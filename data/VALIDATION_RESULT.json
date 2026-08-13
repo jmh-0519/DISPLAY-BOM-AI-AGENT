@@ -1,0 +1,17 @@
+{
+  "bom_rows": 105,
+  "bom_columns": [
+    "bom_parent",
+    "bom_parent_name",
+    "bom_child",
+    "bom_child_name",
+    "location",
+    "sequence_no",
+    "quantity",
+    "start_date",
+    "end_date"
+  ],
+  "sequence_no_added": true,
+  "quantity_added": true,
+  "issues": []
+}

@@ -1,0 +1,15 @@
+﻿test_id,test_type,question,expected_status,expected_result
+TQ-001,BOM_QUERY,LTA400HR01-0의 1레벨 BOM을 보여주세요.,PASS,FA LTA400HR01-001 returned
+TQ-002,BOM_EXPLOSION,LTA400HR01-0의 전체 BOM을 전개해주세요.,PASS,FA부터 TFT 및 하위 component까지 반환
+TQ-003,BOM_EFFECTIVE,2026-08-10 기준 LTA400HR02-0의 현재 BOM을 조회해주세요.,PASS,종료된 LJ94-119905/119906 관계는 제외
+TQ-004,MATERIAL_SEARCH,LJ94-100004 자재 정보를 알려주세요.,PASS,LC Assembly master returned
+TQ-005,WHERE_USED,LJ94-190004가 사용되거나 변경 후보인 모델을 알려주세요.,PASS,Change history / candidate context returned
+TQ-006,DESIGN_CHANGE_PASS,LTA400HR02-0의 OLB를 LJ94-190001로 변경 가능한지 분석해주세요.,PASS,Compatible OLB replacement
+TQ-007,DESIGN_CHANGE_CONDITIONAL,LTA400HR01-0의 LC를 LJ94-190004로 변경 가능한지 분석해주세요.,CONDITIONAL_EXPECTED,Optical tuning review required
+TQ-008,DESIGN_CHANGE_FAIL,LTA400HR01-0의 CF를 LJ94-190005로 변경 가능한지 분석해주세요.,FAIL_EXPECTED,Current TFT와 incompatible
+TQ-009,DESIGN_CHANGE_FAIL,LTA550HR01-0의 TFT를 LJ94-190006으로 변경 가능한지 분석해주세요.,FAIL_EXPECTED,Rejected/discontinued/incompatible TFT
+TQ-010,SUBTREE_REPLACE,LTA400HR01-0의 LC를 LJ94-190004로 교체한 Virtual BOM을 만들어주세요.,PASS,기존 LC subtree 제거 후 신규 LC subtree 추가
+TQ-011,BOM_REVIEW,LTA400HR01-0의 품평회 점검을 수행해주세요.,PASS,Hierarchy/effective/material/rule checks performed
+TQ-012,BOM_REVIEW,LTA550HR01-0에 LJ94-190006 TFT를 가상 적용하고 품평회해주세요.,FAIL_EXPECTED,Lifecycle/approval/spec rule failure
+TQ-013,REPORT_GENERATION,CHG-003 변경 분석과 품평회 결과를 완료 보고서로 작성해주세요.,PASS,Structured report generated
+TQ-014,HIERARCHY,LTA500HR01-0에서 TFT까지의 경로를 알려주세요.,PASS,MODEL-FA-OLB-CP-BIN-LC-CF-TFT path returned

@@ -1,0 +1,10 @@
+openai
+pandas
+python-dotenv
+streamlit
+pytest
+mcp
+langchain-core
+langgraph
+python-docx
+openpyxl

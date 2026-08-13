@@ -1,0 +1,11 @@
+﻿check_id,check_type,check_name,category,severity,required_yn,check_description,purpose
+REV-001,BOM_HIERARCHY,BOM 계층 구조,BOM,ERROR,Y,MODEL-FA-OLB-CP-BIN-LC-CF-TFT 계층 연결 확인,표준 하이라키 보장
+REV-002,EFFECTIVE_DATE,BOM 유효일자,BOM,ERROR,Y,조회 기준일이 start_date~end_date 범위인지 확인,유효하지 않은 BOM 제외
+REV-003,MATERIAL_APPROVAL,자재 승인 상태,MATERIAL,ERROR,Y,APPROVED 또는 CONDITIONAL 상태인지 확인,미승인 자재 사용 방지
+REV-004,LIFECYCLE,자재 Lifecycle,MATERIAL,ERROR,Y,DISCONTINUED 자재가 현재 BOM에 포함되지 않았는지 확인,단종 자재 사용 방지
+REV-005,COMPATIBILITY,Assembly/자재 호환성,COMPATIBILITY,ERROR,Y,INCOMPATIBLE 조합이 없는지 확인,구성 호환성 보장
+REV-006,SUPPLIER_GRADE,공급사 등급,SUPPLIER,WARNING,Y,Grade C 공급사 사용 여부 확인,공급 리스크 확인
+REV-007,MODEL_SPEC,모델 사양 Rule,RULE,ERROR,Y,모델별 Refresh/LC/CF/TFT Rule 충족 확인,설계 사양 보장
+REV-008,CHANGE_REASON,설계변경 사유,CHANGE,WARNING,Y,변경 사유가 존재하는지 확인,추적성 확보
+REV-009,SUBTREE_REPLACE,Assembly 교체 하위구조,CHANGE,ERROR,Y,기존 subtree 제거 및 신규 subtree 삽입 여부 확인,Assembly Replace 정합성 보장
+REV-010,REPORT_DATA,완료 보고서 데이터,REPORT,WARNING,Y,분석/적용/품평회 결과 포함 여부 확인,보고서 완결성 확보
