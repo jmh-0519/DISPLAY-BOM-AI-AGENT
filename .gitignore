@@ -48,3 +48,15 @@ tmp/
 build/
 dist/
 *.egg-info/
+
+# Runtime log directories
+logs/
+
+# SQLite sidecar files
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+
+# Additional tool caches
+.ruff_cache/
