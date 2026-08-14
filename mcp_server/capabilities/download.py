@@ -4,7 +4,7 @@ import base64
 from datetime import datetime
 
 from mcp_server.capabilities.query import get_bom_data
-from services.ai_design_change_workflow_service import AiDesignChangeWorkflowService
+from mcp_server.capabilities.design_change import generate_design_change_report_data
 from services.bom_excel_export_service import BomExcelExportService
 from services.design_change_word_report_service import DesignChangeWordReportService
 
@@ -56,7 +56,7 @@ def export_design_change_report_data(change_id: str) -> dict:
     normalized_change_id = str(change_id).strip().upper()
     if not normalized_change_id:
         raise ValueError("change_id는 비어 있지 않은 문자열이어야 합니다.")
-    report = AiDesignChangeWorkflowService().generate_report(normalized_change_id)
+    report = generate_design_change_report_data(change_id=normalized_change_id)
     if not report.get("success"):
         return report
     content = DesignChangeWordReportService().build(report)

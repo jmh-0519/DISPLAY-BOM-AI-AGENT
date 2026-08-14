@@ -6,13 +6,7 @@ import streamlit as st
 from app.views.bom_view import (
     render_bom_expandable_tree,
 )
-from services.bom_service import BomService
-from services.design_change_apply_service import (
-    DesignChangeApplyService,
-)
-from services.design_change_service import (
-    DesignChangeService,
-)
+from app.views.bom_query_page import create_mcp_client
 
 
 def get_status_label(
@@ -137,26 +131,8 @@ def render_design_change_analysis_result(
 
 @st.cache_resource
 def create_design_change_services():
-    """설계변경 화면에서 사용할 Service를 생성합니다."""
-    bom_service = BomService()
-
-    apply_service = (
-        DesignChangeApplyService(
-            bom_service=bom_service,
-        )
-    )
-
-    design_change_service = (
-        DesignChangeService(
-            bom_service=bom_service,
-            apply_service=apply_service,
-        )
-    )
-
-    return (
-        apply_service,
-        design_change_service,
-    )
+    """구형 별도 화면은 MCP Workflow 화면으로 통합되었습니다."""
+    raise RuntimeError("AI 설계변경 Workflow 메뉴에서 MCP Tool을 사용하세요.")
 
 
 def _reset_preview_if_input_changed(

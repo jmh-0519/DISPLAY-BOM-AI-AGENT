@@ -1,0 +1,14 @@
+{
+  "counts": {
+    "design_changes": 8,
+    "design_change_items": 6,
+    "review_boms": 4,
+    "review_bom_revisions": 4,
+    "bom_reviews": 4,
+    "bom_review_checks": 40
+  },
+  "warnings": [
+    "CHG-20260812-D83862/1: 품목 매핑 실패로 Item 제외",
+    "CHG-20260813-245AB7/1: 품목 매핑 실패로 Item 제외"
+  ]
+}

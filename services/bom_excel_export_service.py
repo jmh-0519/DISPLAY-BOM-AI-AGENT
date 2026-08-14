@@ -42,6 +42,19 @@ class BomExcelExportService:
         "required_quantity": "누적 소요량",
         "status": "상태",
     }
+    BOM_RESULT_COLUMNS = [
+        "bom_parent", "bom_parent_name", "bom_child", "bom_child_name",
+        "location", "quantity", "required_quantity",
+    ]
+    BOM_RESULT_LABELS = {
+        "bom_parent": "PARENT_CODE",
+        "bom_parent_name": "PARENT_NAME",
+        "bom_child": "CHILD_CODE",
+        "bom_child_name": "CHILD_NAME",
+        "location": "LOCATION",
+        "quantity": "수량",
+        "required_quantity": "소요수량",
+    }
 
     @classmethod
     def build(
@@ -54,7 +67,7 @@ class BomExcelExportService:
         if not rows:
             raise ValueError("Excel로 내보낼 BOM 조회 결과가 없습니다.")
 
-        columns = list(rows[0].keys())
+        columns = [key for key in cls.BOM_RESULT_COLUMNS if key in rows[0]]
         workbook = Workbook()
         result_sheet = workbook.active
         result_sheet.title = "BOM 조회결과"
@@ -62,7 +75,7 @@ class BomExcelExportService:
         result_sheet.sheet_view.showGridLines = False
 
         for column_index, key in enumerate(columns, 1):
-            cell = result_sheet.cell(1, column_index, cls.COLUMN_LABELS.get(key, key))
+            cell = result_sheet.cell(1, column_index, cls.BOM_RESULT_LABELS.get(key, key))
             cell.fill = cls.HEADER_FILL
             cell.font = Font(name="맑은 고딕", color="FFFFFF", bold=True)
             cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -75,11 +88,11 @@ class BomExcelExportService:
                 cell.font = Font(name="맑은 고딕", size=10)
                 cell.border = cls.THIN_BORDER
                 cell.alignment = Alignment(vertical="center")
-                if key in {"quantity", "unit_price"} and isinstance(value, (int, float)):
+                if key in {"quantity", "required_quantity"} and isinstance(value, (int, float)):
                     cell.number_format = "#,##0.###"
 
         for column_index, key in enumerate(columns, 1):
-            values = [cls.COLUMN_LABELS.get(key, key)] + [str(row.get(key, "")) for row in rows]
+            values = [cls.BOM_RESULT_LABELS.get(key, key)] + [str(row.get(key, "")) for row in rows]
             width = min(max(max(len(value) for value in values) + 2, 11), 32)
             result_sheet.column_dimensions[get_column_letter(column_index)].width = width
         result_sheet.row_dimensions[1].height = 24
@@ -87,11 +100,12 @@ class BomExcelExportService:
         info_sheet = workbook.create_sheet("조회정보")
         info_sheet.sheet_view.showGridLines = False
         info_rows = [
-            ("조회 모델", product_id),
+            ("BOM 조회 대상 코드", rows[0].get("root_code") or rows[0].get("root_model") or product_id),
             ("기준일", as_of_date or "현재 유효 기준"),
             ("조회 건수", len(rows)),
             ("생성 시각", generated_at),
             ("생성 기능", "Display BOM MCP / export_bom_excel"),
+            ("BOM 구분", rows[0].get("bom_title") or "제품 BOM"),
         ]
         for row_index, (label, value) in enumerate(info_rows, 1):
             label_cell = info_sheet.cell(row_index, 1, label)

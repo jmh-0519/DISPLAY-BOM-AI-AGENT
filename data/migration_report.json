@@ -1,0 +1,40 @@
+{
+  "migration": "STEP24-B1-v2",
+  "status": "SUCCESS",
+  "generated_at": "2026-08-13T17:30:13",
+  "source_data_dir": "data",
+  "counts": {
+    "supplier_master": 8,
+    "item_master": 105,
+    "version_master": 4,
+    "assembly_master": 30,
+    "material_master": 71,
+    "merged_legacy_products": 4,
+    "material_attributes": 101,
+    "bom_master": 98,
+    "excluded_virtual_model_rows": 4,
+    "excluded_mod_to_fa_rows": 4,
+    "reparented_tft_as_lc_child": 6,
+    "dropped_unmapped_cf_tft_rows": 1,
+    "material_compatibility": 10,
+    "design_rules": 14,
+    "review_checklists": 10,
+    "query_aliases": 36,
+    "foreign_key_errors": 0,
+    "orphan_bom_items": 0,
+    "invalid_hierarchy_edges": 0,
+    "cycle_count": 0
+  },
+  "warnings": [
+    "LC 연결이 없는 독립 CF→TFT 관계 제외: LJ94-190005→LJ94-100006"
+  ],
+  "not_migrated_in_b1": [
+    "change_bom.csv",
+    "change_bom_item.csv",
+    "change_bom_detail.csv",
+    "review_bom.csv",
+    "review_bom_detail.csv",
+    "review_bom_check.csv",
+    "change_history.csv"
+  ]
+}

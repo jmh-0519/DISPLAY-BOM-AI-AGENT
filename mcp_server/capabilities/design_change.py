@@ -1,39 +1,37 @@
 from datetime import date
 
-from services.bom_service import BomService
-from services.design_change_service import DesignChangeService
-from services.design_change_apply_service import DesignChangeApplyService
-from services.ai_design_change_workflow_service import AiDesignChangeWorkflowService
+from database import SQLiteDatabase
+from core.database_config import sqlite_database_path
+from services.sqlite_design_change_workflow_service import SQLiteDesignChangeWorkflowService
+
+
+def _workflow() -> SQLiteDesignChangeWorkflowService:
+    return SQLiteDesignChangeWorkflowService(SQLiteDatabase(sqlite_database_path()))
 
 
 def create_ai_change_request_data(**kwargs) -> dict:
-    return AiDesignChangeWorkflowService(
-        data_dir=kwargs.pop("data_dir", "data")
-    ).create_change_request(**kwargs)
+    kwargs.pop("data_dir", None)
+    return _workflow().create_change_request(**kwargs)
 
 
 def create_review_bom_data(**kwargs) -> dict:
-    return AiDesignChangeWorkflowService(
-        data_dir=kwargs.pop("data_dir", "data")
-    ).create_review_bom(**kwargs)
+    kwargs.pop("data_dir", None)
+    return _workflow().create_review_bom(**kwargs)
 
 
 def run_ai_bom_review_data(**kwargs) -> dict:
-    return AiDesignChangeWorkflowService(
-        data_dir=kwargs.pop("data_dir", "data")
-    ).run_ai_review(**kwargs)
+    kwargs.pop("data_dir", None)
+    return _workflow().run_ai_review(**kwargs)
 
 
 def generate_design_change_report_data(**kwargs) -> dict:
-    return AiDesignChangeWorkflowService(
-        data_dir=kwargs.pop("data_dir", "data")
-    ).generate_report(**kwargs)
+    kwargs.pop("data_dir", None)
+    return _workflow().generate_report(**kwargs)
 
 
 def apply_reviewed_bom_data(**kwargs) -> dict:
-    return AiDesignChangeWorkflowService(
-        data_dir=kwargs.pop("data_dir", "data")
-    ).apply_to_production(**kwargs)
+    kwargs.pop("data_dir", None)
+    return _workflow().apply_reviewed_bom(**kwargs)
 
 
 def analyze_design_change_data(
@@ -58,12 +56,7 @@ def analyze_design_change_data(
 
         normalized_values[field_name] = value.strip()
 
-    bom_service = BomService()
-    design_change_service = DesignChangeService(
-        bom_service=bom_service,
-    )
-
-    return design_change_service.analyze_replace(
+    return _workflow().analyze_replace(
         product_id=normalized_values["product_id"],
         old_material_id=normalized_values["old_material_id"],
         new_material_id=normalized_values["new_material_id"],
@@ -90,17 +83,8 @@ def create_design_change_preview_data(
             "설계변경 분석이 FAIL이므로 Preview를 생성할 수 없습니다."
         )
 
-    bom_service = BomService()
-    preview = DesignChangeApplyService(
-        bom_service=bom_service,
-    ).create_preview_revision(
-        product_id=product_id.strip(),
-        old_material_id=old_material_id.strip(),
-        new_material_id=new_material_id.strip(),
-        as_of_date=as_of_date,
-    )
-    preview["analysis_status"] = analysis["result"]
-    return preview
+    return {"success": True, "result": "ANALYZED", "analysis_status": analysis["result"],
+            "analysis": analysis, "production_bom_modified": False}
 
 
 def record_design_change_decision_data(
@@ -154,17 +138,7 @@ def apply_approved_design_change_data(
 ) -> dict:
     """승인된 Preview와 동일한 설계변경을 Production BOM에 적용합니다."""
 
-    bom_service = BomService(data_dir=data_dir)
-    return DesignChangeApplyService(
-        bom_service=bom_service,
-        data_dir=data_dir,
-    ).apply_approved_preview(
-        preview_revision=preview_revision,
-        product_id=product_id,
-        old_material_id=old_material_id,
-        new_material_id=new_material_id,
-        preview_as_of_date=preview_as_of_date,
-        effective_date=effective_date,
-        applied_by=applied_by,
+    raise RuntimeError(
+        "구형 Preview Apply 경로는 STEP25에서 제거되었습니다. "
+        "Review BOM을 승인한 뒤 apply_reviewed_bom Tool을 사용하세요."
     )
-

@@ -5,13 +5,43 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from services.ai_design_change_workflow_service import AiDesignChangeWorkflowService
 from app.views.design_change_page import render_design_change_analysis_result
 from app.views.bom_query_page import create_mcp_client
 
 
-def _service() -> AiDesignChangeWorkflowService:
-    return AiDesignChangeWorkflowService()
+class _McpWorkflowAdapter:
+    """Streamlit Workflow UI가 업무 Service를 우회하지 않도록 하는 MCP Adapter."""
+
+    def __init__(self) -> None:
+        self.client = create_mcp_client()
+
+    def create_change_request(self, product_id, old_id, new_id, reason,
+                              effective_date, requested_by, as_of_date):
+        return self.client.call_tool("create_ai_change_request", {
+            "product_id": product_id, "old_material_id": old_id,
+            "new_material_id": new_id, "reason": reason,
+            "effective_date": effective_date, "requested_by": requested_by,
+            "as_of_date": as_of_date,
+        })
+
+    def create_review_bom(self, change_id, created_by, created_date):
+        return self.client.call_tool("create_review_bom", {
+            "change_id": change_id, "created_by": created_by, "created_date": created_date,
+        })
+
+    def run_ai_review(self, review_id, reviewed_by, checked_date):
+        return self.client.call_tool("run_ai_bom_review", {
+            "review_id": review_id, "reviewed_by": reviewed_by, "checked_date": checked_date,
+        })
+
+    def apply_to_production(self, review_id, applied_by, applied_date):
+        return self.client.call_tool("apply_reviewed_bom", {
+            "review_id": review_id, "applied_by": applied_by, "applied_date": applied_date,
+        })
+
+
+def _service() -> _McpWorkflowAdapter:
+    return _McpWorkflowAdapter()
 
 
 def _check_rows(ai_review: dict) -> list[dict]:
