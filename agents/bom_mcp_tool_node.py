@@ -12,6 +12,11 @@ from agents.design_change_workflow_state import (
     create_initial_design_change_state,
 )
 from mcp_client.client import DisplayBomMcpClient
+from core.observability import (
+    LangfuseObservability,
+    get_observability,
+    summarize_value,
+)
 
 
 class BomMcpToolNode:
@@ -23,8 +28,10 @@ class BomMcpToolNode:
     def __init__(
         self,
         mcp_client: DisplayBomMcpClient,
+        observability: LangfuseObservability | None = None,
     ) -> None:
         self.mcp_client = mcp_client
+        self.observability = observability or get_observability()
 
     def __call__(
         self,
@@ -104,12 +111,22 @@ class BomMcpToolNode:
                     tool_name, design_change_update, arguments
                 )
 
-            tool_result = (
-                self.mcp_client.call_tool(
-                    tool_name=tool_name,
-                    arguments=arguments,
+            with self.observability.observe(
+                "mcp.tool",
+                as_type="tool",
+                input_summary={
+                    "tool_name": tool_name,
+                    "arguments": summarize_value(arguments),
+                },
+                metadata={"tool_name": tool_name},
+            ) as span:
+                tool_result = (
+                    self.mcp_client.call_tool(
+                        tool_name=tool_name,
+                        arguments=arguments,
+                    )
                 )
-            )
+                span.finish(output=summarize_value(tool_result))
 
             if tool_name == "analyze_design_change":
                 design_change_update = (

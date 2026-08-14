@@ -30,6 +30,12 @@ from core.azure_openai_client import (
 from mcp_client.client import (
     DisplayBomMcpClient,
 )
+from core.observability import (
+    LangfuseObservability,
+    get_observability,
+    summarize_text,
+    summarize_value,
+)
 
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -52,7 +58,9 @@ class BomAgentGraph:
         mcp_client: DisplayBomMcpClient,
         skill_context: str,
         checkpointer=None,
+        observability: LangfuseObservability | None = None,
     ) -> None:
+        self.observability = observability or get_observability()
         self.agent_node = BomAgentNode(
             client=client,
             mcp_client=mcp_client,
@@ -61,6 +69,7 @@ class BomAgentGraph:
 
         self.mcp_tool_node = BomMcpToolNode(
             mcp_client=mcp_client,
+            observability=self.observability,
         )
 
         self.checkpointer = (
@@ -83,11 +92,11 @@ class BomAgentGraph:
 
         workflow.add_node(
             AGENT,
-            self.agent_node,
+            self._observed_node(AGENT, self.agent_node),
         )
         workflow.add_node(
             MCP_TOOLS,
-            self.mcp_tool_node,
+            self._observed_node(MCP_TOOLS, self.mcp_tool_node),
         )
 
         workflow.add_edge(
@@ -112,6 +121,23 @@ class BomAgentGraph:
         return workflow.compile(
             checkpointer=self.checkpointer
         )
+
+    def _observed_node(self, name, node):
+        def invoke_node(state):
+            messages = state.get("messages", [])
+            with self.observability.observe(
+                f"langgraph.{name}",
+                input_summary={
+                    "message_count": len(messages),
+                    "tool_steps": state.get("tool_steps", 0),
+                },
+                metadata={"node": name},
+            ) as span:
+                result = node(state)
+                span.finish(output=summarize_value(result))
+                return result
+
+        return invoke_node
 
     def run(
         self,
@@ -177,40 +203,19 @@ class BomAgentGraph:
                 create_initial_design_change_state()
             )
 
-        final_state = self.graph.invoke(
-            initial_state,
-            config=config,
-        )
-
-        messages = final_state.get(
-            "messages",
-            [],
-        )
-
-        if not messages:
-            raise RuntimeError(
-                "Graph 실행 결과에 "
-                "메시지가 없습니다."
+        with self.observability.observe(
+            "display-bom-agent-request",
+            as_type="agent",
+            input_summary=summarize_text(normalized_user_input),
+            metadata={"thread_id_present": bool(thread_id.strip())},
+        ) as trace:
+            final_state = self.graph.invoke(
+                initial_state,
+                config=config,
             )
-
-        final_message = messages[-1]
-
-        if not isinstance(
-            final_message,
-            AIMessage,
-        ):
-            raise RuntimeError(
-                "Graph의 마지막 메시지가 "
-                "AIMessage가 아닙니다."
-            )
-
-        if not final_message.content:
-            raise RuntimeError(
-                "Agent가 최종 답변을 "
-                "생성하지 않았습니다."
-            )
-
-        return str(final_message.content)
+            answer = self._extract_final_answer(final_state)
+            trace.finish(output=summarize_text(answer))
+            return answer
 
     def run_with_artifacts(self, user_input: str, thread_id: str = "default") -> dict:
         """한 Agent 턴의 답변과 MCP 다운로드 파일을 분리해 반환합니다."""
@@ -223,6 +228,18 @@ class BomAgentGraph:
         artifacts = self._extract_download_artifacts(new_messages)
         bom_views = self._extract_bom_views(new_messages)
         return {"answer": answer, "artifacts": artifacts, "bom_views": bom_views}
+
+    @staticmethod
+    def _extract_final_answer(final_state: BomAgentState) -> str:
+        messages = final_state.get("messages", [])
+        if not messages:
+            raise RuntimeError("Graph execution returned no messages.")
+        final_message = messages[-1]
+        if not isinstance(final_message, AIMessage):
+            raise RuntimeError("The final Graph message is not an AIMessage.")
+        if not final_message.content:
+            raise RuntimeError("The Agent did not produce a final answer.")
+        return str(final_message.content)
 
     @staticmethod
     def _normalize_bom_query(user_input: str) -> str:

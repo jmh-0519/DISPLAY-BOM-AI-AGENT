@@ -8,3 +8,4 @@ langchain-core
 langgraph
 python-docx
 openpyxl
+langfuse>=4,<5

@@ -6,6 +6,12 @@ from openai.types.chat import (
 )
 
 from core.settings import Settings
+from core.observability import (
+    LangfuseObservability,
+    get_observability,
+    summarize_messages,
+    summarize_value,
+)
 
 
 class AzureOpenAIClient:
@@ -26,8 +32,10 @@ class AzureOpenAIClient:
     def __init__(
         self,
         settings: Settings,
+        observability: LangfuseObservability | None = None,
     ) -> None:
         self.settings = settings
+        self.observability = observability or get_observability()
 
         self.client = AzureOpenAI(
             azure_endpoint=(
@@ -40,6 +48,37 @@ class AzureOpenAIClient:
                 settings.azure_openai_api_version
             ),
         )
+
+    def _create_completion(self, **request: Any) -> Any:
+        messages = request.get("messages") or []
+        with self.observability.observe(
+            "azure-openai.chat-completion",
+            as_type="generation",
+            input_summary=summarize_messages(messages),
+            metadata={
+                "tool_definition_count": len(request.get("tools") or []),
+                "temperature": request.get("temperature"),
+            },
+            model=self.settings.azure_openai_deployment,
+        ) as generation:
+            response = self.client.chat.completions.create(**request)
+            usage = getattr(response, "usage", None)
+            usage_details = None
+            if usage is not None:
+                usage_details = {
+                    "input": int(getattr(usage, "prompt_tokens", 0) or 0),
+                    "output": int(getattr(usage, "completion_tokens", 0) or 0),
+                    "total": int(getattr(usage, "total_tokens", 0) or 0),
+                }
+            message = response.choices[0].message
+            generation.finish(
+                output=summarize_value({
+                    "has_content": bool(message.content),
+                    "tool_call_count": len(message.tool_calls or []),
+                }),
+                usage_details=usage_details,
+            )
+            return response
 
     # =========================================================
     # 공통 System Prompt
@@ -107,10 +146,7 @@ class AzureOpenAIClient:
             )
 
         response = (
-            self.client
-            .chat
-            .completions
-            .create(
+            self._create_completion(
                 model=(
                     self.settings
                     .azure_openai_deployment
@@ -199,10 +235,7 @@ class AzureOpenAIClient:
         )
 
         response = (
-            self.client
-            .chat
-            .completions
-            .create(
+            self._create_completion(
                 model=(
                     self.settings
                     .azure_openai_deployment
@@ -296,10 +329,7 @@ class AzureOpenAIClient:
         )
 
         response = (
-            self.client
-            .chat
-            .completions
-            .create(
+            self._create_completion(
                 model=(
                     self.settings
                     .azure_openai_deployment
@@ -371,10 +401,7 @@ class AzureOpenAIClient:
             )
 
         response = (
-            self.client
-            .chat
-            .completions
-            .create(
+            self._create_completion(
                 model=(
                     self.settings
                     .azure_openai_deployment
