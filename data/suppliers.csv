@@ -1,9 +1,0 @@
-﻿supplier_id,supplier_name,country,specialty,grade,quality_score,status
-SUP-001,Hanbit Glass,KR,Glass / TFT / CF,A,95,ACTIVE
-SUP-002,Neo Bonding,KR,OLB / FPCB,A,92,ACTIVE
-SUP-003,Pacific Cell,VN,LC / Cell Process,A,90,ACTIVE
-SUP-004,Vision Chemical,JP,LC Material / Sealant,A,94,ACTIVE
-SUP-005,Core Electronics,KR,Driver IC / PCB,B,86,ACTIVE
-SUP-006,Asia Precision,CN,Frame / Mechanical,B,82,ACTIVE
-SUP-007,Test Supplier C,CN,General Component,C,71,ACTIVE
-SUP-008,Legacy Parts,CN,Legacy Component,C,65,INACTIVE

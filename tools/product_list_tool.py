@@ -1,6 +1,5 @@
 from typing import Any
 
-from services.bom_service import BomService
 from tools.base_tool import BaseTool
 
 
@@ -23,7 +22,7 @@ class ProductListTool(BaseTool):
         "additionalProperties": False,
     }
 
-    def __init__(self, bom_service: BomService) -> None:
+    def __init__(self, bom_service: Any) -> None:
         self.bom_service = bom_service
 
     def execute(self, **kwargs: Any) -> Any:

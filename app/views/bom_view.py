@@ -4,6 +4,56 @@ import pandas as pd
 import streamlit as st
 
 
+def render_bom_result_table(bom: pd.DataFrame) -> None:
+    """Agent 채팅과 BOM 조회 메뉴가 공유하는 표준 BOM 결과 표입니다."""
+    if bom is None or bom.empty:
+        st.info("표시할 BOM 정보가 없습니다.")
+        return
+
+    first = bom.iloc[0]
+    root_code = _clean_text(first.get("root_code")) or _clean_text(first.get("root_model"))
+    root_type = _clean_text(first.get("root_type"))
+    title = _clean_text(first.get("bom_title")) or (
+        "ASSY BOM" if root_type == "ASSEMBLY" else "제품 BOM"
+    )
+    st.subheader(title)
+    st.markdown(f"**BOM 조회 대상 코드:** `{escape(root_code)}`")
+
+    headers = [
+        "PARENT_CODE", "PARENT_NAME", "CHILD_CODE", "CHILD_NAME",
+        "LOCATION", "수량", "소요수량",
+    ]
+    body = []
+    for _, row in bom.iterrows():
+        child_is_assy = _clean_text(row.get("bom_child_type")) == "ASSEMBLY"
+        row_class = ' class="bom-assy-row"' if child_is_assy else ""
+        values = [
+            escape(_clean_text(row.get("bom_parent"))),
+            escape(_clean_text(row.get("bom_parent_name"))),
+            escape(_clean_text(row.get("bom_child"))),
+            escape(_clean_text(row.get("bom_child_name"))),
+            escape(_clean_text(row.get("location"))),
+            escape(_format_quantity(row.get("quantity"))),
+            escape(_format_quantity(row.get("required_quantity"))),
+        ]
+        cells = [f"<td>{value}</td>" for value in values]
+        body.append(f"<tr{row_class}>" + "".join(cells) + "</tr>")
+
+    st.markdown(
+        """
+        <style>
+        .bom-result-table{width:100%;border-collapse:collapse;font-size:14px}
+        .bom-result-table th,.bom-result-table td{padding:7px 9px;border-bottom:1px solid rgba(128,128,128,.22);text-align:left}
+        .bom-result-table th{color:#6b7280;font-size:12px}
+        .bom-result-table .bom-assy-row td{color:#1677d2;font-weight:700}
+        </style>
+        """ + '<table class="bom-result-table"><thead><tr>'
+        + "".join(f"<th>{header}</th>" for header in headers)
+        + "</tr></thead><tbody>" + "".join(body) + "</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+
 def _clean_text(value) -> str:
     if pd.isna(value):
         return ""

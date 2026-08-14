@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
-import pandas as pd
+from database import SQLiteDatabase
+from core.database_config import sqlite_database_path
 
 
 class QueryNormalizer:
@@ -19,57 +18,18 @@ class QueryNormalizer:
     - 검색 점수 계산 지원
     """
 
-    def __init__(
-        self,
-        alias_file: str | Path,
-    ) -> None:
-        self.alias_file = Path(alias_file)
+    def __init__(self, database: SQLiteDatabase | None = None) -> None:
+        self.database = database or SQLiteDatabase(sqlite_database_path())
         self.aliases = self._load_aliases()
 
     def _load_aliases(
         self,
     ) -> list[tuple[str, str]]:
-        if not self.alias_file.exists():
-            raise FileNotFoundError(
-                f"Alias 파일을 찾을 수 없습니다: {self.alias_file}"
-            )
-
-        data = pd.read_csv(
-            self.alias_file,
-            encoding="utf-8-sig",
-        )
-
-        required_columns = {
-            "alias",
-            "normalized_value",
-            "alias_type",
-            "active_yn",
-        }
-
-        missing_columns = required_columns - set(data.columns)
-
-        if missing_columns:
-            raise ValueError(
-                "Alias 파일에 필수 컬럼이 없습니다: "
-                + ", ".join(sorted(missing_columns))
-            )
-
-        active = data[
-            data["active_yn"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .eq("Y")
-        ]
-
-        result: list[tuple[str, str]] = []
-
-        for _, row in active.iterrows():
-            alias = str(row["alias"]).strip()
-            normalized = str(row["normalized_value"]).strip()
-
-            if alias and normalized:
-                result.append((alias, normalized))
+        with self.database.connection() as con:
+            rows = con.execute("""SELECT alias,normalized_value FROM query_aliases
+                WHERE active_yn='Y' ORDER BY LENGTH(alias) DESC,alias""").fetchall()
+        result = [(str(row["alias"]).strip(), str(row["normalized_value"]).strip())
+                  for row in rows if str(row["alias"]).strip() and str(row["normalized_value"]).strip()]
 
         # 긴 표현을 먼저 치환
         result.sort(

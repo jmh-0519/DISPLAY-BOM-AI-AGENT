@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,10 @@ class DisplayBomMcpClient:
                     "mcp_server.server",
                 ],
                 cwd=str(PROJECT_ROOT),
+                # MCP Server는 별도 Process로 실행됩니다.
+                # 조회 저장소 선택값을 포함한 현재 실행 환경을 명시적으로
+                # 전달해야 Streamlit과 MCP Server가 동일한 Mode를 사용합니다.
+                env=os.environ.copy(),
             )
         )
 

@@ -1,25 +1,15 @@
-from pathlib import Path
-
 import pytest
 
+from database import SQLiteDatabase
 from services.query_normalizer import QueryNormalizer
 
 
-PROJECT_ROOT = (
-    Path(__file__)
-    .resolve()
-    .parent
-    .parent
-)
-
-
 @pytest.fixture
-def normalizer() -> QueryNormalizer:
-    return QueryNormalizer(
-        PROJECT_ROOT
-        / "data"
-        / "query_aliases.csv"
-    )
+def normalizer(tmp_path) -> QueryNormalizer:
+    import shutil
+    target = tmp_path / "display_bom.db"
+    shutil.copy2("data/display_bom.db", target)
+    return QueryNormalizer(SQLiteDatabase(target))
 
 
 def test_normalize_product_query(

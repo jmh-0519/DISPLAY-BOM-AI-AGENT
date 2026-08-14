@@ -2,7 +2,7 @@ from typing import Any
 
 import pandas as pd
 
-from services.bom_service import BomService
+from services.bom_service_factory import create_read_bom_service
 
 
 def _to_records(
@@ -53,7 +53,7 @@ def get_bom_data(
     제품의 Exploded BOM을 조회합니다.
     """
 
-    bom_service = BomService()
+    bom_service = create_read_bom_service()
 
     result = (
         bom_service.get_bom_explosion(
@@ -72,7 +72,7 @@ def list_products_data() -> list[dict]:
     등록된 전체 제품 목록을 조회합니다.
     """
 
-    bom_service = BomService()
+    bom_service = create_read_bom_service()
 
     result = (
         bom_service.list_products()
@@ -102,7 +102,7 @@ def search_product_data(
             "문자열이어야 합니다."
         )
 
-    bom_service = BomService()
+    bom_service = create_read_bom_service()
 
     result = (
         bom_service.search_product(
@@ -120,7 +120,7 @@ def list_materials_data() -> list[dict]:
     등록된 전체 자재 목록을 조회합니다.
     """
 
-    bom_service = BomService()
+    bom_service = create_read_bom_service()
 
     result = (
         bom_service.list_materials()
@@ -150,7 +150,7 @@ def search_material_data(
             "문자열이어야 합니다."
         )
 
-    bom_service = BomService()
+    bom_service = create_read_bom_service()
 
     result = (
         bom_service.search_material(

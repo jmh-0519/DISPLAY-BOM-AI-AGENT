@@ -15,6 +15,8 @@ from mcp_client.client import DisplayBomMcpClient
 
 from agents.bom_agent_graph import BomAgentGraph
 from app.views.bom_query_page import render_bom_query_page
+from app.views.bom_view import render_bom_result_table
+import pandas as pd
 from app.views.ai_design_change_workflow_page import render_ai_design_change_workflow_page
 from app.views.design_change_history_page import render_design_change_history_page
 from app.views.bom_review_history_page import render_bom_review_history_page
@@ -79,7 +81,13 @@ def render_chat_history() -> None:
     """Session State에 저장된 기존 채팅 내용을 표시합니다."""
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            bom_views = message.get("bom_views", [])
+            # get_bom Tool 결과는 LLM Markdown 표를 다시 표시하지 않고
+            # BOM 조회 메뉴와 동일한 공통 Renderer만 사용합니다.
+            if not bom_views:
+                st.markdown(message["content"])
+            for bom_view in bom_views:
+                render_bom_result_table(pd.DataFrame(bom_view))
             for index, artifact in enumerate(message.get("artifacts", [])):
                 st.download_button(
                     f"{artifact['file_name']} 다운로드",
@@ -189,6 +197,7 @@ def render_agent_chat() -> None:
                 )
                 answer = response["answer"]
                 artifacts = response["artifacts"]
+                bom_views = response.get("bom_views", [])
                 answer = sanitize_agent_download_links(answer, bool(artifacts))
 
             except Exception as error:
@@ -199,7 +208,12 @@ def render_agent_chat() -> None:
                 st.error(answer)
 
             else:
-                st.markdown(answer)
+                # BOM 조회 응답은 LLM이 생성한 중복 표/설명을 숨기고
+                # 구조화된 Tool 결과를 공통 UI로 한 번만 표시합니다.
+                if not bom_views:
+                    st.markdown(answer)
+                for bom_view in bom_views:
+                    render_bom_result_table(pd.DataFrame(bom_view))
                 for index, artifact in enumerate(artifacts):
                     st.download_button(
                         f"{artifact['file_name']} 다운로드", artifact["file_bytes"],
@@ -212,6 +226,7 @@ def render_agent_chat() -> None:
             "role": "assistant",
             "content": answer,
             "artifacts": artifacts if 'artifacts' in locals() else [],
+            "bom_views": bom_views if 'bom_views' in locals() else [],
             "id": str(uuid.uuid4()),
         }
     )

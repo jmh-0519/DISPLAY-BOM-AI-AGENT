@@ -269,7 +269,7 @@ def test_graph_remembers_messages_in_same_thread():
     ]
 
     assert converted_messages[0]["content"] == (
-        "LTA400HR01-0의 BOM을 보여줘."
+        "LTA400HR01-0의 BOM을 보여줘"
     )
 
     assert converted_messages[2]["content"] == (

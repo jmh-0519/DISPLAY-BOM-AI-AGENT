@@ -1,6 +1,13 @@
 # 현재 개발 단계
 
-기준일: 2026-08-12
+기준일: 2026-08-14
+
+## STEP25
+
+- CSV Runtime, Repository, Migration, 데이터 파일 제거
+- 기준정보·BOM·설계변경·Review·품평·보고서·Apply SQLite 전환
+- Agent와 Streamlit Workflow의 MCP Tool 경유 통일
+- 승인 전 Production Apply 차단 및 실패 시 Transaction Rollback 검증
 
 ## STEP22
 
@@ -42,7 +49,7 @@
 
 ## 현재 범위 제한
 
-- 샘플 CSV 기반이며 실제 Windchill/PLM/ERP 연동은 미구현
+- 샘플 SQLite DB 기반이며 실제 Windchill/PLM/ERP 연동은 미구현
 - REPLACE 중심이며 복합 변경 트랜잭션 UI는 후속 범위
 - 비정형 고객 승인/공급사 협의 등은 데이터가 없으면 자동 승인하지 않음
 - 보고서는 현재 DOCX를 지원하며 PDF 변환은 후속 범위
@@ -55,6 +62,3 @@
 3. 사용자 확인 필요 항목의 해소/재검증 UI
 4. 복수 자재 및 Assembly 변경 지원
 5. 실제 BOM 시스템 연동 Adapter와 트랜잭션/권한 설계
-# STEP23 1차 MVP 마무리
-
-Agent 채팅의 파일 다운로드를 Streamlit 실제 다운로드 버튼으로 연결하고, 설계변경·품평회 통합 이력 조회 화면과 MCP Tool을 추가했다. CSV 저장소는 `WorkflowHistoryRepository`로 격리해 차기 SQLite 전환 시 UI와 Agent 계약을 유지할 수 있도록 했다.

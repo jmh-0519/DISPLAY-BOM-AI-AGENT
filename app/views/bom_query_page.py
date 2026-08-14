@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from app.views.bom_view import (
-    render_bom_expandable_tree,
+    render_bom_result_table,
 )
 from mcp_client.client import (
     DisplayBomMcpClient,
@@ -39,8 +39,8 @@ def render_bom_query_page() -> None:
 
     with col1:
         product_id = st.text_input(
-            "모델 ID",
-            value="LTA400HR01-0",
+            "BOM 조회 대상 코드",
+            value="LTA400HR01-001",
             key="bom_query_product_id",
         )
 
@@ -65,7 +65,7 @@ def render_bom_query_page() -> None:
 
         if not normalized_product_id:
             st.error(
-                "모델 ID를 입력해 주세요."
+                "VERSION 또는 ASSEMBLY 코드를 입력해 주세요."
             )
             return
 
@@ -141,21 +141,8 @@ def render_bom_query_page() -> None:
         {},
     )
 
-    st.subheader("제품 BOM")
-
-    info_col1, info_col2, info_col3 = (
-        st.columns(3)
-    )
-
+    info_col1, info_col2 = st.columns(2)
     info_col1.metric(
-        "모델",
-        condition.get(
-            "product_id",
-            "",
-        ),
-    )
-
-    info_col2.metric(
         "기준일",
         condition.get(
             "as_of_date",
@@ -163,14 +150,12 @@ def render_bom_query_page() -> None:
         ),
     )
 
-    info_col3.metric(
+    info_col2.metric(
         "BOM 항목",
         len(bom_df),
     )
 
-    render_bom_expandable_tree(
-        bom_df
-    )
+    render_bom_result_table(bom_df)
 
     st.subheader("조회 결과 다운로드")
     st.caption("화면과 동일한 조회조건으로 MCP가 BOM을 다시 확인한 뒤 Excel을 생성합니다.")

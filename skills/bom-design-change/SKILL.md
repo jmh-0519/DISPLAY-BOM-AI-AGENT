@@ -36,6 +36,8 @@ Single Agent가 MCP Tool 결과를 근거로 설계변경 End-to-End Workflow를
 - 분석, Review BOM, 품평, 보고서, 명시적 승인 순서를 건너뛰지 않는다.
 - 사용자 승인 없이 BOM을 변경했다고 표현하거나 적용 Tool을 호출하지 않는다.
 - 적용 대상 Review BOM과 승인된 Revision이 일치해야 한다.
+- SQLite Apply 직전에 차단 품평 항목, 교체 Item 수, 현재 BOM Revision을 다시 검증한다.
+- Production 변경은 `apply_reviewed_bom`의 SQLite 단일 Transaction에서만 수행한다.
 - Tool 실행 실패와 업무 검증 FAIL을 구분한다.
 - 설계변경·품평 이력 조회는 상태를 변경하지 않는다.
 
