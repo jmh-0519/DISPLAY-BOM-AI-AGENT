@@ -35,6 +35,7 @@ def apply_reviewed_bom_data(**kwargs) -> dict:
 
 
 def analyze_design_change_data(
+    plant_code: str,
     product_id: str,
     old_material_id: str,
     new_material_id: str,
@@ -43,6 +44,7 @@ def analyze_design_change_data(
     """자재 교체 설계변경의 가능 여부와 영향을 분석합니다."""
 
     normalized_values = {
+        "plant_code": plant_code,
         "product_id": product_id,
         "old_material_id": old_material_id,
         "new_material_id": new_material_id,
@@ -57,6 +59,7 @@ def analyze_design_change_data(
         normalized_values[field_name] = value.strip()
 
     return _workflow().analyze_replace(
+        plant_code=normalized_values["plant_code"],
         product_id=normalized_values["product_id"],
         old_material_id=normalized_values["old_material_id"],
         new_material_id=normalized_values["new_material_id"],
@@ -65,6 +68,7 @@ def analyze_design_change_data(
 
 
 def create_design_change_preview_data(
+    plant_code: str,
     product_id: str,
     old_material_id: str,
     new_material_id: str,
@@ -73,6 +77,7 @@ def create_design_change_preview_data(
     """분석을 재검증하고 Production BOM과 분리된 Preview를 생성합니다."""
 
     analysis = analyze_design_change_data(
+        plant_code=plant_code,
         product_id=product_id,
         old_material_id=old_material_id,
         new_material_id=new_material_id,

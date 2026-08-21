@@ -59,3 +59,16 @@ def route_agent_response(
         "Agent 응답에 Tool Call과 "
         "최종 답변이 모두 없습니다."
     )
+
+def route_mcp_tool_result(state: BomAgentState) -> str:
+    """Stop immediately after an MCP/business Tool failure.
+
+    Successful Tool observations continue to the Agent for the next ReAct step.
+    A failed Tool run is terminal for the current user turn so the same Tool is
+    not retried repeatedly with identical arguments.
+    """
+
+    if state.get("error"):
+        return END
+    return "agent"
+

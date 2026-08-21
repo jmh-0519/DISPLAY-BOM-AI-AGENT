@@ -16,6 +16,7 @@ from agents.bom_agent_node import BomAgentNode
 from agents.bom_agent_router import (
     MCP_TOOLS,
     route_agent_response,
+    route_mcp_tool_result,
 )
 from agents.bom_agent_state import BomAgentState
 from agents.design_change_workflow_state import (
@@ -113,9 +114,13 @@ class BomAgentGraph:
             },
         )
 
-        workflow.add_edge(
+        workflow.add_conditional_edges(
             MCP_TOOLS,
-            AGENT,
+            route_mcp_tool_result,
+            {
+                AGENT: AGENT,
+                END: END,
+            },
         )
 
         return workflow.compile(
@@ -227,10 +232,53 @@ class BomAgentGraph:
         )
         artifacts = self._extract_download_artifacts(new_messages)
         bom_views = self._extract_bom_views(new_messages)
-        return {"answer": answer, "artifacts": artifacts, "bom_views": bom_views}
+        where_used_views = self._extract_where_used_views(new_messages)
+        cost_scan_views = self._extract_product_cost_scan_views(new_messages)
+        plant_options = self._extract_plant_options(new_messages)
+        tool_names = self._extract_tool_names(new_messages)
+        candidate_panel_tools = {
+            "analyze_design_change_candidates",
+            "revalidate_design_change_analysis",
+            "evaluate_replacement_candidates",
+            "submit_candidate_additional_data",
+        }
+        terminal_error = bool(str(after.values.get("error") or "").strip())
+        # STEP40-N2: a failed candidate-analysis Tool still leaves a ToolMessage
+        # with the original Tool name.  Tool-name presence alone must therefore
+        # never be used to hide the terminal error answer or render an empty
+        # Phase3 panel.  Successful structured outputs may suppress duplicate LLM
+        # prose; terminal errors must always remain visible to the user.
+        render_phase3_panel = (
+            bool(tool_names & candidate_panel_tools) and not terminal_error
+        )
+        suppress_answer = (
+            bool(bom_views)
+            or bool(where_used_views)
+            or render_phase3_panel
+            or bool(plant_options)
+        ) and not terminal_error
+        return {
+            "answer": answer,
+            "artifacts": artifacts,
+            "bom_views": bom_views,
+            "where_used_views": where_used_views,
+            "cost_scan_views": cost_scan_views,
+            "plant_options": plant_options,
+            "workflow": self.get_design_change_state(thread_id),
+            "render_phase3_panel": render_phase3_panel,
+            "suppress_answer": suppress_answer,
+            "tool_names": sorted(tool_names),
+        }
 
     @staticmethod
     def _extract_final_answer(final_state: BomAgentState) -> str:
+        terminal_error = str(final_state.get("error") or "").strip()
+        if terminal_error:
+            return (
+                "요청을 처리하는 중 Tool 실행 오류가 발생했습니다.\n\n"
+                f"{terminal_error}"
+            )
+
         messages = final_state.get("messages", [])
         if not messages:
             raise RuntimeError("Graph execution returned no messages.")
@@ -264,11 +312,34 @@ class BomAgentGraph:
         if not has_query_intent:
             return compact
 
+        # BOM 조회가 최종 목적이 아니라 다른 업무를 위한 근거 조회인 복합 요청은
+        # 절대 단순 BOM 조회 문장으로 축약하지 않는다. 예를 들어
+        # "BOM 정보를 확인해서 원가를 낮출 대체 자재를 찾아줘"를
+        # "BOM을 보여줘"로 바꾸면 COST/대체/제외 조건이 모두 사라진다.
+        # Query normalization은 UI 제목 복사나 순수 BOM 조회 표현에만 적용한다.
+        normalized_lower = compact.lower()
+        business_intent_markers = (
+            "원가", "비용", "절감", "저렴", "cost",
+            "대체", "변경", "교체", "후보", "단종", "eol",
+            "재고", "납기", "품질", "불량", "공급",
+            "추가", "삭제", "제거", "없애", "빼", "제외", "수량", "적용", "승인",
+            "비교", "영향", "추천",
+            "역방향", "where used", "where-used", "사용처", "상위 assy", "상위 모델",
+            "사용된 모델", "포함하는 모델", "가지고 있는 모델",
+        )
+        if any(marker in normalized_lower for marker in business_intent_markers):
+            return compact
+
         codes = re.findall(r"(?<![A-Z0-9])[A-Z0-9]+(?:-[A-Z0-9]+)+(?![A-Z0-9])", upper)
         unique_codes = list(dict.fromkeys(codes))
         if len(unique_codes) != 1:
             return compact
 
+        # 대화형 PLANT Gate 도입 후에는 사용자가 명시한 PLANT를 Query Normalization에서
+        # 잃어버리면 안 된다. BOM 표현만 표준화하고 PLANT Context는 보존한다.
+        plant_match = re.search(r"(?<![A-Z0-9])P\d{2,}(?![A-Z0-9])", upper)
+        if plant_match:
+            return f"{plant_match.group(0)}에서 {unique_codes[0]}의 BOM을 보여줘"
         return f"{unique_codes[0]}의 BOM을 보여줘"
 
     @staticmethod
@@ -286,6 +357,14 @@ class BomAgentGraph:
         raise RuntimeError("현재 사용자 요청의 Agent 메시지 범위를 찾을 수 없습니다.")
 
     @staticmethod
+    def _extract_tool_names(messages: list) -> set[str]:
+        return {
+            str(message.name)
+            for message in messages
+            if isinstance(message, ToolMessage) and message.name
+        }
+
+    @staticmethod
     def _extract_bom_views(messages: list) -> list[list[dict]]:
         """get_bom Tool 결과를 공통 Streamlit BOM 렌더러용 데이터로 분리합니다."""
         views = []
@@ -295,6 +374,51 @@ class BomAgentGraph:
             try:
                 data = json.loads(str(message.content))
                 if isinstance(data, list) and data:
+                    views.append(data)
+            except (TypeError, json.JSONDecodeError):
+                continue
+        return views
+
+    @staticmethod
+    def _extract_where_used_views(messages: list) -> list[dict]:
+        """Extract reverse BOM payloads for structured Streamlit rendering."""
+        views: list[dict] = []
+        for message in messages:
+            if not isinstance(message, ToolMessage) or message.name != "get_bom_where_used":
+                continue
+            try:
+                data = json.loads(str(message.content))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                views.append(data)
+        return views
+
+    @staticmethod
+    def _extract_plant_options(messages: list) -> list[dict]:
+        """Extract a list_plants Observation for Streamlit button rendering."""
+        options: list[dict] = []
+        for message in messages:
+            if not isinstance(message, ToolMessage) or message.name != "list_plants":
+                continue
+            try:
+                data = json.loads(str(message.content))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(data, list):
+                options = [row for row in data if isinstance(row, dict) and row.get("plant_code")]
+        return options
+
+    @staticmethod
+    def _extract_product_cost_scan_views(messages: list) -> list[dict]:
+        """Extract read-only product-wide cost scan payloads for Streamlit."""
+        views: list[dict] = []
+        for message in messages:
+            if not isinstance(message, ToolMessage) or message.name != "scan_product_cost_reduction_candidates":
+                continue
+            try:
+                data = json.loads(str(message.content))
+                if isinstance(data, dict) and data.get("scan_type") == "PRODUCT_COST_REDUCTION":
                     views.append(data)
             except (TypeError, json.JSONDecodeError):
                 continue
@@ -349,4 +473,25 @@ class BomAgentGraph:
         return snapshot.values.get(
             "design_change",
             create_initial_design_change_state(),
+        )
+
+    def update_design_change_state(
+        self,
+        workflow_state: dict,
+        thread_id: str = "default",
+    ) -> None:
+        """Streamlit 직접 MCP Action 결과를 LangGraph Checkpoint와 동기화합니다."""
+
+        if not isinstance(workflow_state, dict):
+            raise TypeError("workflow_state는 dictionary여야 합니다.")
+        if not thread_id or not str(thread_id).strip():
+            raise ValueError("thread_id는 비어 있지 않은 문자열이어야 합니다.")
+
+        self.graph.update_state(
+            {
+                "configurable": {
+                    "thread_id": str(thread_id).strip(),
+                }
+            },
+            {"design_change": dict(workflow_state)},
         )

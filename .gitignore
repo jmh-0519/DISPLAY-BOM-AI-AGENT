@@ -11,6 +11,7 @@ __pycache__/
 .coverage
 htmlcov/
 .pytest_tmp/
+.pytest_tmp_runtime/
 
 # Environment variables and secrets
 .env

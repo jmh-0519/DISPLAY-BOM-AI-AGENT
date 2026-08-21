@@ -8,7 +8,7 @@ from services.query_normalizer import QueryNormalizer
 def normalizer(tmp_path) -> QueryNormalizer:
     import shutil
     target = tmp_path / "display_bom.db"
-    shutil.copy2("data/display_bom.db", target)
+    shutil.copy2("data/test_display_bom.db", target)
     return QueryNormalizer(SQLiteDatabase(target))
 
 

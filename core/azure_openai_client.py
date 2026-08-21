@@ -275,6 +275,7 @@ class AzureOpenAIClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         skill_context: str | None = None,
+        tool_choice: str | dict[str, Any] = "auto",
     ) -> ChatCompletionMessage:
         """
         Multi-step Agent Loop에서 사용합니다.
@@ -299,16 +300,9 @@ class AzureOpenAIClient:
                 "대화 메시지를 포함해야 합니다."
             )
 
-        if (
-            not isinstance(
-                tools,
-                list,
-            )
-            or not tools
-        ):
+        if not isinstance(tools, list):
             raise ValueError(
-                "tools는 하나 이상의 "
-                "Tool 정의를 포함해야 합니다."
+                "tools는 Tool 정의 list여야 합니다."
             )
 
         system_content = (
@@ -328,18 +322,24 @@ class AzureOpenAIClient:
             messages
         )
 
-        response = (
-            self._create_completion(
-                model=(
-                    self.settings
-                    .azure_openai_deployment
-                ),
-                messages=request_messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0,
+        request: dict[str, Any] = {
+            "model": self.settings.azure_openai_deployment,
+            "messages": request_messages,
+            "temperature": 0,
+        }
+
+        # STEP31: Explain Tool 실행 후 최종 자연어 답변만 생성해야 하는
+        # 턴에서는 허용 Tool이 0개일 수 있습니다. 이 경우 Azure OpenAI에
+        # tools/tool_choice 자체를 보내지 않아 모델의 반복 Tool 호출을 막습니다.
+        if tools:
+            request["tools"] = tools
+            request["tool_choice"] = (
+                {"type": "function", "function": {"name": tool_choice}}
+                if isinstance(tool_choice, str) and tool_choice != "auto"
+                else tool_choice
             )
-        )
+
+        response = self._create_completion(**request)
 
         return (
             response

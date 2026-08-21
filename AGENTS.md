@@ -33,7 +33,9 @@ Streamlit
 ## Production Safety
 
 - 사용자 승인 전 Production BOM을 변경하지 않는다.
-- 후보 선택 승인과 최종 Apply 승인을 분리한다.
+- 후보 분석과 설계변경 Workflow를 분리한다. 사용자가 후보를 선택하기 전에는 Workflow를 시작하지 않는다.
+- 공용 ASSY 내부 BOM 변경은 영향 모델/Spec 추가 승인을 받은 뒤에만 Workflow를 시작한다.
+- 최종 Apply 승인은 별도로 유지한다.
 - 복수 Action Apply는 하나의 Transaction으로 처리한다.
 - 하나의 Action이라도 FAIL이면 전체 Apply를 차단한다.
 - Apply 실패 시 전체 변경을 Rollback한다.
@@ -89,3 +91,22 @@ Phase3에서는:
 - 전체 회귀 테스트 통과
 - 승인 Gate와 Transaction 안전성 유지
 - 변경 파일 및 테스트 결과 보고
+
+## Test Execution
+
+- 모든 pytest는 프로젝트 루트에서 실행한다.
+- pytest를 직접 실행하지 않고 다음 공통 Runner를 사용한다.
+
+  `python -m scripts.run_tests`
+
+- 특정 테스트도 같은 Runner에 테스트 경로와 옵션을 전달한다.
+
+  `python -m scripts.run_tests tests/test_file.py -v`
+
+- 공통 Runner는 TEMP, TMP, TMPDIR와 pytest basetemp를
+  프로젝트 내부 `.pytest_tmp`로 설정한다.
+- 테스트를 위해 사용자 Temp 디렉터리나 프로젝트 외부 경로의
+  접근 권한을 요청하지 않는다.
+- 테스트 중 Langfuse 네트워크 전송은 비활성화한다.
+- 권한 오류가 발생해도 Sandbox 권한 확대를 요청하지 말고
+  공통 Runner 사용 여부를 먼저 확인한다.

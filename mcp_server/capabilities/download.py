@@ -7,6 +7,10 @@ from mcp_server.capabilities.query import get_bom_data
 from mcp_server.capabilities.design_change import generate_design_change_report_data
 from services.bom_excel_export_service import BomExcelExportService
 from services.design_change_word_report_service import DesignChangeWordReportService
+from services.phase3_completion_word_report_service import Phase3CompletionWordReportService
+from core.database_config import sqlite_database_path
+from database import SQLiteDatabase
+from services.phase3_workflow_service import Phase3WorkflowService
 
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -25,12 +29,19 @@ def _file_result(file_name: str, mime_type: str, content: bytes, **metadata) -> 
     }
 
 
-def export_bom_excel_data(product_id: str, as_of_date: str | None = None) -> dict:
+def export_bom_excel_data(
+    plant_code: str, product_id: str, as_of_date: str | None = None
+) -> dict:
     """현재 조회조건으로 BOM을 재조회하고 Excel 파일을 생성합니다."""
     normalized_product_id = str(product_id).strip()
     if not normalized_product_id:
         raise ValueError("product_id는 비어 있지 않은 문자열이어야 합니다.")
-    rows = get_bom_data(normalized_product_id, as_of_date)
+    normalized_plant_code = str(plant_code).strip().upper()
+    if not normalized_plant_code:
+        raise ValueError("plant_code는 비어 있지 않은 문자열이어야 합니다.")
+    rows = get_bom_data(
+        normalized_product_id, as_of_date, plant_code=normalized_plant_code
+    )
     if not rows:
         return {
             "success": False,
@@ -40,14 +51,16 @@ def export_bom_excel_data(product_id: str, as_of_date: str | None = None) -> dic
         }
     generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
     content = BomExcelExportService.build(
-        rows, normalized_product_id, as_of_date, generated_at
+        rows, normalized_product_id, as_of_date, generated_at, normalized_plant_code
     )
     safe_id = normalized_product_id.replace("/", "_").replace("\\", "_")
     date_token = (as_of_date or datetime.now().date().isoformat()).replace("-", "")
     return _file_result(
-        f"BOM_{safe_id}_{date_token}.xlsx", XLSX_MIME, content,
+        f"BOM_{normalized_plant_code}_{safe_id}_{date_token}.xlsx", XLSX_MIME, content,
         row_count=len(rows), generated_at=generated_at,
-        query_conditions={"product_id": normalized_product_id, "as_of_date": as_of_date},
+        query_conditions={"plant_code": normalized_plant_code,
+                          "product_id": normalized_product_id,
+                          "as_of_date": as_of_date},
     )
 
 
@@ -63,4 +76,18 @@ def export_design_change_report_data(change_id: str) -> dict:
     return _file_result(
         f"{normalized_change_id}_design_change_report.docx", DOCX_MIME, content,
         change_id=normalized_change_id, report_stage="PRE_APPLY",
+    )
+
+
+def export_phase3_completion_report_data(request_id: str) -> dict:
+    normalized = str(request_id or "").strip().upper()
+    if not normalized:
+        raise ValueError("request_id는 필수입니다.")
+    report = Phase3WorkflowService(SQLiteDatabase(sqlite_database_path())).get_completion_report_data(normalized)
+    if not report.get("success"):
+        return report
+    content = Phase3CompletionWordReportService().build(report)
+    return _file_result(
+        f"{normalized}_design_change_completion_report.docx", DOCX_MIME, content,
+        request_id=normalized, report_stage="COMPLETED",
     )

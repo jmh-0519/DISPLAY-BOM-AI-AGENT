@@ -7,7 +7,7 @@ from mcp_server.capabilities.query import (
 def test_sqlite_query_capabilities(monkeypatch, tmp_path):
     import shutil
     target = tmp_path / "display_bom.db"
-    shutil.copy2("data/display_bom.db", target)
+    shutil.copy2("data/test_display_bom.db", target)
     monkeypatch.setenv("BOM_SQLITE_PATH", str(target))
     bom = get_bom_data("LTA400HR01-0", "2026-08-11")
     assert bom and all(row["root_code"] == "LTA400HR01-001" for row in bom)
@@ -21,7 +21,7 @@ def test_sqlite_query_capabilities(monkeypatch, tmp_path):
 def test_sqlite_assembly_root_uses_common_contract(monkeypatch, tmp_path):
     import shutil
     target = tmp_path / "display_bom.db"
-    shutil.copy2("data/display_bom.db", target)
+    shutil.copy2("data/test_display_bom.db", target)
     monkeypatch.setenv("BOM_SQLITE_PATH", str(target))
     rows = get_bom_data("LJ94-100004", "2026-08-13")
     assert rows

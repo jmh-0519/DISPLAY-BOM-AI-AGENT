@@ -24,7 +24,7 @@ class SQLiteProductionBomService:
         effective_override = date.fromisoformat(str(applied_date)) if applied_date else None
         with self.database.connection() as con:
             review = con.execute(
-                """SELECT r.review_id,r.change_id,r.version_code,r.review_status,
+                """SELECT r.review_id,r.change_id,r.plant_code,r.version_code,r.review_status,
                 r.current_revision,r.approved_revision,c.effective_date,c.apply_status
                 FROM review_boms r JOIN design_changes c ON c.change_id=r.change_id
                 WHERE UPPER(r.review_id)=UPPER(?)""",
@@ -58,10 +58,12 @@ class SQLiteProductionBomService:
             )
             old = con.execute(
                 """SELECT row_revision FROM bom_master
-                WHERE parent_item_code=? AND child_item_code=? AND location_code=?
+                WHERE plant_code=? AND parent_item_code=?
+                  AND child_item_code=? AND location_code=?
                   AND status='ACTIVE' AND valid_from<=?
                   AND (valid_to IS NULL OR valid_to>=?)""",
-                (item["parent_item_code"], item["old_item_code"], item["location_code"],
+                (review["plant_code"], item["parent_item_code"],
+                 item["old_item_code"], item["location_code"],
                  effective.isoformat(), effective.isoformat()),
             ).fetchall()
             if len(old) != 1:
@@ -70,7 +72,8 @@ class SQLiteProductionBomService:
                 )
             expected_revision = old[0]["row_revision"]
         return self.apply_replace(
-            change_id=review["change_id"], version_code=review["version_code"],
+            change_id=review["change_id"], plant_code=review["plant_code"],
+            version_code=review["version_code"],
             parent_item_code=item["parent_item_code"], old_item_code=item["old_item_code"],
             new_item_code=item["new_item_code"], location_code=item["location_code"],
             effective_date=effective, expected_row_revision=expected_revision,
@@ -81,6 +84,7 @@ class SQLiteProductionBomService:
         self,
         *,
         change_id: str,
+        plant_code: str,
         version_code: str,
         parent_item_code: str,
         old_item_code: str,
@@ -93,6 +97,7 @@ class SQLiteProductionBomService:
         effective = date.fromisoformat(str(effective_date))
         values = {
             "change_id": change_id,
+            "plant_code": plant_code,
             "version_code": version_code,
             "parent_item_code": parent_item_code,
             "old_item_code": old_item_code,
@@ -116,9 +121,9 @@ class SQLiteProductionBomService:
                 """
                 SELECT approval_status,apply_status,workflow_status
                 FROM design_changes
-                WHERE change_id=? AND version_code=?
+                WHERE change_id=? AND plant_code=? AND version_code=?
                 """,
-                (change_id, version_code),
+                (change_id, plant_code, version_code),
             ).fetchone()
             if not change:
                 raise ValueError("SQLite 설계변경 요청을 찾을 수 없습니다.")
@@ -133,13 +138,14 @@ class SQLiteProductionBomService:
                 """
                 SELECT bom_id,sequence_no,quantity,valid_from,valid_to,row_revision
                 FROM bom_master
-                WHERE parent_item_code=? AND child_item_code=? AND location_code=?
+                WHERE plant_code=? AND parent_item_code=?
+                  AND child_item_code=? AND location_code=?
                   AND status='ACTIVE'
                   AND valid_from <= ?
                   AND (valid_to IS NULL OR valid_to >= ?)
                 """,
                 (
-                    parent_item_code, old_item_code, location_code,
+                    plant_code, parent_item_code, old_item_code, location_code,
                     effective.isoformat(), effective.isoformat(),
                 ),
             ).fetchall()
@@ -155,13 +161,14 @@ class SQLiteProductionBomService:
             duplicate = con.execute(
                 """
                 SELECT 1 FROM bom_master
-                WHERE parent_item_code=? AND child_item_code=? AND location_code=?
+                WHERE plant_code=? AND parent_item_code=?
+                  AND child_item_code=? AND location_code=?
                   AND status='ACTIVE'
                   AND valid_from <= ?
                   AND (valid_to IS NULL OR valid_to >= ?)
                 """,
                 (
-                    parent_item_code, new_item_code, location_code,
+                    plant_code, parent_item_code, new_item_code, location_code,
                     effective.isoformat(), effective.isoformat(),
                 ),
             ).fetchone()
@@ -188,12 +195,12 @@ class SQLiteProductionBomService:
             con.execute(
                 """
                 INSERT INTO bom_master(
-                  parent_item_code,child_item_code,location_code,sequence_no,
+                  plant_code,parent_item_code,child_item_code,location_code,sequence_no,
                   quantity,valid_from,valid_to,row_revision,status
-                ) VALUES(?,?,?,?,?,?,?,1,'ACTIVE')
+                ) VALUES(?,?,?,?,?,?,?,?,1,'ACTIVE')
                 """,
                 (
-                    parent_item_code, new_item_code, location_code,
+                    plant_code, parent_item_code, new_item_code, location_code,
                     old["sequence_no"], old["quantity"], effective.isoformat(),
                     old["valid_to"],
                 ),
@@ -201,12 +208,12 @@ class SQLiteProductionBomService:
             con.execute(
                 """
                 INSERT INTO production_apply_history(
-                  application_id,change_id,version_code,before_bom_revision,
+                  application_id,change_id,plant_code,version_code,before_bom_revision,
                   after_bom_revision,apply_result,applied_by,completed_at
-                ) VALUES(?,?,?,?,?,'SUCCEEDED',?,CURRENT_TIMESTAMP)
+                ) VALUES(?,?,?,?,?,?,'SUCCEEDED',?,CURRENT_TIMESTAMP)
                 """,
                 (
-                    application_id, change_id, version_code,
+                    application_id, change_id, plant_code, version_code,
                     expected_row_revision, expected_row_revision + 1, applied_by,
                 ),
             )
@@ -242,6 +249,7 @@ class SQLiteProductionBomService:
             "result": "APPLIED",
             "application_id": application_id,
             "change_id": change_id,
+            "plant_code": plant_code,
             "version_code": version_code,
             "parent_item_code": parent_item_code,
             "old_item_code": old_item_code,
@@ -276,8 +284,13 @@ class SQLiteProductionBomService:
             return
         parent_count = con.execute(
             """
-            SELECT COUNT(DISTINCT parent_item_code)
-            FROM bom_master WHERE child_item_code=? AND status='ACTIVE'
+            SELECT COALESCE(MAX(parent_count), 0)
+            FROM (
+              SELECT plant_code,COUNT(DISTINCT parent_item_code) AS parent_count
+              FROM bom_master
+              WHERE child_item_code=? AND status='ACTIVE'
+              GROUP BY plant_code
+            )
             """,
             (item_code,),
         ).fetchone()[0]

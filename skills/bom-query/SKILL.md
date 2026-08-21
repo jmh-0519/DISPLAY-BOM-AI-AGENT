@@ -20,7 +20,16 @@ description: >
 이 Skill에서 사용할 수 있는 MCP Tool은 다음과 같다.
 
 - `get_bom`
-  - 특정 제품의 기준일 BOM을 조회한다.
+  - 특정 VERSION/ASSY의 기준일 하위 BOM을 조회한다.
+
+- `get_bom_where_used`
+  - MATERIAL/ASSY가 사용된 직접 상위 품목과 최상위 MODEL을 역방향으로 조회한다.
+
+- `get_product_detail`
+  - 모델 Master 및 상세 속성정보를 조회한다.
+
+- `get_item_detail`
+  - MATERIAL/ASSY Master 및 상세 속성정보를 조회한다.
 
 - `export_bom_excel`
   - 동일 조회조건의 BOM 결과를 Excel 파일로 생성한다.
@@ -56,7 +65,19 @@ description: >
 8. 반환된 BOM 데이터를 기준으로 결과를 설명한다.
 
 
-### 2. 제품 검색
+### 2. 역방향 BOM 조회
+
+사용자가 특정 자재/ASSY가 어떤 상위 ASSY 또는 MODEL에 사용되는지 질문한 경우:
+
+1. 대상 품목 코드를 식별한다.
+2. PLANT가 없으면 해당 품목이 실제 사용되는 PLANT를 조회해 사용자 선택을 받는다.
+3. `get_bom_where_used`를 호출한다.
+4. 직접 상위 품목과 최상위 MODEL을 모두 설명한다.
+5. 결과가 없으면 선택한 PLANT의 현재 BOM에 구성되어 있지 않다고 알린다.
+6. MATERIAL에 `get_bom`을 호출하지 않는다.
+
+
+### 3. 제품 검색
 
 사용자가 제품 검색을 요청한 경우:
 
@@ -65,7 +86,7 @@ description: >
 3. 검색 결과를 제품 ID와 제품명을 중심으로 설명한다.
 
 
-### 3. 자재 검색
+### 4. 자재 검색
 
 사용자가 자재 검색을 요청한 경우:
 
@@ -74,7 +95,7 @@ description: >
 3. 검색 결과를 자재 ID와 자재명을 중심으로 설명한다.
 
 
-### 4. BOM 내 자재 확인
+### 5. BOM 내 자재 확인
 
 사용자가 특정 제품 BOM에 특정 자재가 포함되어 있는지 질문한 경우:
 
@@ -116,7 +137,10 @@ description: >
 
 | 사용자 요청 | 우선 Tool |
 | --- | --- |
-| 특정 제품 BOM 조회 | `get_bom` |
+| 특정 제품/ASSY 하위 BOM 조회 | `get_bom` |
+| 자재/ASSY의 상위 BOM·MODEL 조회 | `get_bom_where_used` |
+| 모델 상세 속성 조회 | `get_product_detail` |
+| 자재/ASSY 상세 속성 조회 | `get_item_detail` |
 | 조회한 BOM의 Excel 다운로드 | `export_bom_excel` |
 | 제품 전체 목록 | `list_products` |
 | 제품 검색 | `search_product` |

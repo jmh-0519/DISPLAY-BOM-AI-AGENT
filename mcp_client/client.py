@@ -64,6 +64,8 @@ class DisplayBomMcpClient:
         MCP Server의 Tool을 호출합니다.
         """
 
+        tool_error_message: str | None = None
+
         async with stdio_client(
             self.server_params
         ) as (read, write):
@@ -81,7 +83,7 @@ class DisplayBomMcpClient:
                 )
 
                 if result.is_error:
-                    message = (
+                    tool_error_message = (
                         result.content[0].text
                         if result.content
                         else (
@@ -90,11 +92,13 @@ class DisplayBomMcpClient:
                         )
                     )
 
-                    raise RuntimeError(
-                        message
-                    )
+        # MCP/AnyIO TaskGroup 내부에서 예외를 발생시키면 실제 Tool 오류가
+        # ExceptionGroup으로 포장됩니다. Session과 stdio가 정상 종료된 뒤
+        # 업무 오류를 전달하여 사용자에게 원래 메시지가 보이게 합니다.
+        if tool_error_message is not None:
+            raise RuntimeError(tool_error_message)
 
-                return result
+        return result
 
     async def _list_tools(
         self,
@@ -298,6 +302,7 @@ class DisplayBomMcpClient:
         self,
         product_id: str,
         as_of_date: str | None = None,
+        plant_code: str = "P01",
     ) -> list[dict]:
         """
         제품 BOM을 조회합니다.
@@ -307,6 +312,7 @@ class DisplayBomMcpClient:
             self._get_bom_async(
                 product_id=product_id,
                 as_of_date=as_of_date,
+                plant_code=plant_code,
             )
         )
 
@@ -314,6 +320,7 @@ class DisplayBomMcpClient:
         self,
         product_id: str,
         as_of_date: str | None = None,
+        plant_code: str = "P01",
     ) -> list[dict]:
         """
         MCP get_bom Tool을 호출합니다.
@@ -322,6 +329,7 @@ class DisplayBomMcpClient:
         result = await self._call_tool(
             "get_bom",
             {
+                "plant_code": plant_code,
                 "product_id": (
                     product_id
                 ),
@@ -339,6 +347,54 @@ class DisplayBomMcpClient:
             data,
             "get_bom",
         )
+
+    def list_plants(
+        self,
+        reference_code: str | None = None,
+        as_of_date: str | None = None,
+    ) -> list[dict]:
+        """대상 VERSION/ASSY/MATERIAL이 실제 존재하는 활성 Plant를 조회합니다."""
+        args = {}
+        if reference_code:
+            args["reference_code"] = str(reference_code).strip().upper()
+        if as_of_date:
+            args["as_of_date"] = as_of_date
+        return self._ensure_list(self.call_tool("list_plants", args), "list_plants")
+
+    # =========================================================
+    # reverse BOM / master detail
+    # =========================================================
+
+    def get_bom_where_used(
+        self,
+        item_code: str,
+        plant_code: str,
+        as_of_date: str | None = None,
+    ) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_bom_where_used",
+            {"item_code": item_code, "plant_code": plant_code, "as_of_date": as_of_date},
+        ), "get_bom_where_used")
+
+    def get_product_detail(
+        self,
+        product_id: str,
+        as_of_date: str | None = None,
+    ) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_product_detail",
+            {"product_id": product_id, "as_of_date": as_of_date},
+        ), "get_product_detail")
+
+    def get_item_detail(
+        self,
+        item_code: str,
+        as_of_date: str | None = None,
+    ) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_item_detail",
+            {"item_code": item_code, "as_of_date": as_of_date},
+        ), "get_item_detail")
 
     # =========================================================
     # list_products
@@ -494,6 +550,7 @@ class DisplayBomMcpClient:
         old_material_id: str,
         new_material_id: str,
         as_of_date: str | None = None,
+        plant_code: str = "P01",
     ) -> dict:
         """자재 교체 설계변경의 가능 여부와 영향을 분석합니다."""
 
@@ -503,6 +560,7 @@ class DisplayBomMcpClient:
                 old_material_id=old_material_id,
                 new_material_id=new_material_id,
                 as_of_date=as_of_date,
+                plant_code=plant_code,
             )
         )
 
@@ -540,10 +598,13 @@ class DisplayBomMcpClient:
                 raise RuntimeError(f"{tool_name} 파일 데이터가 올바르지 않습니다.") from error
         return data
 
-    def export_bom_excel(self, product_id: str, as_of_date: str | None = None) -> dict:
+    def export_bom_excel(
+        self, product_id: str, as_of_date: str | None = None, plant_code: str = "P01"
+    ) -> dict:
         data = self._ensure_dict(
             self.call_tool("export_bom_excel", {
-                "product_id": product_id, "as_of_date": as_of_date,
+                "plant_code": plant_code, "product_id": product_id,
+                "as_of_date": as_of_date,
             }),
             "export_bom_excel",
         )
@@ -555,6 +616,13 @@ class DisplayBomMcpClient:
             "export_design_change_report",
         )
         return self._decode_download(data, "export_design_change_report")
+
+    def export_phase3_completion_report(self, request_id: str) -> dict:
+        data = self._ensure_dict(
+            self.call_tool("export_phase3_completion_report", {"request_id": request_id}),
+            "export_phase3_completion_report",
+        )
+        return self._decode_download(data, "export_phase3_completion_report")
 
     def list_design_changes(self) -> list[dict]:
         return self._ensure_list(self.call_tool("list_design_changes", {}), "list_design_changes")
@@ -583,10 +651,12 @@ class DisplayBomMcpClient:
         old_material_id: str,
         new_material_id: str,
         as_of_date: str | None = None,
+        plant_code: str = "P01",
     ) -> dict:
         result = await self._call_tool(
             "analyze_design_change",
             {
+                "plant_code": plant_code,
                 "product_id": product_id,
                 "old_material_id": old_material_id,
                 "new_material_id": new_material_id,
@@ -705,3 +775,133 @@ class DisplayBomMcpClient:
                 "applied_by": applied_by,
             },
         )
+
+    def analyze_design_change_candidates(self, request: dict, actions: list[dict]) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "analyze_design_change_candidates", {"request": request, "actions": actions}),
+            "analyze_design_change_candidates")
+
+    def revalidate_design_change_analysis(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("revalidate_design_change_analysis", arguments),
+                                 "revalidate_design_change_analysis")
+
+    def preview_design_change_analysis_impact(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("preview_design_change_analysis_impact", arguments),
+                                 "preview_design_change_analysis_impact")
+
+    def create_design_change_request_from_analysis(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("create_design_change_request_from_analysis", arguments),
+                                 "create_design_change_request_from_analysis")
+
+    def explain_design_change_analysis_session(self, analysis: dict) -> dict:
+        return self._ensure_dict(self.call_tool("explain_design_change_analysis_session", {"analysis": analysis}),
+                                 "explain_design_change_analysis_session")
+
+    def explain_design_change_analysis_candidate(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("explain_design_change_analysis_candidate", arguments),
+                                 "explain_design_change_analysis_candidate")
+
+    def compare_design_change_analysis_candidates(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("compare_design_change_analysis_candidates", arguments),
+                                 "compare_design_change_analysis_candidates")
+
+    def create_design_change_request(self, request: dict, actions: list[dict]) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "create_design_change_request", {"request": request, "actions": actions}),
+            "create_design_change_request")
+
+    def evaluate_replacement_candidates(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("evaluate_replacement_candidates", arguments),
+                                 "evaluate_replacement_candidates")
+
+    def select_candidate_and_supplier(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("select_candidate_and_supplier", arguments),
+                                 "select_candidate_and_supplier")
+
+    def confirm_candidate_selection(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("confirm_candidate_selection", arguments),
+                                 "confirm_candidate_selection")
+
+    def approve_candidate_impact(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("approve_candidate_impact", arguments),
+                                 "approve_candidate_impact")
+
+    def submit_candidate_additional_data(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("submit_candidate_additional_data", arguments),
+                                 "submit_candidate_additional_data")
+
+    def record_exception_approval(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("record_exception_approval", arguments),
+                                 "record_exception_approval")
+
+    def get_change_request_result(self, request_id: str) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_change_request_result", {"request_id": request_id}),
+            "get_change_request_result")
+
+    def get_design_change_analysis(self, request_id: str) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_design_change_analysis", {"request_id": request_id}),
+            "get_design_change_analysis")
+
+    def get_candidate_evaluation_detail(
+        self, request_id: str, candidate_item_code: str, action_id: str | None = None
+    ) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "get_candidate_evaluation_detail", {
+                "request_id": request_id,
+                "candidate_item_code": candidate_item_code,
+                "action_id": action_id,
+            }), "get_candidate_evaluation_detail")
+
+    def compare_design_change_candidates(
+        self, request_id: str, candidate_item_codes: list[str] | None = None,
+        action_id: str | None = None, criterion: str = "SPEC_SIMILARITY"
+    ) -> dict:
+        return self._ensure_dict(self.call_tool(
+            "compare_design_change_candidates", {
+                "request_id": request_id,
+                "candidate_item_codes": candidate_item_codes,
+                "action_id": action_id,
+                "criterion": criterion,
+            }), "compare_design_change_candidates")
+
+    def create_multi_action_preview(self, request_id: str, created_by: str) -> dict:
+        return self._ensure_dict(self.call_tool("create_multi_action_preview", {
+            "request_id": request_id, "created_by": created_by}), "create_multi_action_preview")
+
+    def record_final_apply_approval(self, request_id: str, approved_by: str) -> dict:
+        return self._ensure_dict(self.call_tool("record_final_apply_approval", {
+            "request_id": request_id, "approved_by": approved_by}), "record_final_apply_approval")
+
+    def apply_approved_change_request(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("apply_approved_change_request", arguments),
+                                 "apply_approved_change_request")
+
+    def list_rules(self, as_of_date: str | None = None) -> list[dict]:
+        return self._ensure_list(self.call_tool("list_rules", {"as_of_date": as_of_date}),
+                                 "list_rules")
+
+    def create_rule(self, rule: dict, conditions: list[dict]) -> dict:
+        return self._ensure_dict(self.call_tool("create_rule", {
+            "rule": rule, "conditions": conditions}), "create_rule")
+
+    def update_rule(self, rule: dict, conditions: list[dict]) -> dict:
+        return self._ensure_dict(self.call_tool("update_rule", {
+            "rule": rule, "conditions": conditions}), "update_rule")
+
+    def deactivate_rule(self, rule_id: str, revision_no: int) -> dict:
+        return self._ensure_dict(self.call_tool("deactivate_rule", {
+            "rule_id": rule_id, "revision_no": revision_no}), "deactivate_rule")
+
+    def list_phase3_change_history(self) -> list[dict]:
+        return self._ensure_list(self.call_tool("list_phase3_change_history", {}),
+                                 "list_phase3_change_history")
+
+    def record_performance_outcome(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("record_performance_outcome", arguments),
+                                 "record_performance_outcome")
+
+    def export_training_dataset(self, **arguments) -> dict:
+        return self._ensure_dict(self.call_tool("export_training_dataset", arguments),
+                                 "export_training_dataset")

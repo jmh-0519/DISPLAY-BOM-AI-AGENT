@@ -12,7 +12,7 @@ def main() -> None:
     parser.add_argument(
         "--recreate",
         action="store_true",
-        help="지정한 기존 DB 파일을 삭제하고 STEP24-A2 v2 Schema로 다시 생성",
+        help="지정한 기존 DB 파일을 삭제하고 현재 Schema로 다시 생성",
     )
     args = parser.parse_args()
     path = Path(args.database)

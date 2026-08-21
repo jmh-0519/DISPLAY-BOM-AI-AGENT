@@ -4,7 +4,7 @@ from collections import Counter
 from datetime import date
 import uuid
 
-from database import SQLiteDatabase
+from database import SchemaManager, SQLiteDatabase
 from repositories.sqlite_repository import SQLiteBomRepository
 from services.repository_bom_service import RepositoryBomService
 from services.sqlite_production_bom_service import SQLiteProductionBomService
@@ -19,6 +19,7 @@ class SQLiteDesignChangeWorkflowService:
 
     def __init__(self, database: SQLiteDatabase) -> None:
         self.database = database
+        SchemaManager(database).initialize()
         self.repository = SQLiteBomRepository(database)
         self.bom = RepositoryBomService(self.repository)
 
@@ -31,7 +32,11 @@ class SQLiteDesignChangeWorkflowService:
         return f"EVT-{uuid.uuid4().hex[:12].upper()}"
 
     def analyze_replace(self, product_id: str, old_material_id: str,
-                        new_material_id: str, as_of_date: str | None = None) -> dict:
+                        new_material_id: str, as_of_date: str | None = None,
+                        plant_code: str = "P01") -> dict:
+        plant = self.repository.get_plant(self._norm(plant_code))
+        if not plant or plant["active_yn"] != "Y":
+            raise ValueError(f"활성 PLANT를 찾을 수 없습니다: {plant_code}")
         product = self._norm(product_id)
         old_code = self._norm(old_material_id)
         new_code = self._norm(new_material_id)
@@ -45,9 +50,11 @@ class SQLiteDesignChangeWorkflowService:
         checks.append({"check": "PRODUCT_EXISTS", "status": "PASS" if version else "FAIL",
                        "message": f"대상 VERSION: {version or product}"})
         if not version:
-            return self._analysis_result(product, old_code, new_code, checks)
+            return self._analysis_result(
+                plant["plant_code"], product, old_code, new_code, checks
+            )
 
-        tree = self.repository.get_tree(version, as_of_date)
+        tree = self.repository.get_tree(plant["plant_code"], version, as_of_date)
         targets = [row for row in tree if self._norm(row["child_item_code"]) == old_code]
         checks.append({"check": "OLD_MATERIAL_IN_BOM", "status": "PASS" if len(targets) == 1 else "FAIL",
                        "message": f"현재 BOM 대상 관계 {len(targets)}건"})
@@ -77,24 +84,30 @@ class SQLiteDesignChangeWorkflowService:
                           "INCOMPATIBLE": "FAIL"}[incompatible["result"]]
                 message = incompatible["reason"] or incompatible["result"]
             checks.append({"check": "COMPATIBILITY", "status": status, "message": message})
-        result = self._analysis_result(version, old_code, new_code, checks)
+        result = self._analysis_result(
+            plant["plant_code"], version, old_code, new_code, checks
+        )
         if len(targets) == 1:
             result["target"] = targets[0]
         return result
 
     @staticmethod
-    def _analysis_result(product: str, old_code: str, new_code: str,
+    def _analysis_result(plant_code: str, product: str, old_code: str, new_code: str,
                          checks: list[dict]) -> dict:
         statuses = {row["status"] for row in checks}
         result = "FAIL" if "FAIL" in statuses else "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
-        return {"success": result != "FAIL", "result": result, "product_id": product,
+        return {"success": result != "FAIL", "result": result,
+                "plant_code": plant_code, "product_id": product,
                 "old_material_id": old_code, "new_material_id": new_code,
                 "checks": checks, "production_bom_modified": False}
 
     def create_change_request(self, *, product_id: str, old_material_id: str,
                               new_material_id: str, reason: str, effective_date: str,
-                              requested_by: str, as_of_date: str | None = None) -> dict:
-        analysis = self.analyze_replace(product_id, old_material_id, new_material_id, as_of_date)
+                              requested_by: str, as_of_date: str | None = None,
+                              plant_code: str = "P01") -> dict:
+        analysis = self.analyze_replace(
+            product_id, old_material_id, new_material_id, as_of_date, plant_code
+        )
         if analysis["result"] == "FAIL":
             return {"success": False, "result": "ANALYSIS_FAILED", "analysis": analysis,
                     "production_bom_modified": False}
@@ -102,36 +115,40 @@ class SQLiteDesignChangeWorkflowService:
         change_id = f"CHG-{date.today():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
         with self.database.transaction() as con:
             old_revision = con.execute(
-                """SELECT row_revision FROM bom_master WHERE parent_item_code=? AND
+                """SELECT row_revision FROM bom_master WHERE plant_code=? AND parent_item_code=? AND
                    child_item_code=? AND location_code=? AND status='ACTIVE'
                    ORDER BY valid_from DESC LIMIT 1""",
-                (target["parent_item_code"], self._norm(old_material_id), target["location_code"]),
+                (analysis["plant_code"], target["parent_item_code"],
+                 self._norm(old_material_id), target["location_code"]),
             ).fetchone()
             con.execute("""INSERT INTO design_changes(
-                change_id,version_code,change_type,requested_date,effective_date,reason,
+                change_id,plant_code,version_code,change_type,requested_date,effective_date,reason,
                 analysis_result,approval_status,apply_status,workflow_status,
                 expected_bom_revision,requested_by)
-                VALUES(?,?, 'REPLACE',?,?,?,?, 'AI_REVIEW_PENDING','REQUESTED','ANALYZED',?,?)""",
-                (change_id, analysis["product_id"], date.today().isoformat(), effective_date,
+                VALUES(?,?,?, 'REPLACE',?,?,?,?, 'AI_REVIEW_PENDING','REQUESTED','ANALYZED',?,?)""",
+                (change_id, analysis["plant_code"], analysis["product_id"],
+                 date.today().isoformat(), effective_date,
                  str(reason).strip(), analysis["result"], old_revision[0] if old_revision else 1,
                  str(requested_by).strip()))
             con.execute("""INSERT INTO design_change_items(
-                change_id,item_seq,action,parent_item_code,old_item_code,new_item_code,
+                change_id,item_seq,plant_code,action,parent_item_code,old_item_code,new_item_code,
                 location_code,sequence_no,quantity,effective_date)
-                VALUES(?,1,'REPLACE',?,?,?,?,?,?,?)""",
-                (change_id, target["parent_item_code"], self._norm(old_material_id),
+                VALUES(?,1,?,'REPLACE',?,?,?,?,?,?,?)""",
+                (change_id, analysis["plant_code"], target["parent_item_code"],
+                 self._norm(old_material_id),
                  self._norm(new_material_id), target["location_code"], target["sequence_no"],
                  target["quantity"], effective_date))
             for seq, check in enumerate(analysis["checks"], 1):
                 con.execute("""INSERT INTO design_change_checks(
-                    change_id,item_seq,check_seq,check_type,target_code,result,blocking_yn,message)
-                    VALUES(?,1,?,?,?,?,?,?)""", (change_id, seq, check["check"],
+                    change_id,item_seq,check_seq,plant_code,check_type,target_code,result,blocking_yn,message)
+                    VALUES(?,1,?,?,?,?,?,?,?)""", (change_id, seq, analysis["plant_code"], check["check"],
                     self._norm(new_material_id), check["status"],
                     "Y" if check["status"] == "FAIL" else "N", check["message"]))
             con.execute("""INSERT INTO workflow_events(event_id,change_id,event_type,
                 to_status,actor_type,actor_id,reason) VALUES(?,?,'CHANGE_REQUESTED',
                 'ANALYZED','USER',?,?)""", (self._event_id(), change_id, requested_by, reason))
         return {"success": True, "result": "CHANGE_REQUESTED", "change_id": change_id,
+                "plant_code": analysis["plant_code"],
                 "analysis": analysis, "production_bom_modified": False}
 
     def create_review_bom(self, *, change_id: str, created_by: str,
@@ -146,16 +163,24 @@ class SQLiteDesignChangeWorkflowService:
                 raise ValueError("SQLite 설계변경 요청 또는 변경 Item을 찾을 수 없습니다.")
             if con.execute("SELECT 1 FROM review_boms WHERE change_id=?", (change_code,)).fetchone():
                 raise ValueError("이미 Review BOM이 생성된 설계변경입니다.")
-            tree = self.repository.get_tree(change["version_code"], created_date)
+            tree = self.repository.get_tree(
+                change["plant_code"], change["version_code"], created_date
+            )
             if not tree:
                 raise ValueError("Review BOM을 생성할 Production BOM이 없습니다.")
-            con.execute("INSERT INTO design_change_snapshots(snapshot_id,change_id,version_code,source_bom_revision) VALUES(?,?,?,?)",
-                        (snapshot_id, change_code, change["version_code"], change["expected_bom_revision"] or 1))
-            con.execute("""INSERT INTO review_boms(review_id,change_id,version_code,review_status,
-                current_revision,created_by,created_at) VALUES(?,?,?,'CREATED',1,?,?)""",
-                (review_id, change_code, change["version_code"], created_by, created_date))
-            con.execute("INSERT INTO review_bom_revisions(review_id,revision_no,source,created_by,created_at) VALUES(?,1,'AI_PREVIEW',?,?)",
-                        (review_id, created_by, created_date))
+            con.execute("""INSERT INTO design_change_snapshots(
+                snapshot_id,change_id,plant_code,version_code,source_bom_revision)
+                VALUES(?,?,?,?,?)""",
+                (snapshot_id, change_code, change["plant_code"], change["version_code"],
+                 change["expected_bom_revision"] or 1))
+            con.execute("""INSERT INTO review_boms(review_id,change_id,plant_code,version_code,review_status,
+                current_revision,created_by,created_at) VALUES(?,?,?,?,'CREATED',1,?,?)""",
+                (review_id, change_code, change["plant_code"], change["version_code"],
+                 created_by, created_date))
+            con.execute("""INSERT INTO review_bom_revisions(
+                review_id,revision_no,plant_code,source,created_by,created_at)
+                VALUES(?,1,?,'AI_PREVIEW',?,?)""",
+                (review_id, change["plant_code"], created_by, created_date))
             for row in tree:
                 is_target = (row["parent_item_code"] == item["parent_item_code"] and
                              row["child_item_code"] == item["old_item_code"] and
@@ -167,14 +192,16 @@ class SQLiteDesignChangeWorkflowService:
                     path = path.rsplit("/", 1)[0] + "/" + child
                 values = (row["parent_item_code"], child, row["location_code"], row["sequence_no"],
                           row["quantity"], row["level"], path, row["required_quantity"], action)
-                con.execute("""INSERT INTO design_change_snapshot_items(snapshot_id,parent_item_code,
+                con.execute("""INSERT INTO design_change_snapshot_items(snapshot_id,plant_code,parent_item_code,
                     child_item_code,location_code,sequence_no,quantity,level,bom_path,
-                    required_quantity,change_action) VALUES(?,?,?,?,?,?,?,?,?,?)""", (snapshot_id, *values))
-                con.execute("""INSERT INTO review_bom_items(review_id,revision_no,version_code,
+                    required_quantity,change_action) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (snapshot_id, change["plant_code"], *values))
+                con.execute("""INSERT INTO review_bom_items(review_id,revision_no,plant_code,version_code,
                     parent_item_code,child_item_code,location_code,sequence_no,quantity,level,
                     bom_path,required_quantity,review_action,source,modified_yn,modified_by,modified_at)
-                    VALUES(?,1,?,?,?,?,?,?,?,?,?,?,'AI_PREVIEW',?,?,?)""",
-                    (review_id, change["version_code"], *values[:-1], action,
+                    VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,'AI_PREVIEW',?,?,?)""",
+                    (review_id, change["plant_code"], change["version_code"],
+                     *values[:-1], action,
                      "Y" if is_target else "N", created_by if is_target else None,
                      created_date if is_target else None))
             con.execute("""UPDATE design_changes SET apply_status='IN_REVIEW',workflow_status='IN_REVIEW',
@@ -197,14 +224,16 @@ class SQLiteDesignChangeWorkflowService:
                                  (review["change_id"],)).fetchall()
             statuses = {row["result"] for row in checks}
             result = "FAIL" if "FAIL" in statuses else "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
-            con.execute("""INSERT INTO bom_reviews(bom_review_id,review_id,revision_no,
+            con.execute("""INSERT INTO bom_reviews(bom_review_id,review_id,revision_no,plant_code,
                 reviewer_type,result,reviewer_id,started_at,completed_at)
-                VALUES(?,?,?,'AI',?,?,?,?)""", (bom_review_id, review_code,
-                review["current_revision"], result, reviewed_by, checked_date, checked_date))
+                VALUES(?,?,?,?,'AI',?,?,?,?)""", (bom_review_id, review_code,
+                review["current_revision"], review["plant_code"], result,
+                reviewed_by, checked_date, checked_date))
             for seq, row in enumerate(checks, 1):
-                con.execute("""INSERT INTO bom_review_checks(bom_review_id,check_seq,check_type,
+                con.execute("""INSERT INTO bom_review_checks(bom_review_id,check_seq,plant_code,check_type,
                     target_code,result,actual_value,expected_value,blocking_yn,message,checked_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?)""", (bom_review_id, seq, row["check_type"],
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (bom_review_id, seq,
+                    review["plant_code"], row["check_type"],
                     row["target_code"], row["result"], row["actual_value"], row["expected_value"],
                     row["blocking_yn"], row["message"], checked_date))
             if result == "FAIL":
@@ -257,6 +286,7 @@ class SQLiteDesignChangeWorkflowService:
             review_dict["review_result"] = "FAIL" if any(x["result"] == "FAIL" for x in checks) else "PASS"
             review_dict["completed_date"] = review_dict.get("updated_at")
         return {"success": True, "change_id": change_code, "product_id": change["version_code"],
+                "plant_code": change["plant_code"],
                 "change": dict(change), "change_items": mapped_items, "change_bom": [],
                 "review": review_dict, "report_revision": review["approved_revision"] if review else None,
                 "review_revision_history": [], "approved_review_bom": [], "review_checks": checks,

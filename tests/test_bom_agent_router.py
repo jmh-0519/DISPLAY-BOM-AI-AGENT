@@ -142,3 +142,10 @@ def test_router_allows_final_answer_after_max_steps():
     )
 
     assert result == END        
+
+def test_step40n_mcp_tool_error_ends_current_graph_turn_immediately():
+    from langgraph.graph import END
+    from agents.bom_agent_router import route_mcp_tool_result
+
+    assert route_mcp_tool_result({"error": "analyze_design_change_candidates: failed"}) == END
+    assert route_mcp_tool_result({"error": None}) == "agent"

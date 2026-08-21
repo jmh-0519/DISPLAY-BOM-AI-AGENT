@@ -67,7 +67,7 @@ def test_schema_creates_all_domain_tables(database):
 def test_schema_initialization_is_idempotent(database):
     manager = SchemaManager(database)
     manager.initialize()
-    assert manager.current_version() == 2
+    assert manager.current_version() == 6
 
     with database.connection() as connection:
         assert connection.execute(
@@ -239,3 +239,28 @@ def test_hierarchy_seed_has_cf_and_tft_as_lc_siblings(database):
 
     assert [row["child_process"] for row in rows] == ["CF", "TFT"]
     assert wrong_edge == 0
+
+
+def test_assy_item_name_accepts_only_process_domain_values(database):
+    with pytest.raises(sqlite3.IntegrityError):
+        with database.transaction() as connection:
+            _insert_item(connection, "ASSY-BAD-NAME", "ASSEMBLY", "OLB ASSY ALT-1")
+
+
+def test_assy_item_name_must_match_process_name(database):
+    with pytest.raises(sqlite3.IntegrityError):
+        with database.transaction() as connection:
+            _insert_item(connection, "ASSY-MISMATCH", "ASSEMBLY", "OLB")
+            connection.execute(
+                "INSERT INTO assembly_master(assembly_code,process_name) VALUES(?,?)",
+                ("ASSY-MISMATCH", "CF"),
+            )
+
+
+def test_step32_schema_has_persisted_supply_and_demand_evidence(tmp_path):
+    database = SQLiteDatabase(tmp_path / "step32-schema.db")
+    SchemaManager(database).initialize()
+    assert SchemaManager(database).current_version() == 6
+    with database.connection() as connection:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(candidate_evaluations)")}
+    assert {"supplier_evaluation_json", "demand_context_json"} <= columns

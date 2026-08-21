@@ -48,6 +48,7 @@ def _to_records(
 def get_bom_data(
     product_id: str,
     as_of_date: str | None = None,
+    plant_code: str = "P01",
 ) -> list[dict]:
     """
     제품의 Exploded BOM을 조회합니다.
@@ -57,13 +58,25 @@ def get_bom_data(
 
     result = (
         bom_service.get_bom_explosion(
+            plant_code,
             product_id,
             as_of_date=as_of_date,
         )
     )
 
+    return _to_records(result)
+
+
+def list_plants_data(
+    reference_code: str | None = None,
+    as_of_date: str | None = None,
+) -> list[dict]:
+    """Return active Plants relevant to a VERSION/ASSY/MATERIAL target.
+
+    If a reference code is supplied, unrelated Plants are intentionally excluded.
+    """
     return _to_records(
-        result
+        create_read_bom_service().list_plants(reference_code, as_of_date)
     )
 
 
@@ -161,3 +174,30 @@ def search_material_data(
     return _to_records(
         result
     )
+
+def get_where_used_data(
+    item_code: str,
+    plant_code: str,
+    as_of_date: str | None = None,
+) -> dict:
+    """Return reverse BOM usage for a MATERIAL/ASSEMBLY in one Plant."""
+    return create_read_bom_service().get_where_used(
+        plant_code=plant_code, item_code=item_code, as_of_date=as_of_date
+    )
+
+
+def get_product_detail_data(
+    product_id: str,
+    as_of_date: str | None = None,
+) -> dict:
+    result = create_read_bom_service().get_product_detail(product_id, as_of_date)
+    return result or {"found": False, "product_id": str(product_id or "").strip().upper()}
+
+
+def get_item_detail_data(
+    item_code: str,
+    as_of_date: str | None = None,
+) -> dict:
+    result = create_read_bom_service().get_item_detail(item_code, as_of_date)
+    return result or {"found": False, "item_code": str(item_code or "").strip().upper()}
+

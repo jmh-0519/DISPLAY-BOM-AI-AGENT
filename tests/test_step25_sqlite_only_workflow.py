@@ -18,7 +18,7 @@ from services.sqlite_production_bom_service import SQLiteProductionBomService
 
 @pytest.fixture
 def runtime_db(tmp_path, monkeypatch):
-    source = "data/display_bom.db"
+    source = "data/test_display_bom.db"
     target = tmp_path / "display_bom.db"
     shutil.copy2(source, target)
     monkeypatch.setenv("BOM_SQLITE_PATH", str(target))

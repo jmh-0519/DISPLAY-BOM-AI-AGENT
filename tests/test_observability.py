@@ -145,3 +145,25 @@ def test_only_allowed_status_values_are_recorded():
     assert unknown_summary["status_present"] is True
     assert "supplier ABC" not in str(unknown_summary)
     
+
+def test_agent_completion_allows_empty_tools_for_final_explanation():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(
+            content="근거를 설명합니다.", tool_calls=None,
+        ))]
+    )
+    azure = AzureOpenAIClient.__new__(AzureOpenAIClient)
+    azure.settings = SimpleNamespace(azure_openai_deployment="deployment")
+    azure._create_completion = Mock(return_value=response)
+
+    actual = azure.create_agent_completion(
+        messages=[{"role": "user", "content": "왜 FAIL이야?"}],
+        tools=[],
+        skill_context="Explain skill",
+    )
+
+    assert actual is response.choices[0].message
+    request = azure._create_completion.call_args.kwargs
+    assert "tools" not in request
+    assert "tool_choice" not in request
+    assert request["temperature"] == 0

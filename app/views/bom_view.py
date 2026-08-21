@@ -17,10 +17,13 @@ def render_bom_result_table(bom: pd.DataFrame) -> None:
         "ASSY BOM" if root_type == "ASSEMBLY" else "제품 BOM"
     )
     st.subheader(title)
+    plant_code = _clean_text(first.get("plant_code"))
+    plant_name = _clean_text(first.get("plant_name"))
+    st.markdown(f"**PLANT:** `{escape(plant_code)}` · {escape(plant_name)}")
     st.markdown(f"**BOM 조회 대상 코드:** `{escape(root_code)}`")
 
     headers = [
-        "PARENT_CODE", "PARENT_NAME", "CHILD_CODE", "CHILD_NAME",
+        "PLANT", "PARENT_CODE", "PARENT_NAME", "CHILD_CODE", "CHILD_NAME",
         "LOCATION", "수량", "소요수량",
     ]
     body = []
@@ -28,6 +31,7 @@ def render_bom_result_table(bom: pd.DataFrame) -> None:
         child_is_assy = _clean_text(row.get("bom_child_type")) == "ASSEMBLY"
         row_class = ' class="bom-assy-row"' if child_is_assy else ""
         values = [
+            escape(_clean_text(row.get("plant_code"))),
             escape(_clean_text(row.get("bom_parent"))),
             escape(_clean_text(row.get("bom_parent_name"))),
             escape(_clean_text(row.get("bom_child"))),

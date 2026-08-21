@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from database import SQLiteDatabase
+from database import SQLiteDatabase, SchemaManager
 from repositories import SQLiteBomRepository
 from services.repository_bom_service import RepositoryBomService
 from core.database_config import sqlite_database_path
@@ -22,6 +22,7 @@ def create_read_bom_service(
             f"SQLite DB를 찾을 수 없습니다: {path}"
         )
     database = SQLiteDatabase(path)
+    SchemaManager(database).initialize()
     with database.connection() as connection:
         schema = connection.execute(
             "SELECT 1 FROM sqlite_master "
@@ -39,7 +40,7 @@ def create_read_bom_service(
             if schema
             else 0
         )
-    if not schema or version != 2:
+    if not schema or version is None or version < 2:
         raise BomStorageConfigurationError(
             "STEP24-A2 v2 Schema가 적용된 SQLite DB가 아닙니다."
         )

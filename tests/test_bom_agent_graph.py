@@ -389,3 +389,147 @@ def test_graph_returns_initial_workflow_for_new_thread():
 
     assert workflow["analysis_status"] == "NOT_STARTED"
     assert workflow["current_step"] == "NOT_STARTED"
+
+
+def test_graph_updates_workflow_after_streamlit_direct_action():
+    client = Mock()
+    mcp_client = Mock()
+    mcp_client.get_tool_definitions.return_value = []
+    client.create_agent_completion.return_value = make_assistant_message(
+        content="후보 승인 대기 중입니다.",
+        tool_calls=None,
+    )
+    graph = BomAgentGraph(
+        client=client,
+        mcp_client=mcp_client,
+        skill_context="Phase3 workflow",
+    )
+    thread_id = "phase3-ui-sync"
+    graph.run("후보를 확인해줘", thread_id=thread_id)
+
+    workflow = graph.get_design_change_state(thread_id)
+    workflow.update({
+        "request_id": "REQ-UI-SYNC",
+        "candidate_approval_id": "APR-UI-SYNC",
+        "requires_exception": True,
+        "current_step": "CANDIDATE_APPROVED",
+    })
+    graph.update_design_change_state(workflow, thread_id=thread_id)
+
+    synchronized = graph.get_design_change_state(thread_id)
+    assert synchronized["request_id"] == "REQ-UI-SYNC"
+    assert synchronized["current_step"] == "CANDIDATE_APPROVED"
+    assert synchronized["requires_exception"] is True
+
+
+def test_bom_query_normalization_preserves_explicit_plant_code():
+    assert BomAgentGraph._normalize_bom_query(
+        "P02에서 LTA400HR01-0의 BOM을 보여줘"
+    ) == "P02에서 LTA400HR01-0의 BOM을 보여줘"
+
+
+def test_bom_query_normalization_preserves_product_wide_cost_scan_intent():
+    query = (
+        "LTA550HR01-001 모델의 CF 자재 말고 대상 모델의 BOM 정보를 확인해서 "
+        "BOM에 구성된 자재들의 원가를 낮출 수 있는 대체 자재들이 있는지 찾아줘. "
+        "PLANT는 P01이야."
+    )
+    assert BomAgentGraph._normalize_bom_query(query) == query
+
+
+def test_bom_query_normalization_preserves_design_change_business_intent():
+    query = "P01에서 LTA400HR01-001 BOM을 확인해서 단종 자재의 대체 후보를 찾아줘"
+    assert BomAgentGraph._normalize_bom_query(query) == query
+
+
+def test_step40g_delete_compound_bom_question_is_not_normalized_to_simple_bom_lookup():
+    raw = "LTA650HR11-001 모델 P03 PLANT BOM을 확인해서 0001-310701 자재를 제거하자."
+    assert BomAgentGraph._normalize_bom_query(raw) == raw
+
+
+def test_step40n_tool_execution_error_stops_without_llm_retry():
+    client = Mock()
+    mcp_client = Mock()
+    mcp_client.get_tool_definitions.return_value = make_tool_definitions()
+    mcp_client.call_tool.side_effect = RuntimeError("deterministic tool failure")
+
+    client.create_agent_completion.return_value = make_assistant_message(
+        content=None,
+        tool_calls=[
+            make_tool_call(
+                tool_call_id="call-fail-once",
+                name="get_bom",
+                arguments='{"product_id": "PRD-001"}',
+            )
+        ],
+    )
+
+    graph = BomAgentGraph(
+        client=client,
+        mcp_client=mcp_client,
+        skill_context="BOM 조회 규칙",
+    )
+
+    result = graph.run("PRD-001의 BOM을 조회해줘")
+
+    assert "Tool 실행 오류" in result
+    assert "get_bom: deterministic tool failure" in result
+    assert client.create_agent_completion.call_count == 1
+    assert mcp_client.call_tool.call_count == 1
+
+
+
+def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
+    client = Mock()
+    mcp_client = Mock()
+    mcp_client.get_tool_definitions.return_value = [{
+        "type": "function",
+        "function": {
+            "name": "analyze_design_change_candidates",
+            "description": "설계변경 후보 분석",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request": {"type": "object"},
+                    "actions": {"type": "array", "items": {"type": "object"}},
+                },
+                "required": ["request", "actions"],
+            },
+        },
+    }]
+    mcp_client.call_tool.side_effect = RuntimeError(
+        "ACTIVE_SOURCE_BOM_RELATION_NOT_FOUND: current BOM relation missing"
+    )
+    client.create_agent_completion.return_value = make_assistant_message(
+        content=None,
+        tool_calls=[
+            make_tool_call(
+                tool_call_id="call-analysis-fail",
+                name="analyze_design_change_candidates",
+                arguments=(
+                    '{"request":{"version_code":"LTA650HR11-001",'
+                    '"plant_code":"P03"},'
+                    '"actions":[{"action_type":"QUANTITY_CHANGE",'
+                    '"old_item_code":"0001-310701","new_quantity":2}]}'
+                ),
+            )
+        ],
+    )
+
+    graph = BomAgentGraph(
+        client=client,
+        mcp_client=mcp_client,
+        skill_context="Phase3 workflow",
+    )
+
+    response = graph.run_with_artifacts(
+        "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재 수량을 2로 바꾸자.",
+        thread_id="step40n2-visible-error",
+    )
+
+    assert "Tool 실행 오류" in response["answer"]
+    assert "ACTIVE_SOURCE_BOM_RELATION_NOT_FOUND" in response["answer"]
+    assert response["suppress_answer"] is False
+    assert response["render_phase3_panel"] is False
+    assert mcp_client.call_tool.call_count == 1
+    assert client.create_agent_completion.call_count == 1

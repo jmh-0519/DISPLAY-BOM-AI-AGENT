@@ -15,6 +15,8 @@ class BomExcelExportService:
     THIN_BORDER = Border(bottom=Side(style="thin", color="B4C6D7"))
 
     COLUMN_LABELS = {
+        "plant_code": "PLANT_CODE",
+        "plant_name": "PLANT_NAME",
         "level": "BOM Level",
         "bom_level": "BOM Level",
         "product_id": "제품 ID",
@@ -43,10 +45,13 @@ class BomExcelExportService:
         "status": "상태",
     }
     BOM_RESULT_COLUMNS = [
-        "bom_parent", "bom_parent_name", "bom_child", "bom_child_name",
+        "plant_code", "plant_name", "bom_parent", "bom_parent_name",
+        "bom_child", "bom_child_name",
         "location", "quantity", "required_quantity",
     ]
     BOM_RESULT_LABELS = {
+        "plant_code": "PLANT_CODE",
+        "plant_name": "PLANT_NAME",
         "bom_parent": "PARENT_CODE",
         "bom_parent_name": "PARENT_NAME",
         "bom_child": "CHILD_CODE",
@@ -63,6 +68,7 @@ class BomExcelExportService:
         product_id: str,
         as_of_date: str | None,
         generated_at: str,
+        plant_code: str = "P01",
     ) -> bytes:
         if not rows:
             raise ValueError("Excel로 내보낼 BOM 조회 결과가 없습니다.")
@@ -100,6 +106,7 @@ class BomExcelExportService:
         info_sheet = workbook.create_sheet("조회정보")
         info_sheet.sheet_view.showGridLines = False
         info_rows = [
+            ("PLANT", f"{plant_code} · {rows[0].get('plant_name') or ''}".strip(" ·")),
             ("BOM 조회 대상 코드", rows[0].get("root_code") or rows[0].get("root_model") or product_id),
             ("기준일", as_of_date or "현재 유효 기준"),
             ("조회 건수", len(rows)),
