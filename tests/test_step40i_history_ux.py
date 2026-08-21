@@ -36,3 +36,31 @@ def test_request_detail_selectbox_is_removed_and_click_drives_detail_without_url
     assert 'st.query_params.get("history_request_id"' not in SOURCE
     assert 'phase3_history_selected_request_id' in SOURCE
     assert "render_phase3_request_detail(client, selected)" in SOURCE
+
+
+def test_history_uses_confirm_and_bom_reflect_business_labels():
+    assert '"변경자재 확정"' in SOURCE
+    assert '"설계변경 확정"' in SOURCE
+    assert '"BOM 반영"' in SOURCE
+    assert '"후보 승인"' not in SOURCE
+    assert '"최종 승인"' not in SOURCE
+    assert '"E-BOM 적용"' not in SOURCE
+    assert '"APPROVED": "확정 완료"' in SOURCE
+    assert '"APPROVED": "확정 완료"' in SOURCE
+    assert '"APPLIED": "반영 완료"' in SOURCE
+
+
+def test_request_detail_can_resume_pending_workflow_from_history():
+    assert "def _render_history_next_step(" in SOURCE
+    assert 'workflow_status == "CANDIDATE_APPROVED"' in SOURCE
+    assert 'workflow_status == "WAITING_FINAL_APPROVAL"' in SOURCE
+    assert 'workflow_status == "FINAL_APPROVED"' in SOURCE
+    assert '"통합 영향 Preview 생성"' in SOURCE
+    assert '"설계변경 확정"' in SOURCE
+    assert '"설계변경 BOM 반영"' in SOURCE
+
+
+def test_change_item_detail_merges_action_sequence_cell():
+    assert "def _render_action_item_detail_table(" in SOURCE
+    assert 'rowspan="{span}"' in SOURCE
+    assert "action-seq" in SOURCE

@@ -271,13 +271,43 @@ class BomAgentGraph:
         }
 
     @staticmethod
+    def _user_facing_tool_error(error_text: str) -> str:
+        """Remove Tool/function names and machine error codes from UI text.
+
+        The raw terminal error remains in Graph state/observability for debugging.
+        Only the business-readable result is returned to Streamlit.
+        """
+        message = str(error_text or "").strip()
+        if not message:
+            return "요청을 처리할 수 없습니다."
+
+        message = re.sub(
+            r"^\s*[A-Za-z0-9_.-]+\s*:\s*Error executing tool\s+"
+            r"[A-Za-z0-9_.-]+\s*:\s*",
+            "",
+            message,
+            flags=re.IGNORECASE,
+        )
+        message = re.sub(
+            r"^\s*Error executing tool\s+[A-Za-z0-9_.-]+\s*:\s*",
+            "",
+            message,
+            flags=re.IGNORECASE,
+        )
+        message = re.sub(
+            r"^\s*[A-Za-z0-9_.-]+\s*:\s*",
+            "",
+            message,
+            count=1,
+        )
+        message = re.sub(r"^\s*[A-Z][A-Z0-9_]{3,}\s*:\s*", "", message)
+        return message.strip() or "요청을 처리할 수 없습니다."
+
+    @staticmethod
     def _extract_final_answer(final_state: BomAgentState) -> str:
         terminal_error = str(final_state.get("error") or "").strip()
         if terminal_error:
-            return (
-                "요청을 처리하는 중 Tool 실행 오류가 발생했습니다.\n\n"
-                f"{terminal_error}"
-            )
+            return BomAgentGraph._user_facing_tool_error(terminal_error)
 
         messages = final_state.get("messages", [])
         if not messages:

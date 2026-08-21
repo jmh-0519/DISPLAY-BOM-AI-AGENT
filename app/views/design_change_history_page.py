@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import math
 
@@ -17,24 +18,21 @@ def _client() -> DisplayBomMcpClient:
 
 
 _STATUS_LABELS = {
-    # Workflow
+    # Workflow labels shown in the history UI.
     "NOT_STARTED": "미시작",
-    "REQUESTED": "요청 생성",
+    "REQUESTED": "Request 생성",
     "CANDIDATES_EVALUATED": "후보 평가 완료",
-    "WAITING_CANDIDATE_APPROVAL": "후보 승인 대기",
+    "WAITING_CANDIDATE_APPROVAL": "변경자재 확정 대기",
     "CONDITIONAL_REVIEW_REQUIRED": "조건부 검토 필요",
     "IMPACT_REVIEW_REQUIRED": "영향범위 확인 필요",
-    "CANDIDATE_APPROVED": "후보 승인 완료",
-    "WAITING_FINAL_APPROVAL": "최종 승인 대기",
-    "FINAL_APPROVED": "최종 승인 완료",
-    "APPLIED": "적용 완료",
+    "CANDIDATE_APPROVED": "변경자재 확정 완료",
+    "WAITING_FINAL_APPROVAL": "설계변경 확정 대기",
+    "FINAL_APPROVED": "설계변경 확정 완료",
+    "APPLIED": "BOM 반영 완료",
     "REPORT_COMPLETED": "완료 보고서 생성 완료",
     "BLOCKED": "진행 차단",
-    # Approval / apply
     "PENDING": "대기",
-    "APPROVED": "승인 완료",
     "REJECTED": "반려",
-    "NOT_APPLIED": "미적용",
     "FAILED": "실패",
 }
 
@@ -44,6 +42,33 @@ def _status_label(value) -> str:
     if not text:
         return "-"
     return _STATUS_LABELS.get(text.upper(), text)
+
+
+def _candidate_status_label(value) -> str:
+    text = str(value or "").strip().upper()
+    return {
+        "PENDING": "대기",
+        "APPROVED": "확정 완료",
+        "REJECTED": "반려",
+    }.get(text, _status_label(value))
+
+
+def _final_status_label(value) -> str:
+    text = str(value or "").strip().upper()
+    return {
+        "PENDING": "대기",
+        "APPROVED": "확정 완료",
+        "REJECTED": "반려",
+    }.get(text, _status_label(value))
+
+
+def _apply_status_label(value) -> str:
+    text = str(value or "").strip().upper()
+    return {
+        "NOT_APPLIED": "미반영",
+        "APPLIED": "반영 완료",
+        "FAILED": "실패",
+    }.get(text, _status_label(value))
 
 
 def _reasons(value) -> str:
@@ -82,9 +107,9 @@ def _history_rows(requests: list[dict]) -> list[dict]:
         "PLANT": row.get("plant_code"),
         "제품": row.get("version_code"),
         "변경 사유": _reasons(row.get("reasons_json")),
-        "후보 승인": _status_label(row.get("candidate_approval_status")),
-        "최종 승인": _status_label(row.get("final_approval_status")),
-        "E-BOM 적용": _status_label(row.get("apply_status")),
+        "변경자재 확정": _candidate_status_label(row.get("candidate_approval_status")),
+        "설계변경 확정": _final_status_label(row.get("final_approval_status")),
+        "BOM 반영": _apply_status_label(row.get("apply_status")),
         "업무 상태": _status_label(row.get("workflow_status")),
         "요청자": row.get("requested_by"),
         "생성시각": row.get("created_at"),
@@ -172,6 +197,149 @@ def _action_item_detail_rows(client: DisplayBomMcpClient, actions: list[dict]) -
     return [row for row in rows if row.get("품목 코드") or row.get("BOM 수량") is not None]
 
 
+def _render_action_item_detail_table(rows: list[dict]) -> None:
+    """Render before/after rows with one vertically merged Action sequence cell."""
+    if not rows:
+        return
+
+    columns = list(rows[0].keys())
+    grouped: list[tuple[object, list[dict]]] = []
+    for row in rows:
+        action_no = row.get("Action")
+        if grouped and grouped[-1][0] == action_no:
+            grouped[-1][1].append(row)
+        else:
+            grouped.append((action_no, [row]))
+
+    head = "".join(
+        f"<th>{html.escape(str(column))}</th>" for column in columns
+    )
+    body_parts: list[str] = []
+    for action_no, action_rows in grouped:
+        span = len(action_rows)
+        for row_index, row in enumerate(action_rows):
+            cells: list[str] = []
+            if row_index == 0:
+                cells.append(
+                    f'<td rowspan="{span}" class="action-seq">'
+                    f'{html.escape(_display_value(action_no))}</td>'
+                )
+            for column in columns[1:]:
+                value = _display_value(row.get(column))
+                cls = ""
+                if column in {"품목 코드", "BOM 수량"}:
+                    cls = "before" if row.get("구분") == "변경 전" else "after"
+                cells.append(
+                    f'<td class="{cls}">{html.escape(value)}</td>'
+                )
+            body_parts.append("<tr>" + "".join(cells) + "</tr>")
+
+    st.markdown(
+        f"""
+        <style>
+        .phase3-item-detail-wrap {{
+            overflow-x: auto;
+            margin-bottom: 0.75rem;
+        }}
+        table.phase3-item-detail {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.90rem;
+        }}
+        table.phase3-item-detail th,
+        table.phase3-item-detail td {{
+            border: 1px solid #E5E7EB;
+            padding: 0.52rem 0.58rem;
+            text-align: left;
+            vertical-align: middle;
+            white-space: nowrap;
+        }}
+        table.phase3-item-detail th {{
+            background: #F8FAFC;
+            font-weight: 500;
+        }}
+        table.phase3-item-detail td.action-seq {{
+            text-align: center;
+            font-weight: 600;
+            background: #FFFFFF;
+        }}
+        table.phase3-item-detail td.before {{
+            color: #1565C0;
+            font-weight: 700;
+        }}
+        table.phase3-item-detail td.after {{
+            color: #D32F2F;
+            font-weight: 700;
+        }}
+        </style>
+        <div class="phase3-item-detail-wrap">
+          <table class="phase3-item-detail">
+            <thead><tr>{head}</tr></thead>
+            <tbody>{''.join(body_parts)}</tbody>
+          </table>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_history_next_step(
+    client: DisplayBomMcpClient,
+    detail: dict,
+    *,
+    actor: str = "streamlit-user",
+) -> None:
+    """Allow a pending persisted Request to continue from the history detail."""
+    request_id = str(detail.get("request_id") or "").strip()
+    workflow_status = str(detail.get("workflow_status") or "").strip().upper()
+    if not request_id:
+        return
+
+    try:
+        if workflow_status == "CANDIDATE_APPROVED":
+            st.info("변경자재 확정이 완료되었습니다. 다음 단계인 통합 영향 Preview를 생성할 수 있습니다.")
+            if st.button(
+                "통합 영향 Preview 생성",
+                type="primary",
+                key=f"history_next_preview_{request_id}",
+            ):
+                client.create_multi_action_preview(request_id, actor)
+                st.rerun()
+
+        elif workflow_status == "WAITING_FINAL_APPROVAL":
+            st.info("Preview 확인이 완료되었습니다. 설계변경을 확정할 수 있습니다.")
+            if st.button(
+                "설계변경 확정",
+                type="primary",
+                key=f"history_next_confirm_{request_id}",
+            ):
+                client.record_final_apply_approval(request_id, actor)
+                st.rerun()
+
+        elif workflow_status == "FINAL_APPROVED":
+            final_approval_id = str(detail.get("final_approval_id") or "").strip()
+            if not final_approval_id:
+                st.warning("설계변경 확정 정보는 있으나 최종 확정 ID를 확인할 수 없습니다.")
+                return
+            st.warning(
+                "확정된 설계변경 내용을 Production E-BOM에 반영합니다. "
+                "반영 후에는 BOM이 실제 변경되므로 변경 내용을 다시 확인해 주세요."
+            )
+            if st.button(
+                "설계변경 BOM 반영",
+                type="primary",
+                key=f"history_next_apply_{request_id}",
+            ):
+                client.apply_approved_change_request(
+                    request_id=request_id,
+                    final_approval_id=final_approval_id,
+                    applied_by=actor,
+                )
+                st.rerun()
+    except Exception as error:
+        st.error(f"다음 단계 진행에 실패했습니다: {error}")
+
+
 def render_phase3_request_detail(
     client: DisplayBomMcpClient,
     request_id: str,
@@ -193,9 +361,9 @@ def render_phase3_request_detail(
     st.markdown(f"#### {heading}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("업무 상태", _status_label(detail.get("workflow_status")))
-    c2.metric("후보 승인", _status_label(detail.get("candidate_approval_status")))
-    c3.metric("최종 승인", _status_label(detail.get("final_approval_status")))
-    c4.metric("E-BOM 적용", _status_label(detail.get("apply_status")))
+    c2.metric("변경자재 확정", _candidate_status_label(detail.get("candidate_approval_status")))
+    c3.metric("설계변경 확정", _final_status_label(detail.get("final_approval_status")))
+    c4.metric("BOM 반영", _apply_status_label(detail.get("apply_status")))
 
     st.table(_display_df([
         {"항목": "Request ID", "값": detail.get("request_id")},
@@ -215,8 +383,11 @@ def render_phase3_request_detail(
         item_rows = _action_item_detail_rows(client, actions)
         if item_rows:
             st.markdown("#### 변경 품목 상세")
-            st.caption("방금 승인한 변경 전/후 품목의 Master 정보를 함께 표시합니다.")
-            st.dataframe(_display_df(item_rows), hide_index=True, width="stretch")
+            st.caption("확정한 변경 전/후 품목의 Master 정보를 함께 표시합니다.")
+            _render_action_item_detail_table(item_rows)
+
+    if show_completion_report:
+        _render_history_next_step(client, detail)
 
     if show_completion_report and detail.get("apply_status") == "APPLIED":
         try:
@@ -342,7 +513,7 @@ def render_design_change_history_page() -> None:
     st.subheader("설계변경 이력")
     st.caption(
         "AI 분석 Session은 이 목록에 저장되지 않습니다. 후보·영향범위를 확인한 뒤 사용자가 "
-        "'설계변경 진행'을 승인하여 실제 Request가 생성된 건만 표시합니다."
+        "'설계변경 진행'을 선택하여 실제 Request가 생성된 건만 표시합니다."
     )
     client = _client()
     try:

@@ -1663,4 +1663,22 @@ class Phase3WorkflowService:
         result = self.repository.get_request(request_id)
         if not result:
             raise ValueError("Change request not found")
+
+        # History detail can resume a persisted Request without bypassing MCP.
+        # Expose only workflow identifiers needed for the next allowed step.
+        context = SQLiteMultiActionRepository(self.repository.database).get_apply_context(request_id) or {}
+        approvals = context.get("approvals") or []
+        final_approval = next(
+            (
+                approval for approval in reversed(approvals)
+                if approval.get("approval_stage") == "FINAL_APPLY"
+                and approval.get("decision") == "APPROVED"
+            ),
+            None,
+        )
+        result["final_approval_id"] = (
+            final_approval.get("approval_id") if final_approval else None
+        )
+        preview = context.get("preview") or {}
+        result["preview_id"] = preview.get("preview_id")
         return result

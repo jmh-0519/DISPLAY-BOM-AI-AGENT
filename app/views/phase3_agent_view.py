@@ -1343,7 +1343,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 type="primary",
                 key=f"download_phase3_report_completed_{workflow.get('request_id')}",
             )
-        st.caption("현재 Phase3 활성 프로세스는 품평회 없이 Request → Preview → 최종 승인 → Apply → Word 완료 보고서로 종료됩니다.")
+        st.caption("현재 Phase3 활성 프로세스는 품평회 없이 Request → Preview → 설계변경 확정 → BOM 반영 → Word 완료 보고서로 종료됩니다.")
         return
 
     action = available_action(workflow)
@@ -1389,22 +1389,22 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             st.markdown("전체 영향 Preview")
             st.caption("상위 하이라키 전체 경로 대신 실제 영향받는 최상위 MODEL만 표시합니다.")
             st.dataframe(_display_df(models), width="stretch", hide_index=True)
-        st.warning("영향 MODEL과 Rule 결과를 확인한 뒤 최종 승인을 진행하세요.")
-        if st.button("Production Apply 2차 최종 승인", type="primary"):
+        st.warning("영향 MODEL과 Rule 결과를 확인한 뒤 설계변경을 확정하세요.")
+        if st.button("설계변경 확정", type="primary"):
             result = client.record_final_apply_approval(workflow["request_id"], actor)
             _complete_workflow_action(
                 workflow,
                 "record_final_apply_approval",
                 result,
-                "최종 승인만 기록되었습니다. 아직 Apply되지 않았습니다.",
+                "설계변경이 확정되었습니다. 아직 BOM에는 반영되지 않았습니다.",
                 on_workflow_update,
             )
     elif action == "APPLY":
         st.error(
-            "최종 승인된 설계변경 내용을 Production E-BOM에 적용합니다. "
-            "적용 후에는 BOM이 실제 변경되므로 변경 내용을 다시 확인해 주세요."
+            "확정된 설계변경 내용을 Production E-BOM에 반영합니다. "
+            "반영 후에는 BOM이 실제 변경되므로 변경 내용을 다시 확인해 주세요."
         )
-        if st.button("승인된 변경 전체 Apply", type="primary"):
+        if st.button("설계변경 BOM 반영", type="primary"):
             result = client.apply_approved_change_request(
                 request_id=workflow["request_id"],
                 final_approval_id=workflow["final_approval_id"], applied_by=actor,
@@ -1413,11 +1413,11 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 workflow,
                 "apply_approved_change_request",
                 result,
-                "승인된 전체 변경이 적용되었습니다.",
+                "확정된 설계변경이 BOM에 반영되었습니다.",
                 on_workflow_update,
             )
     elif action == "REPORT":
-        st.success("설계변경이 Production E-BOM에 적용되었습니다. 품평회 단계 없이 완료 보고서를 생성하여 업무를 종료합니다.")
+        st.success("설계변경이 Production E-BOM에 반영되었습니다. 품평회 단계 없이 완료 보고서를 생성하여 업무를 종료합니다.")
         cache_key = f"phase3_completion_report_{workflow.get('request_id')}"
         report = st.session_state.get(cache_key)
         if report is None:
@@ -1432,7 +1432,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 workflow,
                 "export_phase3_completion_report",
                 {"success": True, "file_name": report.get("file_name")},
-                "Production E-BOM 적용과 Word 완료 보고서 생성이 완료되었습니다. 설계변경 업무를 종료합니다.",
+                "Production E-BOM 반영과 Word 완료 보고서 생성이 완료되었습니다. 설계변경 업무를 종료합니다.",
                 on_workflow_update,
             )
         else:

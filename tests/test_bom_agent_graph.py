@@ -472,8 +472,9 @@ def test_step40n_tool_execution_error_stops_without_llm_retry():
 
     result = graph.run("PRD-001의 BOM을 조회해줘")
 
-    assert "Tool 실행 오류" in result
-    assert "get_bom: deterministic tool failure" in result
+    assert result == "deterministic tool failure"
+    assert "get_bom" not in result
+    assert "Tool 실행 오류" not in result
     assert client.create_agent_completion.call_count == 1
     assert mcp_client.call_tool.call_count == 1
 
@@ -527,8 +528,9 @@ def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
         thread_id="step40n2-visible-error",
     )
 
-    assert "Tool 실행 오류" in response["answer"]
-    assert "ACTIVE_SOURCE_BOM_RELATION_NOT_FOUND" in response["answer"]
+    assert response["answer"] == "current BOM relation missing"
+    assert "analyze_design_change_candidates" not in response["answer"]
+    assert "ACTIVE_SOURCE_BOM_RELATION_NOT_FOUND" not in response["answer"]
     assert response["suppress_answer"] is False
     assert response["render_phase3_panel"] is False
     assert mcp_client.call_tool.call_count == 1
