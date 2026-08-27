@@ -114,7 +114,13 @@ def _render_pending_scroll() -> None:
 
 
 def candidate_rows(workflow: dict) -> list[dict]:
-    """Return comparison-friendly candidate rows without exposing internal JSON."""
+    """Return comparison-friendly candidate rows without exposing internal JSON.
+
+    Recommendation ranking is deliberately separated from evaluation status.
+    A candidate receives a visible score/grade/rank only after its technical
+    suitability is PASS. CONDITIONAL therefore means "evaluation pending",
+    never a low-scoring recommendation.
+    """
     rows = []
     reason_codes = _candidate_reason_codes(workflow)
     for candidate in workflow.get("candidates", []):
@@ -123,18 +129,22 @@ def candidate_rows(workflow: dict) -> list[dict]:
         inventory = candidate.get("inventory") or {}
         reasons = candidate.get("decision_reasons") or []
         missing_data = list(candidate.get("missing_data", []))
+        technical_status = str(candidate.get("technical_status") or candidate.get("status") or "").upper()
+        ranking_score = candidate.get("ranking_score") if technical_status == "PASS" else None
+        ranking_grade = candidate.get("ranking_grade") if technical_status == "PASS" else None
+        ranking_rank = candidate.get("rank") if technical_status == "PASS" and ranking_score is not None else None
         rows.append({
             "action_id": candidate.get("action_id"),
             "candidate_id": candidate.get("candidate_id"),
             "supplier_item_id": supplier.get("supplier_item_id"),
-            "rank": candidate.get("rank"),
+            "rank": ranking_rank,
             "candidate_item_code": candidate.get("candidate_item_code"),
             "candidate_name": candidate.get("candidate_name"),
             "candidate_description": candidate.get("candidate_description"),
             "status": candidate.get("status"),
             "technical_status": candidate.get("technical_status"),
-            "score": candidate.get("total_score"),
-            "grade": candidate.get("grade"),
+            "score": ranking_score,
+            "grade": ranking_grade,
             "evaluation_mode": candidate.get("evaluation_mode"),
             "decision_reasons": " / ".join(str(value) for value in reasons),
             "evaluation_reasons": " · ".join(reason_codes) or "-",
@@ -515,7 +525,7 @@ def _candidate_display_frame(rows: list[dict]) -> pd.DataFrame:
     display_rows = []
     for row in rows:
         display_rows.append({
-            "순위": row.get("rank"),
+            "순위": row.get("rank") if row.get("rank") is not None else "-",
             "후보 코드": row.get("candidate_item_code"),
             "품목명": row.get("candidate_name"),
             "DESCRIPTION": row.get("candidate_description"),
@@ -523,14 +533,14 @@ def _candidate_display_frame(rows: list[dict]) -> pd.DataFrame:
             "종합 판단 요약": row.get("decision_summary") or _candidate_decision_summary(row),
             "평가 사유": row.get("evaluation_reasons") or "-",
             "기술 평가": row.get("technical_status"),
-            "점수": row.get("score"),
-            "등급": row.get("grade"),
+            "추천 점수": row.get("score") if row.get("score") is not None else "평가 보류",
+            "추천등급": row.get("grade") or "-",
             "상세 판단 근거": row.get("decision_reasons"),
             "주 공급사": row.get("supplier_name") or row.get("supplier_code"),
             "공급 평가": row.get("supplier_status"),
             "단가(KRW)": row.get("unit_price"),
             "납기(일)": row.get("lead_time_days"),
-            "품질등급": row.get("quality_grade"),
+            "공급사 품질등급": row.get("quality_grade"),
             "재고 평가": row.get("inventory_status"),
             "BOM 수량": row.get("bom_quantity"),
             "가용재고": row.get("available_quantity"),
@@ -545,17 +555,24 @@ def _render_candidate_tables(rows: list[dict]) -> None:
     if not rows:
         st.warning("검색된 대체 후보가 없습니다.")
         return
-    eligible = [row for row in rows if row.get("status") in {"PASS", "CONDITIONAL"}]
+    passed = [row for row in rows if row.get("status") == "PASS"]
+    conditional = [row for row in rows if row.get("status") == "CONDITIONAL"]
     failed = [row for row in rows if row.get("status") == "FAIL"]
 
-    st.markdown("#### 추천 후보 비교")
-    if eligible:
-        st.dataframe(_candidate_display_frame(eligible), width="stretch", hide_index=True)
+    st.markdown("#### 후보 평가 결과")
+    if passed:
+        st.markdown(f"**추천 가능 후보 (PASS) · {len(passed)}건**")
+        st.dataframe(_candidate_display_frame(passed), width="stretch", hide_index=True)
     else:
-        st.warning("PASS 또는 CONDITIONAL 후보가 없습니다. 현재 검색된 후보는 모두 교체 불가입니다.")
+        st.info("현재 기술·업무 기준을 모두 통과하여 추천 순위를 산출할 수 있는 PASS 후보가 없습니다.")
+
+    if conditional:
+        st.markdown(f"**평가 보류 후보 (CONDITIONAL) · {len(conditional)}건**")
+        st.caption("필수 기술 Evidence가 확인되기 전에는 추천 점수·추천등급·순위를 산출하지 않습니다. 기준정보 보완 후 재검증하세요.")
+        st.dataframe(_candidate_display_frame(conditional), width="stretch", hide_index=True)
 
     if failed:
-        with st.expander(f"검토 제외 후보 (FAIL) · {len(failed)}건", expanded=not eligible):
+        with st.expander(f"검토 제외 후보 (FAIL) · {len(failed)}건", expanded=not passed and not conditional):
             st.dataframe(_candidate_display_frame(failed), width="stretch", hide_index=True)
 
 
@@ -569,9 +586,9 @@ def _render_analysis_metrics(workflow: dict, rows: list[dict], *, context_overri
     context = context_override or workflow.get("analysis_context") or {}
     cols = st.columns(5)
     cols[0].metric("검색 후보", len(rows))
-    cols[1].metric("PASS", counts["PASS"])
-    cols[2].metric("CONDITIONAL", counts["CONDITIONAL"])
-    cols[3].metric("FAIL", counts["FAIL"])
+    cols[1].metric("추천 가능", counts["PASS"])
+    cols[2].metric("평가 보류", counts["CONDITIONAL"])
+    cols[3].metric("검토 제외", counts["FAIL"])
     bom_quantity = context.get("new_quantity") if context.get("action_type") in {"ADD", "QUANTITY_CHANGE"} else context.get("old_quantity")
     cols[4].metric("BOM 수량", bom_quantity if bom_quantity is not None else "-")
 
@@ -597,8 +614,8 @@ def _selection_review_frame(workflow: dict, selected_rows: list[dict]) -> pd.Dat
             "종합 판단 요약": _candidate_decision_summary(row),
             "평가 사유": row.get("evaluation_reasons") or "-",
             "기술 평가": row.get("technical_status"),
-            "점수": row.get("score"),
-            "등급": row.get("grade"),
+            "추천 점수": row.get("score") if row.get("score") is not None else "평가 보류",
+            "추천등급": row.get("grade") or "-",
             "주 공급사": row.get("supplier_name") or row.get("supplier_code") or "미등록",
             "단가(KRW)": row.get("unit_price"),
             "납기(일)": row.get("lead_time_days"),
@@ -652,7 +669,14 @@ def _render_selection_review_responsive(workflow: dict, selected_rows: list[dict
                 {"항목": "재고 평가", "값": row.get("inventory_status") or "-"},
                 {"항목": "BOM 수량", "값": row.get("bom_quantity")},
                 {"항목": "가용재고", "값": row.get("available_quantity")},
-                {"항목": "점수 / 등급", "값": f"{row.get('score')} / {row.get('grade')}"},
+                {
+                    "항목": "추천 점수 / 추천등급",
+                    "값": (
+                        f"{row.get('score')} / {row.get('grade')}"
+                        if row.get("score") is not None
+                        else "평가 보류 / -"
+                    ),
+                },
             ]))
         st.markdown("**종합 판단 요약**")
         st.info(_candidate_decision_summary(row))
@@ -709,9 +733,17 @@ def _render_revalidation_history(workflow: dict) -> None:
         for label, key in (
             ("종합 적합성", "status"), ("기술 평가", "technical_status"),
             ("공급 평가", "supplier_status"), ("재고 평가", "inventory_status"),
-            ("점수", "total_score"), ("등급", "grade"),
+            ("추천 점수", "ranking_score"), ("추천등급", "ranking_grade"),
         ):
-            rows.append({"항목": label, "재검증 전": before.get(key), "재검증 후": after.get(key)})
+            before_value = before.get(key)
+            after_value = after.get(key)
+            if key == "ranking_score":
+                before_value = before_value if before_value is not None else "평가 보류"
+                after_value = after_value if after_value is not None else "평가 보류"
+            elif key == "ranking_grade":
+                before_value = before_value or "-"
+                after_value = after_value or "-"
+            rows.append({"항목": label, "재검증 전": before_value, "재검증 후": after_value})
         before_inv = before.get("inventory") or {}
         after_inv = after.get("inventory") or {}
         before_demand = before.get("demand") or {}
@@ -848,6 +880,100 @@ def _latest_candidate_row(workflow: dict, base_row: dict) -> dict:
     return base_row
 
 
+def _proceed_analysis_to_final_confirmation(
+    workflow: dict,
+    client: DisplayBomMcpClient,
+    on_workflow_update,
+    *,
+    selections: list[dict],
+    exception_reason: str | None = None,
+) -> None:
+    """Commit one confirmed Analysis and prepare the final Preview in one user action.
+
+    The user-facing button is the explicit proceed approval. Internally we still
+    preserve all safety gates: read-only shared-impact calculation, Request creation,
+    and read-only Preview/Revision snapshot are executed in order. Production BOM is
+    not modified until the later final approval + Apply actions.
+    """
+    workflow["analysis_selection"] = [dict(value) for value in selections]
+    workflow["analysis_exception_reason"] = str(exception_reason or "").strip() or None
+
+    try:
+        impact_result = client.preview_design_change_analysis_impact(
+            analysis=_analysis_payload(workflow),
+            selections=selections,
+        )
+    except Exception as error:
+        st.error(f"영향범위 분석에 실패했습니다: {error}")
+        return
+
+    impact_state = apply_phase3_tool_result(
+        "preview_design_change_analysis_impact",
+        workflow,
+        impact_result,
+    )
+    impact_state["analysis_selection"] = [dict(value) for value in selections]
+    impact_state["analysis_exception_reason"] = workflow.get("analysis_exception_reason")
+    # This single button is the user's explicit approval to proceed with the selected
+    # analysis. Common/shared impact is still displayed in the final confirmation
+    # before the separate final approval and Production Apply.
+    impact_state["analysis_impact_confirmed"] = True
+
+    try:
+        request_result = client.create_design_change_request_from_analysis(
+            analysis=_analysis_payload(impact_state),
+            selections=selections,
+            approved_by="streamlit-user",
+            exception_reason=impact_state.get("analysis_exception_reason"),
+            impact_confirmed=True,
+        )
+    except Exception as error:
+        st.error(f"설계변경 Request 생성에 실패했습니다: {error}")
+        return
+
+    request_state = apply_phase3_tool_result(
+        "create_design_change_request_from_analysis",
+        impact_state,
+        request_result,
+    )
+    request_id = request_result.get("request_id")
+    try:
+        preview_result = client.create_multi_action_preview(
+            request_id,
+            "streamlit-user",
+        )
+    except Exception as error:
+        # Keep the successfully created Request so the existing CANDIDATE_APPROVED
+        # recovery path can recreate the read-only Preview without duplicate Request.
+        workflow.clear()
+        workflow.update(request_state)
+        if on_workflow_update is not None:
+            on_workflow_update(request_state)
+        st.error(
+            "설계변경 Request는 생성되었지만 적용 전 최종 확인 정보를 준비하지 못했습니다. "
+            f"화면을 다시 갱신해 재시도해 주세요. 상세: {error}"
+        )
+        return
+
+    updated = apply_phase3_tool_result(
+        "create_multi_action_preview",
+        request_state,
+        preview_result,
+    )
+    workflow.clear()
+    workflow.update(updated)
+    if on_workflow_update is not None:
+        on_workflow_update(updated)
+    st.session_state["phase3_workflow_notice"] = {
+        "context_id": updated.get("request_id"),
+        "message": (
+            f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
+            "내용을 확인한 뒤 설계변경을 확정해 주세요."
+        ),
+    }
+    st.rerun()
+
+
 def _render_candidate_free_action_analysis(
     workflow: dict,
     client: DisplayBomMcpClient,
@@ -904,34 +1030,27 @@ def _render_candidate_free_action_analysis(
             key=f"candidate_free_exception_{context_id}",
         )
         can_confirm = bool(exception_reason.strip())
-        label = "예외조건 포함 Action 분석안 확정"
+        label = "예외조건 포함 분석안으로 설계변경 진행"
     else:
-        st.success("후보 선택이 필요 없는 Action 검증이 완료되었습니다. 영향범위를 확인할 수 있습니다.")
+        st.success(
+            "Action 검증이 완료되었습니다. 아래 버튼을 누르면 이 분석안으로 Request를 생성하고 "
+            "적용 전 최종 확인 정보까지 자동으로 준비합니다."
+        )
         can_confirm = True
-        label = "이 Action 분석안 확정"
+        label = "해당 분석안으로 설계변경 진행"
 
     if st.button(label, type="primary", key=f"confirm_candidate_free_{context_id}", disabled=not can_confirm):
-        workflow["analysis_selection"] = []
-        workflow["analysis_exception_reason"] = exception_reason.strip() or None
-        try:
-            result = client.preview_design_change_analysis_impact(
-                analysis=_analysis_payload(workflow), selections=[],
-            )
-        except Exception as error:
-            st.error(f"영향범위 분석에 실패했습니다: {error}")
-            return
-        _complete_workflow_action(
+        _proceed_analysis_to_final_confirmation(
             workflow,
-            "preview_design_change_analysis_impact",
-            result,
-            "Action 분석안을 확정했습니다. 실제 Design Change Request는 아직 생성되지 않았습니다.",
+            client,
             on_workflow_update,
+            selections=[],
+            exception_reason=exception_reason,
         )
 
 
 def _render_candidate_selection(workflow: dict, rows: list[dict], client: DisplayBomMcpClient, on_workflow_update) -> None:
-    selectable = [row for row in rows if row.get("status") in {"PASS", "CONDITIONAL"}]
-    if not selectable:
+    if not any(row.get("status") in {"PASS", "CONDITIONAL"} for row in rows):
         return
     required_actions = _required_candidate_actions(workflow)
     if not required_actions:
@@ -940,15 +1059,19 @@ def _render_candidate_selection(workflow: dict, rows: list[dict], client: Displa
     _render_anchor(_candidate_selection_anchor(workflow))
     st.markdown("#### 후보 선택")
     st.caption(
-        "후보 선택은 Analysis Memory의 임시 선택입니다. 실제 설계변경 Request는 생성되지 않으며, "
-        "후보·추가정보·공용 영향범위를 모두 확인한 뒤 '설계변경 진행'을 승인할 때만 생성됩니다."
+        "PASS 후보가 있으면 추천 가능한 PASS 후보만 선택합니다. PASS 후보가 하나도 없는 경우에만 "
+        "CONDITIONAL 후보를 재검증/예외 검토 대상으로 선택할 수 있습니다."
     )
     selections: list[dict] = []
     selected_rows: list[dict] = []
     missing_actions: list[str] = []
     for action_index, action in enumerate(required_actions, start=1):
         action_id = action.get("action_id")
-        action_rows = [row for row in selectable if row.get("action_id") == action_id]
+        all_action_rows = [row for row in rows if row.get("action_id") == action_id]
+        pass_rows = [row for row in all_action_rows if row.get("status") == "PASS"]
+        conditional_rows = [row for row in all_action_rows if row.get("status") == "CONDITIONAL"]
+        action_rows = pass_rows if pass_rows else conditional_rows
+        selection_mode = "PASS" if pass_rows else "CONDITIONAL"
         if not action_rows:
             missing_actions.append(f"Action {action_index}")
             continue
@@ -962,13 +1085,23 @@ def _render_candidate_selection(workflow: dict, rows: list[dict], client: Displa
         ):
             st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]
             st.session_state.pop("phase3_pending_candidate_navigation", None)
+        select_label = (
+            f"추천 후보 선택 · Action {action_index}"
+            if selection_mode == "PASS"
+            else f"평가 보류 후보 선택(재검증/예외 검토) · Action {action_index}"
+        )
+        def _format_candidate(value, values=action_rows):
+            row = next(row for row in values if row["candidate_item_code"] == value)
+            score_label = f"{row['score']}점" if row.get("score") is not None else "평가 보류"
+            return (
+                f"{row['candidate_item_code']} · "
+                f"{row.get('candidate_description') or row.get('candidate_name') or '-'} · "
+                f"{row['status']} · {score_label}"
+            )
         selected_code = st.selectbox(
-            f"설계변경 후보 선택 · Action {action_index}", codes,
+            select_label, codes,
             key=selectbox_key,
-            format_func=lambda value, values=action_rows: next(
-                f"{row['candidate_item_code']} · {row.get('candidate_description') or row.get('candidate_name') or '-'} · {row['status']} · {row['score']}점"
-                for row in values if row["candidate_item_code"] == value
-            ),
+            format_func=_format_candidate,
         )
         base_row = next(value for value in action_rows if value["candidate_item_code"] == selected_code)
         row = _latest_candidate_row(workflow, base_row)
@@ -994,35 +1127,31 @@ def _render_candidate_selection(workflow: dict, rows: list[dict], client: Displa
         can_confirm = False
         label = "FAIL 후보는 분석안 확정 불가"
     elif has_conditional:
-        st.warning("선택 후보에 CONDITIONAL이 있습니다. 가능한 추가정보를 입력해 재검증하거나, 보완할 수 없는 경우 예외 사유를 남겨 분석안을 확정하세요.")
+        st.warning("선택 후보에 CONDITIONAL이 있습니다. 가능한 추가정보를 입력해 재검증하거나, 보완할 수 없는 경우 예외 사유를 남겨 진행하세요.")
         _render_selected_candidate_revalidation(workflow, selected_rows, client, on_workflow_update)
         reason = st.text_area(
             "CONDITIONAL 예외 검토 사유",
             key=f"analysis_exception_{context_id}",
-            placeholder="추가정보를 보완할 수 없는 업무 사유와 이 조건부 후보를 검토안으로 채택해야 하는 이유를 입력하세요.",
+            placeholder="추가정보를 보완할 수 없는 업무 사유와 이 조건부 후보를 설계변경안으로 채택해야 하는 이유를 입력하세요.",
         )
         can_confirm = bool(reason.strip())
-        label = "예외조건 포함 분석안 확정"
+        label = "예외조건 포함 분석안으로 설계변경 진행"
     else:
-        st.success("선택한 후보의 최신 평가가 PASS입니다. 이 선택을 분석안으로 확정해 공용 영향범위를 확인할 수 있습니다.")
+        st.success(
+            "선택한 후보의 최신 평가가 PASS입니다. 아래 버튼을 누르면 이 후보를 분석안으로 확정하고 "
+            "공용 영향 확인, Request 생성, 적용 전 최종 확인 준비까지 연속 수행합니다."
+        )
         reason = ""
         can_confirm = True
-        label = "이 후보로 분석안 확정"
+        label = "해당 분석안으로 설계변경 진행"
 
     if st.button(label, type="primary", key=f"confirm_analysis_selection_{context_id}", disabled=not can_confirm):
-        workflow["analysis_selection"] = selections
-        workflow["analysis_exception_reason"] = reason.strip() or None
-        try:
-            result = client.preview_design_change_analysis_impact(
-                analysis=_analysis_payload(workflow), selections=selections,
-            )
-        except Exception as error:
-            st.error(f"영향범위 분석에 실패했습니다: {error}")
-            return
-        _complete_workflow_action(
-            workflow, "preview_design_change_analysis_impact", result,
-            "후보 분석안을 확정했습니다. 실제 Design Change Request는 아직 생성되지 않았습니다.",
+        _proceed_analysis_to_final_confirmation(
+            workflow,
+            client,
             on_workflow_update,
+            selections=selections,
+            exception_reason=reason,
         )
 
 def _selected_conditional_rows(workflow: dict) -> list[dict]:
@@ -1092,10 +1221,12 @@ def _render_conditional_review_gate(workflow: dict, client: DisplayBomMcpClient,
 
 
 def _render_impact_review(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
+    """Render the read-only shared impact summary without a separate approval step."""
     review = workflow.get("impact_review") or {}
     st.markdown("#### 공용자재 영향 확인")
-    st.warning(
-        "현재는 Analysis 단계입니다. 아래 영향 모델과 변경 전/후 Spec을 확인해도 실제 설계변경 Request나 BOM은 생성/변경되지 않습니다."
+    st.info(
+        "선택한 분석안의 공용 BOM 영향범위를 계산했습니다. 이 정보는 적용 전 최종 확인에도 함께 표시되며, "
+        "Production BOM은 아직 변경되지 않습니다."
     )
     models = impact_model_rows(workflow)
     if models:
@@ -1112,44 +1243,61 @@ def _render_impact_review(workflow: dict, client: DisplayBomMcpClient, on_workfl
         with st.expander("동일 Spec까지 전체 비교"):
             st.dataframe(pd.DataFrame(all_specs), width="stretch", hide_index=True)
     st.caption(f"영향 모델 수: {review.get('impacted_model_count', len(models))}")
-    if st.button("영향범위를 확인했습니다", type="primary", key=f"confirm_analysis_impact_{workflow.get('analysis_id')}"):
-        updated = dict(workflow)
-        updated["analysis_impact_confirmed"] = True
-        updated["current_step"] = "ANALYSIS_CONFIRMED"
-        workflow.clear(); workflow.update(updated)
-        if on_workflow_update is not None:
-            on_workflow_update(updated)
-        st.session_state["phase3_workflow_notice"] = {
-            "context_id": updated.get("analysis_id"),
-            "message": "공용 영향범위를 확인했습니다. 아직 Design Change Request는 생성되지 않았습니다.",
-        }
-        st.rerun()
 
 
 def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
-    st.markdown("#### 설계변경 진행 여부")
+    st.markdown("#### 해당 분석안으로 설계변경 진행")
     st.success("후보 분석, 필요한 재검증 및 영향범위 확인이 완료되었습니다.")
     st.info(
-        "여기까지는 AI 분석 단계이며 설계변경 리스트에 Request가 등록되지 않았습니다. "
-        "아래 버튼을 명시적으로 누른 경우에만 실제 Design Change Request를 생성하고 Workflow를 시작합니다."
+        "아래 버튼은 현재 선택된 분석안을 실제 설계변경 대상으로 진행하겠다는 명시적 승인입니다. "
+        "Request 생성과 적용 전 최종 확인 정보 준비까지 자동으로 수행하며 Production BOM은 아직 변경하지 않습니다."
     )
-    if st.button("이 분석 결과로 설계변경 진행", type="primary", key=f"start_design_change_{workflow.get('analysis_id')}"):
+    if st.button("해당 분석안으로 설계변경 진행", type="primary", key=f"start_design_change_{workflow.get('analysis_id')}"):
         try:
-            result = client.create_design_change_request_from_analysis(
+            request_result = client.create_design_change_request_from_analysis(
                 analysis=_analysis_payload(workflow),
                 selections=workflow.get("analysis_selection") or [],
                 approved_by="streamlit-user",
                 exception_reason=workflow.get("analysis_exception_reason"),
-                impact_confirmed=bool(workflow.get("analysis_impact_confirmed") or not (workflow.get("impact_review") or {}).get("requires_impact_approval")),
+                impact_confirmed=True,
             )
         except Exception as error:
             st.error(f"설계변경 Request 생성에 실패했습니다: {error}")
             return
-        _complete_workflow_action(
-            workflow, "create_design_change_request_from_analysis", result,
-            f"사용자 승인으로 설계변경 Request {result.get('request_id')}가 생성되었습니다. 이제 실제 설계변경 Workflow를 진행합니다.",
-            on_workflow_update,
+
+        # Preserve the successfully created Request before attempting the read-only
+        # final Preview. If Preview generation fails, the next render can recover
+        # from CANDIDATE_APPROVED without creating a duplicate Request.
+        request_state = apply_phase3_tool_result(
+            "create_design_change_request_from_analysis", workflow, request_result
         )
+        request_id = request_result.get("request_id")
+        try:
+            preview_result = client.create_multi_action_preview(request_id, "streamlit-user")
+        except Exception as error:
+            workflow.clear(); workflow.update(request_state)
+            if on_workflow_update is not None:
+                on_workflow_update(request_state)
+            st.error(
+                "설계변경 Request는 생성되었지만 적용 전 최종 확인 정보를 준비하지 못했습니다. "
+                f"다시 화면을 갱신해 재시도해 주세요. 상세: {error}"
+            )
+            return
+
+        updated = apply_phase3_tool_result(
+            "create_multi_action_preview", request_state, preview_result
+        )
+        workflow.clear(); workflow.update(updated)
+        if on_workflow_update is not None:
+            on_workflow_update(updated)
+        st.session_state["phase3_workflow_notice"] = {
+            "context_id": updated.get("request_id"),
+            "message": (
+                f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
+                "내용을 확인한 뒤 설계변경을 확정해 주세요."
+            ),
+        }
+        st.rerun()
 
 def _confirmed_selected_candidate_rows(workflow: dict) -> list[dict]:
     """Return only the candidate(s) the user confirmed for this Analysis Session."""
@@ -1208,7 +1356,14 @@ def _render_confirmed_analysis_summary(workflow: dict) -> None:
                 {"항목": "기술 평가", "값": row.get("technical_status")},
                 {"항목": "공급 평가", "값": row.get("supplier_status")},
                 {"항목": "재고 평가", "값": row.get("inventory_status")},
-                {"항목": "점수 / 등급", "값": f"{row.get('score')} / {row.get('grade')}"},
+                {
+                    "항목": "추천 점수 / 추천등급",
+                    "값": (
+                        f"{row.get('score')} / {row.get('grade')}"
+                        if row.get("score") is not None
+                        else "평가 보류 / -"
+                    ),
+                },
                 {"항목": "BOM 수량", "값": row.get("bom_quantity")},
                 {"항목": "가용재고", "값": row.get("available_quantity")},
                 {"항목": "주 공급사", "값": row.get("supplier_name") or row.get("supplier_code") or "미등록"},
@@ -1281,10 +1436,9 @@ def _render_pre_workflow_analysis(workflow: dict, client: DisplayBomMcpClient, o
     # actually selected and its evaluation evidence.
     if step in {"ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED"}:
         _render_confirmed_analysis_summary(workflow)
-        if step == "ANALYSIS_IMPACT_REVIEW":
+        if workflow.get("impact_review"):
             _render_impact_review(workflow, client, on_workflow_update)
-        else:
-            _render_analysis_proceed_gate(workflow, client, on_workflow_update)
+        _render_analysis_proceed_gate(workflow, client, on_workflow_update)
         _render_pending_scroll()
         return
 
@@ -1294,7 +1448,8 @@ def _render_pre_workflow_analysis(workflow: dict, client: DisplayBomMcpClient, o
     _render_target_summary(workflow, context_override=initial_context)
     initial_rows = _analysis_selection_rows(workflow)
     _render_analysis_metrics(workflow, initial_rows, context_override=initial_context)
-    _render_candidate_tables(initial_rows)
+    if _required_candidate_actions(workflow) or initial_rows:
+        _render_candidate_tables(initial_rows)
 
     if step in {"ANALYSIS_READY", "ANALYSIS_REVALIDATED"}:
         # 재검증이 특정 후보를 FAIL로 바꾸더라도 최초 분석 후보 Pool은 유지하여
@@ -1315,9 +1470,70 @@ def _render_pre_workflow_analysis(workflow: dict, client: DisplayBomMcpClient, o
     _render_revalidation_history(workflow)
     _render_pending_scroll()
 
+def _final_confirmation_action_rows(actions: list[dict]) -> list[dict]:
+    """Return the minimal approved delta shown immediately before final approval."""
+    return [{
+        "Action": action.get("action_type"),
+        "Parent": action.get("parent_item_code"),
+        "LOCATION": action.get("location_code"),
+        "변경 전": action.get("old_item_code"),
+        "변경 후": action.get("new_item_code"),
+        "변경 전 수량": action.get("old_quantity"),
+        "변경 후 수량": action.get("new_quantity"),
+        "종합 판정": action.get("evaluation_status"),
+    } for action in actions]
+
+
+def _render_final_confirmation(workflow: dict, client: DisplayBomMcpClient) -> None:
+    """Render one de-duplicated Request + Preview confirmation surface."""
+    request_id = workflow.get("request_id")
+    try:
+        detail = client.get_change_request_result(request_id) if request_id else {}
+    except Exception:
+        detail = {}
+
+    context = workflow.get("analysis_context") or {}
+    reason_codes = context.get("reason_codes") or (
+        [context.get("reason_code")] if context.get("reason_code") else []
+    )
+    st.markdown("#### 적용 전 최종 확인")
+    st.info(
+        "설계변경 진행 승인으로 Request 생성과 적용 전 최종 확인 준비가 완료되었습니다. "
+        "아래 내용은 실제 Production E-BOM에 반영될 변경사항만 중복 없이 요약한 것입니다."
+    )
+    st.table(_display_df([
+        {"항목": "Request ID", "값": request_id or detail.get("request_id")},
+        {"항목": "제품", "값": detail.get("version_code") or context.get("version_code")},
+        {"항목": "PLANT", "값": detail.get("plant_code") or workflow.get("plant_code")},
+        {"항목": "변경 사유", "값": " · ".join(reason_codes) or "-"},
+    ]))
+
+    actions = detail.get("actions") or workflow.get("actions") or []
+    action_rows = _final_confirmation_action_rows(actions)
+    if action_rows:
+        st.markdown("**실제 적용 예정 변경사항**")
+        st.dataframe(
+            _style_change_frame(_display_df(action_rows)),
+            hide_index=True,
+            width="stretch",
+        )
+
+    analysis_models = impact_model_rows(workflow)
+    models = analysis_models or preview_model_rows(workflow, client)
+    if models:
+        st.markdown("**영향 MODEL**")
+        st.dataframe(_display_df(models), hide_index=True, width="stretch")
+
+    changed_specs = impact_spec_rows(workflow, changed_only=True)
+    if changed_specs:
+        st.markdown("**공용 영향 변경 Spec**")
+        st.dataframe(_display_df(changed_specs), hide_index=True, width="stretch")
+
+
 def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
     request_id = workflow.get("request_id")
-    if request_id:
+    current_step = workflow.get("current_step")
+    if request_id and current_step != "WAITING_FINAL_APPROVAL":
         render_phase3_request_detail(
             client,
             request_id,
@@ -1343,7 +1559,6 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 type="primary",
                 key=f"download_phase3_report_completed_{workflow.get('request_id')}",
             )
-        st.caption("현재 Phase3 활성 프로세스는 품평회 없이 Request → Preview → 설계변경 확정 → BOM 반영 → Word 완료 보고서로 종료됩니다.")
         return
 
     action = available_action(workflow)
@@ -1362,36 +1577,38 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 on_workflow_update,
             )
     elif action == "CREATE_PREVIEW":
-        if st.button("통합 영향 Preview 생성"):
-            try:
-                result = client.create_multi_action_preview(workflow["request_id"], actor)
-            except Exception as exc:
-                message = str(exc)
-                if "ADD target is already active at the effective date" in message:
-                    st.error(
-                        "선택한 ADD 자재가 적용일 기준 동일한 PLANT/Parent/Location BOM에 "
-                        "이미 존재합니다. 해당 Request는 Preview를 생성할 수 없습니다. "
-                        "새 분석에서 다른 추가 후보를 선택해 주세요."
-                    )
-                else:
-                    st.error(f"Preview 생성에 실패했습니다: {message}")
-            else:
-                _complete_workflow_action(
-                    workflow,
-                    "create_multi_action_preview",
-                    result,
-                    "Preview가 생성되었습니다. Production BOM은 변경되지 않았습니다.",
-                    on_workflow_update,
+        # Recovery path for a Request that was created successfully but whose
+        # Preview preparation was interrupted. Preview is read-only, so retry it
+        # automatically instead of exposing a separate Preview button.
+        st.info("생성된 Request를 기준으로 적용 전 최종 확인 정보를 준비하고 있습니다.")
+        try:
+            result = client.create_multi_action_preview(workflow["request_id"], actor)
+        except Exception as exc:
+            message = str(exc)
+            if "ADD target is already active at the effective date" in message:
+                st.error(
+                    "선택한 ADD 자재가 적용일 기준 동일한 PLANT/Parent/Location BOM에 "
+                    "이미 존재합니다. 새 분석에서 다른 추가 후보를 선택해 주세요."
                 )
+            else:
+                st.error(f"적용 전 최종 확인 정보를 준비하지 못했습니다: {message}")
+            return
+        _complete_workflow_action(
+            workflow,
+            "create_multi_action_preview",
+            result,
+            "적용 전 최종 확인 정보가 준비되었습니다. 내용을 확인한 뒤 설계변경을 확정해 주세요.",
+            on_workflow_update,
+        )
     elif action == "FINAL_APPROVAL":
-        models = preview_model_rows(workflow, client)
-        if models:
-            st.markdown("전체 영향 Preview")
-            st.caption("상위 하이라키 전체 경로 대신 실제 영향받는 최상위 MODEL만 표시합니다.")
-            st.dataframe(_display_df(models), width="stretch", hide_index=True)
-        st.warning("영향 MODEL과 Rule 결과를 확인한 뒤 설계변경을 확정하세요.")
+        _render_final_confirmation(workflow, client)
+        st.warning("실제 적용 예정 변경사항을 확인한 뒤 설계변경을 확정하세요.")
         if st.button("설계변경 확정", type="primary"):
-            result = client.record_final_apply_approval(workflow["request_id"], actor)
+            try:
+                result = client.record_final_apply_approval(workflow["request_id"], actor)
+            except Exception as error:
+                st.error(f"설계변경 확정에 실패했습니다: {error}")
+                return
             _complete_workflow_action(
                 workflow,
                 "record_final_apply_approval",
@@ -1405,10 +1622,18 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             "반영 후에는 BOM이 실제 변경되므로 변경 내용을 다시 확인해 주세요."
         )
         if st.button("설계변경 BOM 반영", type="primary"):
-            result = client.apply_approved_change_request(
-                request_id=workflow["request_id"],
-                final_approval_id=workflow["final_approval_id"], applied_by=actor,
-            )
+            try:
+                result = client.apply_approved_change_request(
+                    request_id=workflow["request_id"],
+                    final_approval_id=workflow["final_approval_id"], applied_by=actor,
+                )
+            except Exception as error:
+                st.error(
+                    "BOM 반영 중 오류가 발생하여 변경을 완료하지 못했습니다. "
+                    "Transaction은 Rollback되며 Production E-BOM을 다시 확인한 뒤 재시도해 주세요. "
+                    f"상세: {error}"
+                )
+                return
             _complete_workflow_action(
                 workflow,
                 "apply_approved_change_request",

@@ -108,6 +108,9 @@ class DesignChangeWorkflowState(TypedDict, total=False):
     final_approval_id: str | None
     impacts: list[dict]
     requires_exception: bool
+    pending_quantity_request: str | None
+    pending_add_target_request: dict | None
+    pending_version_request: str | None
 
 
 def create_initial_design_change_state() -> DesignChangeWorkflowState:
@@ -163,6 +166,9 @@ def create_initial_design_change_state() -> DesignChangeWorkflowState:
         "final_approval_id": None,
         "impacts": [],
         "requires_exception": False,
+        "pending_quantity_request": None,
+        "pending_add_target_request": None,
+        "pending_version_request": None,
     }
 
 

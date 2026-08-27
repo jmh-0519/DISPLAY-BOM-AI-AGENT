@@ -16,4 +16,5 @@ class BomAgentState(TypedDict, total=False):
     tool_steps: int
     error: str | None
     design_change: DesignChangeWorkflowState
+    active_bom_context: dict[str, str] | None
     

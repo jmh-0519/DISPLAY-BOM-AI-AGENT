@@ -181,11 +181,25 @@ class SQLiteMultiActionRepository:
         old = None if action_type == "ADD" else self._active_relation(connection, action, effective_date)
         if action_type in {"REPLACE", "DELETE", "QUANTITY_CHANGE"}:
             assert old is not None
-            connection.execute(
-                """UPDATE bom_master SET valid_to=?,row_revision=row_revision+1,
-                   updated_at=CURRENT_TIMESTAMP WHERE bom_id=?""",
-                ((effective - timedelta(days=1)).isoformat(), old["bom_id"]),
-            )
+            old_valid_from = date.fromisoformat(str(old["valid_from"]))
+            if effective <= old_valid_from:
+                # The active relation may have been created earlier on the same
+                # effective date (for example REPLACE followed by DELETE during
+                # one day's UI acceptance). An inclusive valid_to cannot be set
+                # to effective-1 without violating valid_to >= valid_from. There
+                # is no historical day to preserve, so remove that zero-duration
+                # production row. The approved Request/Preview/Apply evidence
+                # remains persisted in the design-change audit tables.
+                connection.execute(
+                    "DELETE FROM bom_master WHERE bom_id=?",
+                    (old["bom_id"],),
+                )
+            else:
+                connection.execute(
+                    """UPDATE bom_master SET valid_to=?,row_revision=row_revision+1,
+                       updated_at=CURRENT_TIMESTAMP WHERE bom_id=?""",
+                    ((effective - timedelta(days=1)).isoformat(), old["bom_id"]),
+                )
         if action_type == "DELETE":
             return {"action_id": action["action_id"], "result": "DELETED"}
 

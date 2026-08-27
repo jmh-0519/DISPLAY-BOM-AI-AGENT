@@ -22,7 +22,7 @@ def _add_rule_context(database: SQLiteDatabase) -> dict:
     with database.connection() as connection:
         scope = connection.execute(
             """
-            SELECT DISTINCT s.reason_code,s.target_type,a.alias_text
+            SELECT DISTINCT s.reason_code,s.target_type,a.alias_text,r.evaluation_item
             FROM change_reason_scope s
             JOIN change_reason_alias a
               ON a.reason_code=s.reason_code AND a.active_yn='Y'
@@ -186,7 +186,11 @@ def test_add_without_new_item_discovers_ranked_candidates_and_applies_selected_o
                 "reasons": [context["reason_code"]],
                 "requested_by": "pytest",
             },
-            [{"action_type": "ADD", "target_type": context["target_type"]}],
+            [{
+                "action_type": "ADD",
+                "target_type": context["target_type"],
+                "target_item_name": context["evaluation_item"],
+            }],
         )
         pass_candidate = next(
             (row for row in candidate_analysis["candidates"] if row["status"] == "PASS"),
@@ -324,7 +328,11 @@ def test_add_analysis_marks_already_active_same_bom_candidate_fail_before_previe
         }
         candidate_analysis = service.analyze_candidates(
             payload,
-            [{"action_type": "ADD", "target_type": context["target_type"]}],
+            [{
+                "action_type": "ADD",
+                "target_type": context["target_type"],
+                "target_item_name": context["evaluation_item"],
+            }],
         )
         pass_candidate = next(
             (row for row in candidate_analysis["candidates"] if row["status"] == "PASS"),
@@ -357,7 +365,11 @@ def test_add_analysis_marks_already_active_same_bom_candidate_fail_before_previe
 
     reanalysis = service.analyze_candidates(
         request_payload,
-        [{"action_type": "ADD", "target_type": context["target_type"]}],
+        [{
+                "action_type": "ADD",
+                "target_type": context["target_type"],
+                "target_item_name": context["evaluation_item"],
+            }],
     )
     duplicate = next(
         row for row in reanalysis["candidates"]

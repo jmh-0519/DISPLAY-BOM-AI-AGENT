@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from core.performance_profiler import record_performance_event
+
 
 class SkillLoader:
     """
@@ -41,6 +43,16 @@ class SkillLoader:
                 f"Skill 내용이 비어 있습니다: "
                 f"{skill_name}"
             )
+
+        record_performance_event(
+            category="prompt",
+            name="skill.loaded",
+            metadata={"skill_name": skill_name},
+            metrics={
+                "chars": len(content),
+                "lines": len(content.splitlines()),
+            },
+        )
 
         return content
 

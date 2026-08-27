@@ -1,6 +1,7 @@
 from core.database_config import sqlite_database_path
 from database import SQLiteDatabase
 from services.phase3_workflow_service import Phase3WorkflowService
+from core.performance_profiler import performance_span
 
 
 def _service() -> Phase3WorkflowService:
@@ -98,7 +99,16 @@ def compare_design_change_candidates_data(
 
 
 def analyze_design_change_candidates_data(request: dict, actions: list[dict]) -> dict:
-    return _service().analyze_candidates(request, actions)
+    with performance_span(
+        "service",
+        "phase3.analyze_design_change_candidates",
+        metadata={
+            "action_count": len(actions or []),
+            "plant_present": bool((request or {}).get("plant_code")),
+            "version_present": bool((request or {}).get("version_code")),
+        },
+    ):
+        return _service().analyze_candidates(request, actions)
 
 
 def scan_product_cost_reduction_candidates_data(

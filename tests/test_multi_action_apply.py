@@ -308,3 +308,38 @@ def test_production_bom_change_after_preview_blocks_apply(tmp_path):
         MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
+
+
+def test_delete_same_effective_day_relation_does_not_break_validity_constraint(tmp_path):
+    """A relation created on the effective date can still be deleted the same day.
+
+    This reproduces the UI sequence where a REPLACE creates a new active BOM row
+    today and a later DELETE request removes that row today. The old implementation
+    tried to set valid_to to effective_date-1 and violated valid_to >= valid_from.
+    """
+    database = setup_request(tmp_path)
+    with database.transaction() as con:
+        con.execute("DELETE FROM candidate_evaluations WHERE action_id IN ('A1','A2')")
+        con.execute("DELETE FROM change_actions WHERE request_id='REQ'")
+        con.execute(
+            """UPDATE bom_master SET valid_from='2026-08-20',valid_to=NULL,status='ACTIVE'
+               WHERE parent_item_code='FA' AND child_item_code='OLD'"""
+        )
+        con.execute(
+            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
+               target_type,parent_item_code,old_item_code,location_code,evaluation_status)
+               VALUES('D-SAME','REQ',1,'DELETE','MATERIAL','FA','OLD','N/A','PASS')"""
+        )
+    refresh_preview(database)
+
+    result = MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        request_id="REQ", final_approval_id="APP-F", applied_by="tester",
+    )
+
+    assert result["result"] == "APPLIED"
+    with database.connection() as con:
+        remaining = con.execute(
+            """SELECT COUNT(*) FROM bom_master
+               WHERE parent_item_code='FA' AND child_item_code='OLD'"""
+        ).fetchone()[0]
+    assert remaining == 0

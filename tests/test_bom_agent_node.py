@@ -145,25 +145,9 @@ def test_agent_node_converts_tool_call():
     )
 
 
-def test_agent_node_converts_message_history():
+def test_agent_node_finalizes_plain_bom_observation_without_second_llm():
     client = Mock()
     mcp_client = Mock()
-
-    mcp_client.get_tool_definitions.return_value = [
-        {
-            "type": "function",
-            "function": {
-                "name": "get_bom",
-            },
-        }
-    ]
-
-    client.create_agent_completion.return_value = (
-        make_assistant_message(
-            content="최종 답변",
-            tool_calls=None,
-        )
-    )
 
     node = BomAgentNode(
         client=client,
@@ -171,20 +155,16 @@ def test_agent_node_converts_message_history():
         skill_context="BOM 조회 규칙",
     )
 
-    node(
+    result = node(
         {
             "messages": [
-                HumanMessage(
-                    content="BOM을 조회해줘"
-                ),
+                HumanMessage(content="BOM을 조회해줘"),
                 AIMessage(
                     content="",
                     tool_calls=[
                         {
                             "name": "get_bom",
-                            "args": {
-                                "product_code": "PRD-001"
-                            },
+                            "args": {"product_code": "PRD-001"},
                             "id": "call-001",
                             "type": "tool_call",
                         }
@@ -199,34 +179,8 @@ def test_agent_node_converts_message_history():
         }
     )
 
-    call_arguments = (
-        client
-        .create_agent_completion
-        .call_args
-        .kwargs
-    )
-
-    converted_messages = (
-        call_arguments["messages"]
-    )
-
-    assert converted_messages[0]["role"] == "user"
-    assert (
-        converted_messages[1]["role"]
-        == "assistant"
-    )
-    assert (
-        converted_messages[1]
-        ["tool_calls"][0]
-        ["function"]["name"]
-        == "get_bom"
-    )
-    assert converted_messages[2]["role"] == "tool"
-    assert (
-        converted_messages[2]["tool_call_id"]
-        == "call-001"
-    )
-
+    client.create_agent_completion.assert_not_called()
+    assert result["messages"][0].content == "BOM 조회 결과를 확인해 주세요."
 
 def test_agent_node_rejects_empty_messages():
     node = BomAgentNode(
@@ -324,7 +278,7 @@ def test_phase3_recommendation_exposes_analysis_after_bom_result():
     assert "evaluate_replacement_candidates" not in names
 
 
-def test_phase3_explicit_product_and_item_force_analysis_tool():
+def test_phase3_explicit_product_and_item_uses_deterministic_analysis_macro():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -332,23 +286,23 @@ def test_phase3_explicit_product_and_item_force_analysis_tool():
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(
-        content="", tool_calls=None,
-    )
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "P01에서 MODEL-123의 1234-567890이 단종됐어. 변경 가능한 자재를 찾아줘"
         ))],
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    assert (
-        client.create_agent_completion.call_args.kwargs["tool_choice"]
-        == "analyze_design_change_candidates"
-    )
-
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    assert tool_call["args"]["request"]["version_code"] == "MODEL-123"
+    assert tool_call["args"]["request"]["plant_code"] == "P01"
+    action = tool_call["args"]["actions"][0]
+    assert action["action_type"] == "REPLACE"
+    assert action["old_item_code"] == "1234-567890"
 
 def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
     client = Mock()
@@ -376,10 +330,12 @@ def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
         }
     )
 
-    tools = client.create_agent_completion.call_args.kwargs["tools"]
+    kwargs = client.create_agent_completion.call_args.kwargs
+    tools = kwargs["tools"]
     names = {tool["function"]["name"] for tool in tools}
     assert "analyze_design_change" in names
     assert "create_design_change_request" not in names
+    assert kwargs["tool_choice"] == "auto"
 
 
 def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
@@ -420,17 +376,16 @@ def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_fo
     assert client.create_agent_completion.call_args.kwargs["tool_choice"] == "auto"
 
 
-def test_phase3_multi_reason_change_request_forces_dynamic_analysis_without_new_item():
+def test_phase3_multi_reason_change_request_uses_macro_without_new_item():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "analyze_design_change"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "[선택 PLANT: P01] LTA400HR01-001 모델의 0001-200010이 "
             "단종됐고 원가도 너무 높아서 변경하고 싶어"
@@ -438,13 +393,18 @@ def test_phase3_multi_reason_change_request_forces_dynamic_analysis_without_new_
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-    assert "신규 자재 ID를 사용자에게 요구하지 마세요" in kwargs["skill_context"]
-    names = {row["function"]["name"] for row in kwargs["tools"]}
-    assert "analyze_design_change_candidates" in names
-    assert "analyze_design_change" not in names
-
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert request["version_code"] == "LTA400HR01-001"
+    assert request["plant_code"] == "P01"
+    assert "단종" in request["original_request"]
+    assert "원가" in request["original_request"]
+    assert action["action_type"] == "REPLACE"
+    assert action["old_item_code"] == "0001-200010"
+    assert "new_item_code" not in action
 
 def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis():
     client = Mock()
@@ -452,10 +412,9 @@ def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [
             HumanMessage(content=(
                 "[선택 PLANT: P01] LTA400HR01-001 모델의 0001-200010이 "
@@ -467,8 +426,14 @@ def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis()
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    assert client.create_agent_completion.call_args.kwargs["tool_choice"] == "analyze_design_change_candidates"
-
+    client.create_agent_completion.assert_not_called()
+    message = result["messages"][0]
+    assert len(message.tool_calls) == 1
+    tool_call = message.tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    assert tool_call["args"]["request"]["version_code"] == "LTA400HR01-001"
+    assert tool_call["args"]["request"]["plant_code"] == "P01"
+    assert tool_call["args"]["actions"][0]["old_item_code"] == "0001-200010"
 
 def test_phase3_missing_plant_forces_target_scoped_plant_discovery_before_analysis():
     client = Mock()
@@ -505,10 +470,9 @@ def test_phase3_selected_plant_in_followup_reuses_original_request_and_forces_an
         {"type": "function", "function": {"name": "list_plants"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [
             HumanMessage(content=(
                 "MODEL-123의 1234-567890이 단종됐어. 변경 가능한 자재를 찾아줘"
@@ -519,59 +483,65 @@ def test_phase3_selected_plant_in_followup_reuses_original_request_and_forces_an
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-    names = {row["function"]["name"] for row in kwargs["tools"]}
-    assert "list_plants" not in names
-    assert "analyze_design_change_candidates" in names
-    assert "현재 확정 PLANT: P01" in kwargs["skill_context"]
+    client.create_agent_completion.assert_not_called()
+    message = result["messages"][0]
+    assert len(message.tool_calls) == 1
+    tool_call = message.tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    assert tool_call["args"]["request"]["version_code"] == "MODEL-123"
+    assert tool_call["args"]["request"]["plant_code"] == "P01"
+    assert tool_call["args"]["actions"][0]["old_item_code"] == "1234-567890"
 
-
-
-
-def test_step40n_exact_delete_without_reason_forces_analysis_with_default_reason_policy():
+def test_step40n_exact_delete_without_reason_uses_macro_default_reason_policy():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재를 제거하자."
         ))],
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert request["version_code"] == "LTA650HR11-001"
+    assert request["plant_code"] == "P03"
+    assert action["action_type"] == "DELETE"
+    assert action["old_item_code"] == "0001-310701"
 
-def test_step40g_exact_delete_with_reason_forces_analysis_without_bom_lookup():
+def test_step40g_exact_delete_with_reason_uses_macro_without_bom_lookup():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재를 공용화를 위해 제거하자."
         ))],
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-    names = {row["function"]["name"] for row in kwargs["tools"]}
-    assert "analyze_design_change_candidates" in names
-    assert "현재 단계: NOT_STARTED" in kwargs["skill_context"]
-
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert "공용화" in request["original_request"]
+    assert action["action_type"] == "DELETE"
+    assert action["old_item_code"] == "0001-310701"
 
 def test_step40g_delete_without_business_reason_is_phase3_change_intent():
     assert BomAgentNode._is_phase3_change_request(
@@ -585,21 +555,22 @@ def test_step40g_delete_without_business_reason_is_phase3_change_intent():
     )
 
 
-def test_step40g_bom_observation_continues_name_based_delete_into_analysis():
+def test_step40g_bom_observation_name_delete_continues_with_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    query = (
+        "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 "
+        "브라켓 자재를 제거하자."
+    )
 
-    node({
+    result = node({
         "messages": [
-            HumanMessage(content=(
-                "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 브라켓 자재를 제거하자."
-            )),
+            HumanMessage(content=query),
             AIMessage(content="", tool_calls=[{
                 "name": "get_bom",
                 "args": {"product_id": "LTA650HR11-001", "plant_code": "P03"},
@@ -612,15 +583,18 @@ def test_step40g_bom_observation_continues_name_based_delete_into_analysis():
                 name="get_bom",
             ),
         ],
-        "user_query": "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 브라켓 자재를 제거하자.",
+        "user_query": query,
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    action = tool_call["args"]["actions"][0]
+    assert action["action_type"] == "DELETE"
+    assert action.get("target_item_name")
 
-
-def test_step40g_completed_request_does_not_block_new_delete_analysis():
+def test_step40g_completed_request_does_not_block_new_delete_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -628,10 +602,9 @@ def test_step40g_completed_request_does_not_block_new_delete_analysis():
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "get_change_request_result"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재를 공용화를 위해 제거하자."
         ))],
@@ -643,12 +616,16 @@ def test_step40g_completed_request_does_not_block_new_delete_analysis():
         },
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-    assert "현재 단계: NOT_STARTED" in kwargs["skill_context"]
-    assert "현재 확정 PLANT: P03" in kwargs["skill_context"]
-    assert "현재 Request ID: 없음" in kwargs["skill_context"]
-
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert request["version_code"] == "LTA650HR11-001"
+    assert request["plant_code"] == "P03"
+    assert "REQ-OLD" not in str(tool_call["args"])
+    assert "OLD-MODEL" not in str(tool_call["args"])
+    assert action["action_type"] == "DELETE"
 
 def test_step40j_where_used_without_plant_forces_scoped_plant_lookup():
     client = Mock()
@@ -692,37 +669,40 @@ def test_step40j_where_used_with_plant_forces_reverse_bom_tool():
     assert tool_call["args"] == {"item_code": "0001-310501", "plant_code": "P01"}
 
 
-def test_step40n_quantity_change_without_business_reason_forces_analysis():
+def test_step40n_quantity_change_without_business_reason_uses_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재 수량을 2로 바꾸자."
         ))],
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    action = tool_call["args"]["actions"][0]
+    assert action["action_type"] == "QUANTITY_CHANGE"
+    assert action["old_item_code"] == "0001-310701"
+    assert action["new_quantity"] == 2
 
-def test_step40m_exact_quantity_change_with_reason_forces_analysis_without_bom_lookup():
+def test_step40m_exact_quantity_change_with_reason_uses_macro_without_bom_lookup():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=(
             "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재를 "
             "공용화를 위해 수량 1에서 2로 변경하자."
@@ -730,57 +710,45 @@ def test_step40m_exact_quantity_change_with_reason_forces_analysis_without_bom_l
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    kwargs = client.create_agent_completion.call_args.kwargs
-    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-    names = {row["function"]["name"] for row in kwargs["tools"]}
-    assert "analyze_design_change_candidates" in names
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert "공용화" in request["original_request"]
+    assert action["action_type"] == "QUANTITY_CHANGE"
+    assert action["old_item_code"] == "0001-310701"
+    assert action["new_quantity"] == 2
 
-
-def test_step40m_name_based_quantity_change_forces_bom_then_continues_analysis():
+def test_step40m_name_based_quantity_change_uses_macro_target_resolution():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
     node = BomAgentNode(client, mcp_client, "Phase3 workflow")
     query = (
         "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 "
         "브라켓 자재 수량을 2로 변경하자."
     )
 
-    node({
+    result = node({
         "messages": [HumanMessage(content=query)],
         "user_query": query,
         "design_change": {"current_step": "NOT_STARTED"},
     })
-    first_kwargs = client.create_agent_completion.call_args.kwargs
-    assert first_kwargs["tool_choice"] == "get_bom"
 
-    client.reset_mock()
-    client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
-    node({
-        "messages": [
-            HumanMessage(content=query),
-            AIMessage(content="", tool_calls=[{
-                "name": "get_bom",
-                "args": {"product_id": "LTA650HR11-001", "plant_code": "P03"},
-                "id": "call-bom-qty",
-                "type": "tool_call",
-            }]),
-            ToolMessage(
-                content='[{"PARENT_CODE":"LJ94-310701","CHILD_CODE":"0001-310701","CHILD_NAME":"BASE BRACKET","LOCATION":"N/A","수량":1}]',
-                tool_call_id="call-bom-qty",
-                name="get_bom",
-            ),
-        ],
-        "user_query": query,
-        "design_change": {"current_step": "NOT_STARTED"},
-    })
-    second_kwargs = client.create_agent_completion.call_args.kwargs
-    assert second_kwargs["tool_choice"] == "analyze_design_change_candidates"
-
+    client.create_agent_completion.assert_not_called()
+    tool_call = result["messages"][0].tool_calls[0]
+    assert tool_call["name"] == "analyze_design_change_candidates"
+    request = tool_call["args"]["request"]
+    action = tool_call["args"]["actions"][0]
+    assert request["version_code"] == "LTA650HR11-001"
+    assert request["plant_code"] == "P03"
+    assert action["action_type"] == "QUANTITY_CHANGE"
+    assert action["new_quantity"] == 2
+    assert action.get("target_item_name")
 
 def test_step40m_read_only_quantity_question_is_not_explicit_quantity_change():
     assert not BomAgentNode._is_quantity_change_instruction("이 자재의 현재 수량이 얼마야?")

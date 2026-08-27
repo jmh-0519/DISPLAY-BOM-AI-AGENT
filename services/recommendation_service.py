@@ -172,7 +172,45 @@ class RecommendationService:
             ]
             if any(label and (hint in label or label in hint) for label in labels):
                 matched.append(rule)
-        return matched or rules
+        # When the user explicitly named an ADD target family, unrelated rules
+        # must never be borrowed merely to manufacture a score.  No matching
+        # rule means technical evaluation remains CONDITIONAL/pending.
+        return matched
+
+    def _filter_add_candidates_by_target_hint(
+        self,
+        candidates: list[dict],
+        target_item_name: str | None,
+        as_of_date: str,
+    ) -> list[dict]:
+        """Keep only ADD master items that match the user-named item/family.
+
+        This prevents semantically unrelated MATERIALs such as FRAME, DRIVE-IC
+        and POLARIZER from appearing in one ranking when the user asked for FILM
+        or SEALANT.  Matching is metadata-driven; no scenario item codes are
+        hard-coded.
+        """
+        hint = self._normalize_label(target_item_name)
+        if not hint:
+            return candidates
+
+        matched: list[dict] = []
+        for candidate in candidates:
+            code = str(candidate.get("candidate_item_code") or "")
+            profile = self._item_profile(code, as_of_date)
+            labels = [
+                self._normalize_label(code),
+                self._normalize_label(profile.get("item_name")),
+                self._normalize_label(profile.get("material_name")),
+                self._normalize_label(profile.get("material_group")),
+                self._normalize_label(profile.get("material_family")),
+                self._normalize_label(profile.get("process_name")),
+                self._normalize_label(profile.get("description")),
+                self._normalize_label(profile.get("specification")),
+            ]
+            if any(label and (hint in label or label in hint) for label in labels):
+                matched.append(candidate)
+        return matched
 
     @staticmethod
     def _identity_rule_conditions(rule: dict) -> list[dict]:
@@ -270,6 +308,11 @@ class RecommendationService:
     ) -> list[dict]:
         all_rules = self.repository.get_active_rules(reasons, target_type, as_of_date)
         if source_item_code is None:
+            candidates = self._filter_add_candidates_by_target_hint(
+                candidates, rule_scope_hint, as_of_date
+            )
+            if not candidates:
+                return []
             all_rules = self._select_add_rules(all_rules, rule_scope_hint)
             candidates = self._filter_add_candidates_by_rule_identity(
                 candidates, all_rules, as_of_date
@@ -333,7 +376,10 @@ class RecommendationService:
         ))
         rank = 0
         for evaluation in evaluations:
-            if evaluation["status"] == "FAIL":
+            # A recommendation rank is meaningful only after technical suitability
+            # is fully PASS. CONDITIONAL means evaluation is still pending, not a
+            # low-ranked recommendation. FAIL is excluded as before.
+            if str(evaluation.get("status") or "").upper() != "PASS":
                 evaluation["rank"] = None
             else:
                 rank += 1

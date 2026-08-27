@@ -46,6 +46,9 @@ class Phase3ChangeActionInput(TypedDict):
 
     target_type/parent/location은 기존 품목과 제품 BOM 관계에서 Service가
     결정할 수 있으므로 자연어 요청에서 명확하지 않으면 생략할 수 있습니다.
+    REPLACE/DELETE/QUANTITY_CHANGE에서 old_item_code를 모르는 경우에는
+    target_item_name을 전달할 수 있으며, Service가 지정된 VERSION/PLANT의 실제
+    활성 BOM 안에서 정확한 source item을 resolve합니다.
     REPLACE 후보 추천의 new_item_code는 생략하며 후보를 동적으로 탐색합니다.
     ADD도 후보 탐색 요청에서는 new_item_code를 생략할 수 있고 target_type을 기준으로
     활성 Rule/Item Master에서 전체 후보를 평가합니다. 실제 Request 생성 시에는 사용자가

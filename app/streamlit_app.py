@@ -20,7 +20,6 @@ from app.views.where_used_view import render_where_used_result
 import pandas as pd
 from app.views.design_change_history_page import render_design_change_history_page
 from app.views.phase3_agent_view import render_phase3_workflow
-from app.views.phase3_management_view import render_phase3_management
 from app.views.product_cost_scan_view import render_product_cost_scan
 from core.azure_openai_client import AzureOpenAIClient
 from core.settings import Settings
@@ -301,7 +300,7 @@ def render_agent_chat() -> None:
             - 자재·모델 Master 검색
             - 설계변경 후보 분석·재검증·후속질문
             - 후보/공용 영향 확인 후 설계변경 Request 생성
-            - Preview·최종 승인 후 양산 E-BOM 적용
+            - 적용 전 최종 확인·승인 후 양산 E-BOM 적용
             - 적용 완료 Word 보고서
             """
         )
@@ -350,7 +349,20 @@ def render_agent_chat() -> None:
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    if _requires_conversational_plant_gate(user_input):
+    # The UI PLANT gate runs before LangGraph, so it must honor the same
+    # active-BOM inheritance rule as the Graph Gateway. Otherwise a valid
+    # follow-up such as "LJ94-100006 수량 바꾸고싶어" is intercepted here even
+    # though the user is already viewing LTA400HR01-001 / P01.
+    agent = create_agent()
+    inherit_active_bom = agent.can_inherit_active_bom_context(
+        user_input,
+        thread_id=st.session_state.thread_id,
+    )
+
+    if (
+        _requires_conversational_plant_gate(user_input)
+        and not inherit_active_bom
+    ):
         try:
             plant_options = _relevant_plant_options(user_input)
         except Exception as error:
@@ -381,7 +393,6 @@ def render_agent_chat() -> None:
             "Azure OpenAI가 요청을 분석하고 있습니다..."
         ):
             try:
-                agent = create_agent()
                 response = agent.run_with_artifacts(
                     user_input,
                     thread_id=(
@@ -478,7 +489,6 @@ def main() -> None:
         "model": "모델",
         "material": "자재",
         "history": "설계변경 이력",
-        "phase3": "Phase3 Rule / History",
     }
     menu_to_view = {value: key for key, value in view_to_menu.items()}
 
@@ -528,7 +538,6 @@ def main() -> None:
             _menu_link("모델", "model", 24),
             _menu_link("자재", "material", 24),
             _menu_link("설계변경 이력", "history"),
-            _menu_link("Phase3 Rule / History", "phase3"),
             '</div>',
         ])
         st.html(menu_html)
@@ -551,9 +560,6 @@ def main() -> None:
 
     elif menu == "설계변경 이력":
         render_design_change_history_page()
-
-    elif menu == "Phase3 Rule / History":
-        render_phase3_management()
 
 
 if __name__ == "__main__":

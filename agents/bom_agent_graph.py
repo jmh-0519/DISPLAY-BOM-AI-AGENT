@@ -12,11 +12,31 @@ from langgraph.graph import (
     StateGraph,
 )
 
+from agents.analysis_macro_dispatch import MACRO_ANALYZE
+from agents.bom_analysis_finalizer_node import (
+    ANALYSIS_FINALIZE,
+    BomAnalysisFinalizerNode,
+    is_macro_analysis_tool_result,
+)
 from agents.bom_agent_node import BomAgentNode
 from agents.bom_agent_router import (
     MCP_TOOLS,
     route_agent_response,
     route_mcp_tool_result,
+)
+from agents.bom_graph_gateway import (
+    AGENT_PATH,
+    FAST_BOM_READ,
+    FAST_CHAT,
+    FAST_CURRENT_BOM_QUANTITY,
+    FAST_WHERE_USED,
+    BomGraphGateway,
+)
+from agents.bom_fast_path_nodes import (
+    FAST_READ_FINALIZE,
+    BomFastPathNodes,
+    is_current_bom_quantity_tool_message,
+    is_graph_fast_tool_result,
 )
 from agents.bom_agent_state import BomAgentState
 from agents.design_change_workflow_state import (
@@ -25,6 +45,7 @@ from agents.design_change_workflow_state import (
 from agents.bom_mcp_tool_node import (
     BomMcpToolNode,
 )
+from agents.bom_macro_dispatch_node import BomMacroDispatchNode
 from core.azure_openai_client import (
     AzureOpenAIClient,
 )
@@ -37,6 +58,7 @@ from core.observability import (
     summarize_text,
     summarize_value,
 )
+from core.performance_profiler import performance_span
 
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -48,9 +70,11 @@ class BomAgentGraph:
     Display BOM AI Agent의 LangGraph 실행 흐름입니다.
 
     START
-      → Agent Node
-        → MCP Tool Node → Agent Node
-        → END
+      → Gateway Router
+        → Fast Chat → END
+        → Fast BOM/Where-used → MCP Tool Node → Fast Finalize → END
+        → Deterministic Analysis Macro → MCP Tool Node → Analysis Finalizer → END
+        → Agent Node → MCP Tool Node → Agent Node → END
     """
 
     def __init__(
@@ -62,6 +86,12 @@ class BomAgentGraph:
         observability: LangfuseObservability | None = None,
     ) -> None:
         self.observability = observability or get_observability()
+
+        # Warm the MCP Tool schema once while Streamlit/Agent is being created.
+        # Subsequent Agent turns use the process cache instead of starting a new
+        # MCP stdio server just to list the same Tool definitions.
+        mcp_client.get_tool_definitions()
+
         self.agent_node = BomAgentNode(
             client=client,
             mcp_client=mcp_client,
@@ -73,6 +103,17 @@ class BomAgentGraph:
             observability=self.observability,
         )
 
+        self.gateway = BomGraphGateway(
+            phase3_active_steps=self.agent_node.PHASE3_ACTIVE_STEPS,
+        )
+        self.fast_path_nodes = BomFastPathNodes()
+        self.macro_dispatch_node = BomMacroDispatchNode(
+            self.gateway.analysis_macro_dispatch
+        )
+        self.analysis_finalizer_node = BomAnalysisFinalizerNode(
+            client=client,
+        )
+
         self.checkpointer = (
             checkpointer
             if checkpointer is not None
@@ -82,15 +123,47 @@ class BomAgentGraph:
         self.graph = self._build_graph()
 
     def _build_graph(self):
-        """
-        Agent와 MCP Tool Node를 연결하고
-        실행 가능한 Graph로 컴파일합니다.
-        """
+        """Build the hybrid LangGraph with a workflow-aware entry gateway."""
 
-        workflow = StateGraph(
-            BomAgentState
+        workflow = StateGraph(BomAgentState)
+
+        workflow.add_node(
+            FAST_CHAT,
+            self._observed_node(FAST_CHAT, self.fast_path_nodes.chat),
         )
-
+        workflow.add_node(
+            FAST_BOM_READ,
+            self._observed_node(FAST_BOM_READ, self.fast_path_nodes.bom_read),
+        )
+        workflow.add_node(
+            FAST_WHERE_USED,
+            self._observed_node(FAST_WHERE_USED, self.fast_path_nodes.where_used),
+        )
+        workflow.add_node(
+            FAST_CURRENT_BOM_QUANTITY,
+            self._observed_node(
+                FAST_CURRENT_BOM_QUANTITY,
+                self.fast_path_nodes.current_bom_quantity,
+            ),
+        )
+        workflow.add_node(
+            FAST_READ_FINALIZE,
+            self._observed_node(
+                FAST_READ_FINALIZE,
+                self.fast_path_nodes.finalize_read,
+            ),
+        )
+        workflow.add_node(
+            MACRO_ANALYZE,
+            self._observed_node(MACRO_ANALYZE, self.macro_dispatch_node),
+        )
+        workflow.add_node(
+            ANALYSIS_FINALIZE,
+            self._observed_node(
+                ANALYSIS_FINALIZE,
+                self.analysis_finalizer_node,
+            ),
+        )
         workflow.add_node(
             AGENT,
             self._observed_node(AGENT, self.agent_node),
@@ -100,10 +173,29 @@ class BomAgentGraph:
             self._observed_node(MCP_TOOLS, self.mcp_tool_node),
         )
 
-        workflow.add_edge(
+        # True Graph-level Fast Path: high-confidence simple requests bypass
+        # BomAgentNode entirely. Incomplete/complex/workflow-sensitive turns
+        # enter the existing Agent path unchanged.
+        workflow.add_conditional_edges(
             START,
-            AGENT,
+            self._route_user_request,
+            {
+                FAST_CHAT: FAST_CHAT,
+                FAST_BOM_READ: FAST_BOM_READ,
+                FAST_WHERE_USED: FAST_WHERE_USED,
+                FAST_CURRENT_BOM_QUANTITY: FAST_CURRENT_BOM_QUANTITY,
+                MACRO_ANALYZE: MACRO_ANALYZE,
+                AGENT_PATH: AGENT,
+            },
         )
+
+        workflow.add_edge(FAST_CHAT, END)
+        workflow.add_edge(FAST_BOM_READ, MCP_TOOLS)
+        workflow.add_edge(FAST_WHERE_USED, MCP_TOOLS)
+        workflow.add_edge(FAST_CURRENT_BOM_QUANTITY, MCP_TOOLS)
+        workflow.add_edge(MACRO_ANALYZE, MCP_TOOLS)
+        workflow.add_edge(FAST_READ_FINALIZE, END)
+        workflow.add_edge(ANALYSIS_FINALIZE, END)
 
         workflow.add_conditional_edges(
             AGENT,
@@ -116,16 +208,45 @@ class BomAgentGraph:
 
         workflow.add_conditional_edges(
             MCP_TOOLS,
-            route_mcp_tool_result,
+            self._route_mcp_tool_result,
             {
                 AGENT: AGENT,
+                ANALYSIS_FINALIZE: ANALYSIS_FINALIZE,
+                FAST_READ_FINALIZE: FAST_READ_FINALIZE,
                 END: END,
             },
         )
 
-        return workflow.compile(
-            checkpointer=self.checkpointer
-        )
+        return workflow.compile(checkpointer=self.checkpointer)
+
+    def _route_user_request(self, state: BomAgentState) -> str:
+        """Route the current turn at Graph entry before BomAgentNode executes."""
+        with self.observability.observe(
+            "langgraph.gateway",
+            input_summary={
+                "message_count": len(state.get("messages", [])),
+                "workflow_step": (
+                    (state.get("design_change") or {}).get("current_step")
+                    or "NOT_STARTED"
+                ),
+            },
+            metadata={"node": "gateway"},
+        ) as span:
+            route = self.gateway.route(state)
+            span.finish(output={"route": route})
+            return route
+
+    @staticmethod
+    def _route_mcp_tool_result(state: BomAgentState) -> str:
+        """Return Fast Tool results to an LLM-free finalizer when applicable."""
+        normal_route = route_mcp_tool_result(state)
+        if normal_route == END:
+            return END
+        if is_graph_fast_tool_result(state):
+            return FAST_READ_FINALIZE
+        if is_macro_analysis_tool_result(state):
+            return ANALYSIS_FINALIZE
+        return AGENT
 
     def _observed_node(self, name, node):
         def invoke_node(state):
@@ -138,7 +259,15 @@ class BomAgentGraph:
                 },
                 metadata={"node": name},
             ) as span:
-                result = node(state)
+                with performance_span(
+                    "graph_node",
+                    f"langgraph.{name}",
+                    metadata={
+                        "message_count": len(messages),
+                        "tool_steps": state.get("tool_steps", 0),
+                    },
+                ):
+                    result = node(state)
                 span.finish(output=summarize_value(result))
                 return result
 
@@ -214,11 +343,16 @@ class BomAgentGraph:
             input_summary=summarize_text(normalized_user_input),
             metadata={"thread_id_present": bool(thread_id.strip())},
         ) as trace:
-            final_state = self.graph.invoke(
-                initial_state,
-                config=config,
-            )
-            answer = self._extract_final_answer(final_state)
+            with performance_span(
+                "request",
+                "agent.request",
+                metadata={"thread_id_present": bool(thread_id.strip())},
+            ):
+                final_state = self.graph.invoke(
+                    initial_state,
+                    config=config,
+                )
+                answer = self._extract_final_answer(final_state)
             trace.finish(output=summarize_text(answer))
             return answer
 
@@ -265,6 +399,7 @@ class BomAgentGraph:
             "cost_scan_views": cost_scan_views,
             "plant_options": plant_options,
             "workflow": self.get_design_change_state(thread_id),
+            "active_bom_context": self.get_active_bom_context(thread_id),
             "render_phase3_panel": render_phase3_panel,
             "suppress_answer": suppress_answer,
             "tool_names": sorted(tool_names),
@@ -280,6 +415,18 @@ class BomAgentGraph:
         message = str(error_text or "").strip()
         if not message:
             return "요청을 처리할 수 없습니다."
+
+        lower_message = message.lower()
+        if "old_item_code must reference an active item" in lower_message:
+            return (
+                "요청한 자재를 활성 자재 기준정보에서 찾을 수 없습니다. "
+                "자재 코드를 확인해 주세요."
+            )
+        if "new_item_code must reference an active item" in lower_message:
+            return (
+                "변경 후보 자재를 활성 자재 기준정보에서 찾을 수 없습니다. "
+                "자재 코드를 확인해 주세요."
+            )
 
         message = re.sub(
             r"^\s*[A-Za-z0-9_.-]+\s*:\s*Error executing tool\s+"
@@ -401,6 +548,10 @@ class BomAgentGraph:
         for message in messages:
             if not isinstance(message, ToolMessage) or message.name != "get_bom":
                 continue
+            if is_current_bom_quantity_tool_message(message):
+                # Contextual fact queries reuse get_bom evidence internally but
+                # must answer only the requested value, not redraw the full BOM.
+                continue
             try:
                 data = json.loads(str(message.content))
                 if isinstance(data, list) and data:
@@ -476,6 +627,35 @@ class BomAgentGraph:
             except (ValueError, TypeError, json.JSONDecodeError, KeyError):
                 continue
         return artifacts
+
+    def get_active_bom_context(
+        self,
+        thread_id: str = "default",
+    ) -> dict | None:
+        """Return the latest single-product BOM context for this chat thread."""
+        if not isinstance(thread_id, str) or not thread_id.strip():
+            raise ValueError("thread_id는 비어 있지 않은 문자열이어야 합니다.")
+
+        snapshot = self.graph.get_state(
+            {
+                "configurable": {
+                    "thread_id": thread_id.strip(),
+                }
+            }
+        )
+        context = snapshot.values.get("active_bom_context")
+        return dict(context) if isinstance(context, dict) else None
+
+    def can_inherit_active_bom_context(
+        self,
+        user_input: str,
+        thread_id: str = "default",
+    ) -> bool:
+        """Use the same Gateway policy before Streamlit's PLANT pre-gate."""
+        return self.gateway.can_inherit_active_bom_context(
+            user_input,
+            self.get_active_bom_context(thread_id),
+        )
 
     def get_design_change_state(
         self,

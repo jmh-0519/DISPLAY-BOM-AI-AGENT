@@ -5,6 +5,8 @@ import base64
 import json
 import os
 import sys
+import threading
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,8 @@ from mcp import (
     StdioServerParameters,
 )
 from mcp.client.stdio import stdio_client
+
+from core.performance_profiler import performance_span
 
 
 PROJECT_ROOT = (
@@ -24,6 +28,32 @@ PROJECT_ROOT = (
 
 
 class DisplayBomMcpClient:
+    _tool_definitions_cache: list[dict] | None = None
+    _tool_definitions_lock = threading.Lock()
+
+    # Local demo/read optimization. The Agent still uses the same MCP Tool names
+    # and schemas, but selected read-only capabilities can execute in-process to
+    # avoid the ~3s stdio MCP process startup cost on every query.
+    LOCAL_READ_TOOL_NAMES = {
+        "get_bom",
+        "get_bom_where_used",
+        "get_product_detail",
+        "get_item_detail",
+        "list_products",
+        "search_product",
+        "list_materials",
+        "search_material",
+        "list_plants",
+    }
+
+    # SPEED2E: only the Analysis Macro receives a local transport fast path.
+    # It may persist Analysis Session evidence, but it cannot create a Design
+    # Change Request and cannot modify Production E-BOM. All approval/apply
+    # tools remain behind the stdio MCP transport.
+    LOCAL_ANALYSIS_TOOL_NAMES = {
+        "analyze_design_change_candidates",
+    }
+
     """
     Display BOM MCP Server 호출을 담당하는 Client입니다.
 
@@ -216,9 +246,24 @@ class DisplayBomMcpClient:
         Azure OpenAI Tool Calling 형식으로 변환합니다.
         """
 
-        return asyncio.run(
-            self._get_tool_definitions_async()
-        )
+        cached = type(self)._tool_definitions_cache
+        if cached is not None:
+            return deepcopy(cached)
+
+        with type(self)._tool_definitions_lock:
+            cached = type(self)._tool_definitions_cache
+            if cached is None:
+                with performance_span(
+                    "mcp",
+                    "mcp.tool_definitions",
+                    metadata={"cache_hit": False},
+                ):
+                    cached = asyncio.run(
+                        self._get_tool_definitions_async()
+                    )
+                type(self)._tool_definitions_cache = cached
+
+        return deepcopy(cached)
 
     async def _get_tool_definitions_async(
         self,
@@ -269,12 +314,150 @@ class DisplayBomMcpClient:
         MCP Tool을 범용적으로 호출합니다.
         """
 
-        return asyncio.run(
-            self._call_tool_generic_async(
-                tool_name,
-                arguments,
+        local_read = self._use_local_read_fast_path(tool_name)
+        local_analysis = self._use_local_analysis_fast_path(tool_name)
+        if local_read:
+            transport = "local_read"
+        elif local_analysis:
+            transport = "local_analysis"
+        else:
+            transport = "stdio"
+
+        with performance_span(
+            "tool",
+            f"mcp.call.{tool_name}",
+            metadata={
+                "tool_name": tool_name,
+                "transport": transport,
+                "argument_count": len(arguments or {}),
+            },
+        ):
+            if local_read:
+                return self._call_local_read_tool(tool_name, arguments)
+            if local_analysis:
+                return self._call_local_analysis_tool(tool_name, arguments)
+
+            return asyncio.run(
+                self._call_tool_generic_async(
+                    tool_name,
+                    arguments,
+                )
             )
+
+
+    @classmethod
+    def clear_tool_definition_cache(cls) -> None:
+        """Test/development helper for refreshing the MCP Tool catalog."""
+
+        with cls._tool_definitions_lock:
+            cls._tool_definitions_cache = None
+
+    @classmethod
+    def _use_local_read_fast_path(cls, tool_name: str) -> bool:
+        enabled = str(
+            os.getenv("BOM_MCP_LOCAL_READ_FAST_PATH", "1") or "1"
+        ).strip().lower() not in {"0", "false", "off", "no"}
+        return enabled and str(tool_name or "").strip() in cls.LOCAL_READ_TOOL_NAMES
+
+    @classmethod
+    def _use_local_analysis_fast_path(cls, tool_name: str) -> bool:
+        enabled = str(
+            os.getenv("BOM_MCP_LOCAL_ANALYSIS_FAST_PATH", "1") or "1"
+        ).strip().lower() not in {"0", "false", "off", "no"}
+        return (
+            enabled
+            and str(tool_name or "").strip() in cls.LOCAL_ANALYSIS_TOOL_NAMES
         )
+
+    @staticmethod
+    def _call_local_analysis_tool(
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        """Execute the Phase3 Analysis Macro capability in-process.
+
+        This bypasses only the stdio transport. The logical Tool boundary and
+        the same MCP capability -> Service -> Repository -> SQLite path remain.
+
+        IMPORTANT:
+        - no Request creation
+        - no candidate approval
+        - no Preview creation
+        - no Production Apply
+        """
+        from mcp_server.capabilities.phase3 import (
+            analyze_design_change_candidates_data,
+        )
+
+        dispatch = {
+            "analyze_design_change_candidates": lambda: (
+                analyze_design_change_candidates_data(
+                    request=arguments["request"],
+                    actions=arguments["actions"],
+                )
+            ),
+        }
+
+        handler = dispatch.get(str(tool_name or "").strip())
+        if handler is None:
+            raise ValueError(f"Unsupported local analysis Tool: {tool_name}")
+        return handler()
+
+    @staticmethod
+    def _call_local_read_tool(
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        """Execute selected read-only capability functions in-process.
+
+        This is a transport optimization for the local Streamlit demo. It keeps
+        the same Tool names, input contract, Service and Repository path.
+        Phase3 analysis has its own separately guarded local transport policy;
+        approval/apply mutations continue through the MCP stdio boundary.
+        """
+
+        from mcp_server.capabilities.query import (
+            get_bom_data,
+            get_item_detail_data,
+            get_product_detail_data,
+            get_where_used_data,
+            list_materials_data,
+            list_plants_data,
+            list_products_data,
+            search_material_data,
+            search_product_data,
+        )
+
+        dispatch = {
+            "get_bom": lambda: get_bom_data(
+                product_id=arguments["product_id"],
+                as_of_date=arguments.get("as_of_date"),
+                plant_code=arguments.get("plant_code", "P01"),
+            ),
+            "get_bom_where_used": lambda: get_where_used_data(
+                item_code=arguments["item_code"],
+                plant_code=arguments["plant_code"],
+                as_of_date=arguments.get("as_of_date"),
+            ),
+            "get_product_detail": lambda: get_product_detail_data(
+                arguments["product_id"], arguments.get("as_of_date")
+            ),
+            "get_item_detail": lambda: get_item_detail_data(
+                arguments["item_code"], arguments.get("as_of_date")
+            ),
+            "list_products": list_products_data,
+            "search_product": lambda: search_product_data(arguments["keyword"]),
+            "list_materials": list_materials_data,
+            "search_material": lambda: search_material_data(arguments["keyword"]),
+            "list_plants": lambda: list_plants_data(
+                arguments.get("reference_code"), arguments.get("as_of_date")
+            ),
+        }
+
+        handler = dispatch.get(str(tool_name or "").strip())
+        if handler is None:
+            raise ValueError(f"Unsupported local read Tool: {tool_name}")
+        return handler()
 
     async def _call_tool_generic_async(
         self,

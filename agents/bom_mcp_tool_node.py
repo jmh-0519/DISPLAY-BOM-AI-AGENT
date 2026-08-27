@@ -69,6 +69,7 @@ class BomMcpToolNode:
         design_change_update = state.get(
             "design_change"
         )
+        active_bom_context_update = state.get("active_bom_context")
         terminal_error: str | None = None
 
         for tool_index, tool_call in enumerate(last_message.tool_calls):
@@ -151,6 +152,11 @@ class BomMcpToolNode:
                     )
                     continue
 
+            if tool_name in {"get_bom", "get_bom_where_used"}:
+                # A new read context replaces the previous active product BOM.
+                # WHERE_USED has no single product root, so it clears the scope.
+                active_bom_context_update = None
+
             try:
                 with self.observability.observe(
                     "mcp.tool",
@@ -208,6 +214,16 @@ class BomMcpToolNode:
                         )
                     )
                 break
+
+            if tool_name == "get_bom" and tool_result:
+                product_id = str(arguments.get("product_id") or "").strip().upper()
+                plant_code = str(arguments.get("plant_code") or "").strip().upper()
+                if product_id and plant_code:
+                    active_bom_context_update = {
+                        "product_id": product_id,
+                        "plant_code": plant_code,
+                        "source": "get_bom",
+                    }
 
             if tool_name == "analyze_design_change":
                 design_change_update = (
@@ -297,6 +313,8 @@ class BomMcpToolNode:
             result["design_change"] = (
                 design_change_update
             )
+
+        result["active_bom_context"] = active_bom_context_update
 
         return result
 

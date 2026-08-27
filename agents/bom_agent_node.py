@@ -10,9 +10,16 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from agents.analysis_macro_dispatch import DeterministicAnalysisMacroDispatch
 from agents.bom_agent_state import BomAgentState
+from agents.domain_intent_router import (
+    DEFAULT_DOMAIN_INTENT_ROUTER,
+    DomainIntentRouter,
+)
+from agents.llm_context_compactor import LlmContextCompactor
 from core.azure_openai_client import AzureOpenAIClient
 from mcp_client.client import DisplayBomMcpClient
+from core.performance_profiler import record_performance_event
 
 
 class BomAgentNode:
@@ -71,23 +78,11 @@ class BomAgentNode:
         "compare_design_change_candidates",
     }
 
-    FOLLOW_UP_EXPLAIN_MARKERS = (
-        "왜", "이유", "사유", "근거", "원인", "설명", "탈락",
-        "fail", "conditional", "조건부", "후보가 없", "후보 없음",
-        "적합 후보", "spec", "스펙", "재고평가", "재고 평가",
-    )
-
-    FOLLOW_UP_COMPARE_MARKERS = (
-        "비교", "차이", "뭐가 더", "어떤 게 더", "어떤게 더",
-        "가장", "비슷", "유사", "가까운", "저렴", "싼",
-        "재고가 많은", "재고 많은", "점수가 높은",
-    )
-
-    ANALYSIS_RESTART_MARKERS = (
-        "다시 처음", "처음부터 다시", "처음부터 확인", "처음부터 분석",
-        "다시 분석", "새로 분석", "분석 다시", "다시 조회", "처음부터 보자",
-        "다시 확인하자", "새로 시작",
-    )
+    # Domain language rules are owned by DomainIntentRouter.
+    # Aliases are kept for backward compatibility with existing tests/helpers.
+    FOLLOW_UP_EXPLAIN_MARKERS = DomainIntentRouter.FOLLOW_UP_EXPLAIN_MARKERS
+    FOLLOW_UP_COMPARE_MARKERS = DomainIntentRouter.FOLLOW_UP_COMPARE_MARKERS
+    ANALYSIS_RESTART_MARKERS = DomainIntentRouter.ANALYSIS_RESTART_MARKERS
 
     LEGACY_DESIGN_CHANGE_TOOLS = {
         "analyze_design_change",
@@ -101,67 +96,20 @@ class BomAgentNode:
         "apply_reviewed_bom",
     }
 
-    PHASE3_RECOMMENDATION_MARKERS = (
-        "추천",
-        "후보",
-        "찾아",
-        "대체 가능",
-        "대체가능",
-        "대체재",
-        "대체품",
-        "변경 가능",
-        "변경가능",
-        "recommend",
-        "candidate",
-        "alternative",
-        "replacement material",
-    )
-
-    PRODUCT_COST_SCAN_SCOPE_MARKERS = (
-        "대상모델", "대상 모델", "모델 전체", "제품 전체",
-        "전체 bom", "bom 전체", "bom에 구성", "bom 구성",
-        "구성된 자재", "구성 자재", "모델 원가", "제품 원가",
-    )
-    PRODUCT_COST_SCAN_COST_MARKERS = (
-        "원가", "비용", "cost", "저렴", "절감",
-    )
-    PRODUCT_COST_SCAN_ACTION_MARKERS = (
-        "대체", "변경 가능", "변경가능", "후보", "찾아", "줄일",
-    )
-    ASSY_PROCESS_NAMES = ("OLB", "CP", "BIN", "LC", "CF", "TFT")
-
-    PHASE3_CHANGE_INTENT_MARKERS = (
-        "변경", "교체", "대체", "바꾸", "추가", "삭제", "제거",
-        "없애", "빼", "제외", "수량", "증량", "감량",
-    )
-
-    # Reason(EOL/COST/...)이 별도로 없어도 그 자체로 실제 BOM 변경 의도가
-    # 명확한 Action 표현들입니다. 특히 DELETE/ADD/QUANTITY_CHANGE는 사용자가
-    # 단순히 "제거하자", "추가하자", "수량을 2로 바꾸자"라고 요청할 수
-    # 있으므로 변경 사유의 존재를 Phase3 진입 조건으로 강제하지 않습니다.
-    PHASE3_EXPLICIT_ACTION_MARKERS = (
-        "추가", "삭제", "제거", "없애", "빼", "제외",
-        "증량", "감량",
-    )
-    PHASE3_REASON_LANGUAGE_MARKERS = (
-        "단종", "eol", "공급 중단", "공급중단", "납기", "원가", "비용",
-        "재고", "품질", "불량", "고객 사양", "고객사양", "규제", "인증",
-        "공용화", "공통화",
-    )
-
-    ITEM_CODE_PATTERN = re.compile(
-        r"(?<![A-Z0-9])(?:[A-Z]{2,}[A-Z0-9]*-\d{3,}(?:-\d+)?|\d{4}-\d{6})(?![A-Z0-9])",
-        re.IGNORECASE,
-    )
-    PLANT_CODE_PATTERN = re.compile(r"(?<![A-Z0-9])P\d{2,}(?![A-Z0-9])", re.IGNORECASE)
-    PLANT_REQUIRED_QUERY_MARKERS = ("bom", "설계변경", "변경", "교체", "대체", "후보")
-
-    WHERE_USED_MARKERS = (
-        "역방향 bom", "역방향", "where used", "where-used", "사용처",
-        "가지고 있는 모델", "포함하는 모델", "사용된 모델", "사용되는 모델",
-        "어떤 모델", "어느 모델", "상위 assy", "상위assy", "상위 모델",
-        "어디에 사용", "어디에 들어", "어디에 포함",
-    )
+    PHASE3_RECOMMENDATION_MARKERS = DomainIntentRouter.PHASE3_RECOMMENDATION_MARKERS
+    PRODUCT_COST_SCAN_SCOPE_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_SCOPE_MARKERS
+    PRODUCT_COST_SCAN_COST_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_COST_MARKERS
+    PRODUCT_COST_SCAN_ACTION_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_ACTION_MARKERS
+    ASSY_PROCESS_NAMES = DomainIntentRouter.ASSY_PROCESS_NAMES
+    PHASE3_CHANGE_INTENT_MARKERS = DomainIntentRouter.PHASE3_CHANGE_INTENT_MARKERS
+    PHASE3_EXPLICIT_ACTION_MARKERS = DomainIntentRouter.PHASE3_EXPLICIT_ACTION_MARKERS
+    PHASE3_REASON_LANGUAGE_MARKERS = DomainIntentRouter.PHASE3_REASON_LANGUAGE_MARKERS
+    ITEM_CODE_PATTERN = DomainIntentRouter.ITEM_CODE_PATTERN
+    PLANT_CODE_PATTERN = DomainIntentRouter.PLANT_CODE_PATTERN
+    PLANT_REQUIRED_QUERY_MARKERS = DomainIntentRouter.PLANT_REQUIRED_QUERY_MARKERS
+    WHERE_USED_MARKERS = DomainIntentRouter.WHERE_USED_MARKERS
+    PLAIN_BOM_QUERY_MARKERS = DomainIntentRouter.PLAIN_BOM_QUERY_MARKERS
+    SIMPLE_CHAT_EXACT = DomainIntentRouter.SIMPLE_CHAT_EXACT
 
     PHASE3_ACTIVE_STEPS = {
         "ANALYSIS_READY",
@@ -178,6 +126,16 @@ class BomAgentNode:
         "FINAL_APPROVED",
         "APPLIED",
         "BLOCKED",
+    }
+
+    # Analysis Session exists, but no Design Change Request has been created yet.
+    # A clearly scoped new change request may replace this temporary Analysis
+    # context without touching persisted Request/Production BOM state.
+    PHASE3_PRE_REQUEST_ANALYSIS_STEPS = {
+        "ANALYSIS_READY",
+        "ANALYSIS_REVALIDATED",
+        "ANALYSIS_IMPACT_REVIEW",
+        "ANALYSIS_CONFIRMED",
     }
 
     PHASE3_ALLOWED_TOOLS = {
@@ -287,6 +245,11 @@ class BomAgentNode:
         self.client = client
         self.mcp_client = mcp_client
         self.skill_context = skill_context
+        self.domain_intent_router = DEFAULT_DOMAIN_INTENT_ROUTER
+        self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
+            self.domain_intent_router
+        )
+        self.llm_context_compactor = LlmContextCompactor()
 
     def __call__(
         self,
@@ -303,12 +266,6 @@ class BomAgentNode:
                 "하나 이상의 메시지가 필요합니다."
             )
 
-        openai_messages = (
-            self._convert_messages(
-                messages
-            )
-        )
-
         workflow_state = state.get("design_change") or {}
         current_step = workflow_state.get("current_step", "NOT_STARTED")
         user_query = self._current_user_query(
@@ -316,52 +273,296 @@ class BomAgentNode:
             state.get("user_query"),
         )
 
+        user_query = self._inherit_active_bom_context_for_change(
+            user_query=user_query,
+            workflow_state=workflow_state,
+            active_bom_context=state.get("active_bom_context"),
+        )
+
+        pending_add_target_request = workflow_state.get("pending_add_target_request") or None
+        pending_add_target_consumed = False
+        if pending_add_target_request:
+            pending = dict(pending_add_target_request)
+            target_type = str(pending.get("target_type") or "MATERIAL").upper()
+            version_code = str(pending.get("version_code") or "").strip().upper()
+            plant_code = str(pending.get("plant_code") or "").strip().upper()
+            reply = " ".join(str(user_query or "").strip().split())
+            reply = re.sub(
+                r"\s*(?:자재|MATERIAL|ASSY|어셈블리|어셈블리)\s*$",
+                "",
+                reply,
+                flags=re.IGNORECASE,
+            ).strip().strip('\"\'`“”‘’')
+            if not reply:
+                role = "자재" if target_type == "MATERIAL" else "ASSY"
+                return {
+                    "messages": [AIMessage(content=f"추가하려는 {role}의 자재코드, 자재명 또는 품목군을 입력해 주세요.")],
+                    "design_change": dict(workflow_state),
+                    "error": None,
+                }
+            role = "자재" if target_type == "MATERIAL" else "ASSY"
+            scope = " ".join(value for value in (version_code, plant_code) if value)
+            user_query = f"{scope} 모델에 {reply} {role}를 추가해줘".strip()
+            workflow_state = dict(workflow_state)
+            workflow_state["pending_add_target_request"] = None
+            pending_add_target_consumed = True
+
+        pending_quantity_request = str(
+            workflow_state.get("pending_quantity_request") or ""
+        ).strip()
+        pending_quantity_consumed = False
+
+        if pending_quantity_request:
+            quantity_value = self.domain_intent_router.extract_quantity_only_input(user_query)
+            if quantity_value is None:
+                return {
+                    "messages": [AIMessage(
+                        content="변경할 수량을 입력해 주세요."
+                    )],
+                    "design_change": dict(workflow_state),
+                    "error": None,
+                }
+
+            user_query = (
+                f"{pending_quantity_request} "
+                f"수량을 {self._format_quantity(quantity_value)}로 변경해줘"
+            )
+            workflow_state = dict(workflow_state)
+            workflow_state["pending_quantity_request"] = None
+            pending_quantity_consumed = True
+
+        elif (
+            self.domain_intent_router.is_quantity_change_instruction(user_query)
+            and self.domain_intent_router.extract_new_quantity(user_query) is None
+        ):
+            updated_workflow_state = dict(workflow_state)
+            updated_workflow_state["pending_quantity_request"] = user_query
+            return {
+                "messages": [AIMessage(
+                    content="변경할 수량을 입력해 주세요."
+                )],
+                "design_change": updated_workflow_state,
+                "error": None,
+            }
+
+        # ADD Target Resolution Gate:
+        # A request that only says "자재/ASSY를 추가하고 싶어" does not identify
+        # a meaningful business target.  Do not create Analysis or rank unrelated
+        # master items.  Ask for the item code/name/family first and keep a narrow
+        # pending slot so the next short reply can resume the original scope.
+        normalized_add = self.domain_intent_router.normalize(user_query)
+        is_add_instruction = any(marker in normalized_add for marker in ("추가", "넣어", " add "))
+        if is_add_instruction:
+            add_target_type = self.domain_intent_router.extract_add_target_type(user_query)
+            add_target_name = self.domain_intent_router.extract_add_target_name(user_query)
+            explicit_version = self.domain_intent_router.explicit_model_scope_code(user_query)
+            non_version_codes = [
+                code for code in self.domain_intent_router.item_codes(user_query)
+                if code != explicit_version
+            ]
+            explicit_new_code = (
+                non_version_codes[0]
+                if add_target_type == "MATERIAL" and len(non_version_codes) == 1
+                else None
+            )
+            if add_target_type and not add_target_name and not explicit_new_code:
+                updated_workflow_state = dict(workflow_state)
+                updated_workflow_state["pending_add_target_request"] = {
+                    "original_request": user_query,
+                    "target_type": add_target_type,
+                    "version_code": explicit_version,
+                    "plant_code": self.domain_intent_router.extract_plant_code(user_query),
+                }
+                role = "자재" if add_target_type == "MATERIAL" else "ASSY"
+                return {
+                    "messages": [AIMessage(
+                        content=(
+                            f"추가하려는 {role}를 특정해 주세요. "
+                            "자재코드, 자재명 또는 품목군으로 입력할 수 있습니다. "
+                            "예: FILM, SEALANT, 0001-200007"
+                        )
+                    )],
+                    "design_change": updated_workflow_state,
+                    "error": None,
+                }
+
+        # Azure message conversion is intentionally deferred until an actual
+        # LLM call is required. Deterministic Tool routing must not pay the
+        # cost of serializing/compacting the entire message history.
+        fast_chat = self.domain_intent_router.fast_chat_response(user_query)
+        if fast_chat is not None:
+            return {"messages": [AIMessage(content=fast_chat)], "error": None}
+
         # A completed/blocked request is historical context, not the routing context
         # for a brand-new change instruction.  Without this separation a new DELETE
         # after REPORT_COMPLETED can inherit the previous request/PLANT and never
         # expose the Analysis tool.  Keep the persisted state intact for history, but
         # route the new instruction exactly like a fresh Analysis Session.
+        initial_routing = self.domain_intent_router.route(
+            user_query,
+            workflow_active=current_step in self.PHASE3_ACTIVE_STEPS,
+            workflow_state=workflow_state,
+        )
         fresh_change_intent = (
-            self._is_product_cost_scan_request(user_query)
-            or self._is_phase3_recommendation_request(user_query)
-            or self._is_phase3_change_request(user_query)
+            initial_routing.product_cost_scan
+            or initial_routing.recommendation
+            or initial_routing.change
         )
         start_fresh_after_terminal = (
             current_step in {"APPLIED", "REPORT_COMPLETED", "BLOCKED"}
             and fresh_change_intent
         )
-        routing_step = "NOT_STARTED" if start_fresh_after_terminal else current_step
-        routing_workflow_state = {} if start_fresh_after_terminal else workflow_state
-        design_change_context = (
-            str(user_query)
-            if start_fresh_after_terminal
-            else self._recent_user_context(messages, user_query)
+
+        # A pre-Request Analysis is temporary working context. If the user starts
+        # another explicitly scoped change request, do not reuse the old
+        # Analysis MODEL/PLANT merely because it is still present in LangGraph
+        # state. This is especially important for:
+        #
+        #   old Analysis: LTA400HR01-001 / P01
+        #   new request : "LTA400HR01-001 모델에서 SEALANT를 변경하고싶어"
+        #
+        # The MODEL is explicitly restated while PLANT is omitted, so the new
+        # request must resolve valid Plants again instead of inheriting P01.
+        #
+        # Genuine Analysis follow-ups ("왜 1번 후보가 FAIL이야?") remain on the
+        # existing Analysis Session.
+        current_analysis_follow_up = (
+            self.domain_intent_router.classify_analysis_follow_up(
+                user_query,
+                workflow_state,
+                active_steps=self.PHASE3_ACTIVE_STEPS,
+            )
+            if current_step in self.PHASE3_PRE_REQUEST_ANALYSIS_STEPS
+            else None
         )
+        explicit_current_model = (
+            self.domain_intent_router.explicit_model_scope_code(user_query)
+        )
+        start_fresh_analysis_scope = (
+            current_step in self.PHASE3_PRE_REQUEST_ANALYSIS_STEPS
+            and fresh_change_intent
+            and current_analysis_follow_up is None
+            and bool(explicit_current_model)
+        )
+
+        start_fresh_scope = (
+            start_fresh_after_terminal
+            or start_fresh_analysis_scope
+        )
+        routing_step = "NOT_STARTED" if start_fresh_scope else current_step
+        routing_workflow_state = {} if start_fresh_scope else workflow_state
+
+        # SPEED1B contract:
+        # - history must not silently redefine a normal current-turn intent;
+        # - history may supply missing entity/slot context.
+        #
+        # A PLANT-only reply is an explicit slot-completion turn, not a new
+        # arbitrary intent, so the immediately preceding Phase3 request may be
+        # restored only for this narrow case.
+        previous_user_query = self._previous_user_query(messages, user_query)
+        plant_slot_continuation = (
+            routing_step == "NOT_STARTED"
+            and self.domain_intent_router.is_plant_only_selection(user_query)
+            and bool(previous_user_query)
+            and self.domain_intent_router.route(
+                previous_user_query,
+                workflow_active=False,
+                workflow_state={},
+            ).phase3_mode
+        )
+
+        current_routing_query = (
+            f"{previous_user_query} {user_query}".strip()
+            if plant_slot_continuation
+            else user_query
+        )
+
+        # Current-turn intent remains authoritative except for the explicit
+        # PLANT-slot continuation above.
+        routing_decision = self.domain_intent_router.route(
+            current_routing_query,
+            workflow_active=routing_step in self.PHASE3_ACTIVE_STEPS,
+            workflow_state=routing_workflow_state,
+        )
+
+        current_has_entity_scope = bool(
+            self.domain_intent_router.item_codes(user_query)
+            or self.domain_intent_router.extract_plant_code(user_query)
+            or self.domain_intent_router.extract_named_change_target(user_query)
+        )
+        short_entity_followup = (
+            routing_step == "NOT_STARTED"
+            and routing_decision.phase3_mode
+            and not current_has_entity_scope
+            and bool(previous_user_query)
+        )
+
+        if start_fresh_scope:
+            design_change_context = str(user_query)
+        elif plant_slot_continuation or short_entity_followup:
+            design_change_context = self._recent_user_context(messages, user_query)
+        elif routing_step == "NOT_STARTED" and fresh_change_intent:
+            # A complete new request must not inherit stale scope.
+            design_change_context = str(user_query)
+        else:
+            design_change_context = self._recent_user_context(messages, user_query)
+
         current_turn_tools = self._current_turn_tool_names(messages)
-        product_cost_scan_intent = self._is_product_cost_scan_request(user_query)
-        phase3_mode = (
-            product_cost_scan_intent
-            or self._is_phase3_recommendation_request(design_change_context)
-            or self._is_phase3_change_request(design_change_context)
-            or routing_step in self.PHASE3_ACTIVE_STEPS
+        product_cost_scan_intent = routing_decision.product_cost_scan
+        current_recommendation_intent = routing_decision.recommendation
+        current_change_intent = routing_decision.change
+        explicit_pair_analysis = (
+            self.domain_intent_router.is_explicit_replacement_pair_analysis(
+                user_query
+            )
         )
-        plant_required = self._requires_plant_context(design_change_context, phase3_mode)
+        phase3_mode = (
+            False if explicit_pair_analysis else routing_decision.phase3_mode
+        )
+        plant_required = (
+            False if explicit_pair_analysis else routing_decision.requires_plant
+        )
         active_plant_code = str(routing_workflow_state.get("plant_code") or "").strip().upper()
-        plant_code_in_context = self._extract_plant_code(design_change_context)
+        plant_code_in_context = self.domain_intent_router.extract_plant_code(design_change_context)
         plant_context_ready = bool(active_plant_code or plant_code_in_context)
-        plant_reference_code = self._reference_code_for_plant_lookup(
+        plant_reference_code = self.domain_intent_router.reference_code_for_plant_lookup(
             design_change_context, routing_workflow_state
         )
         product_cost_scan_observed = "scan_product_cost_reduction_candidates" in current_turn_tools
         follow_up_complete = bool(current_turn_tools & self.PHASE3_EXPLAIN_TOOLS)
         follow_up_intent = (
             None if (follow_up_complete or product_cost_scan_intent)
-            else self._classify_analysis_follow_up(user_query, routing_workflow_state)
+            else self.domain_intent_router.classify_analysis_follow_up(
+                user_query,
+                routing_workflow_state,
+                active_steps=self.PHASE3_ACTIVE_STEPS,
+            )
         )
         bom_context_ready = "get_bom" in current_turn_tools
-        where_used_intent = self._is_where_used_request(design_change_context)
+
+        # Router already applies write/recommendation precedence over WHERE_USED.
+        where_used_intent = routing_decision.where_used
         where_used_observed = "get_bom_where_used" in current_turn_tools
         plant_options_observed = "list_plants" in current_turn_tools
+
+        # Structured Streamlit panels already render these read-only Tool results.
+        # Avoid a second Azure call whose prose would be suppressed by the UI.
+        if where_used_observed:
+            return {
+                "messages": [AIMessage(content="역방향 BOM 조회 결과를 확인해 주세요.")],
+                "error": None,
+            }
+        if plant_options_observed:
+            return {
+                "messages": [AIMessage(content="조회할 PLANT를 선택해 주세요.")],
+                "error": None,
+            }
+        if "get_bom" in current_turn_tools and not phase3_mode:
+            return {
+                "messages": [AIMessage(content="BOM 조회 결과를 확인해 주세요.")],
+                "error": None,
+            }
+
         tool_definitions = self._filter_tool_definitions(
             self.mcp_client.get_tool_definitions(),
             routing_step,
@@ -414,7 +615,7 @@ class BomAgentNode:
             for value in routing_workflow_state.get("actions", [])
             if value.get("action_id")
         ]
-        mentioned_candidate_codes = self._mentioned_candidate_codes(
+        mentioned_candidate_codes = self.domain_intent_router.mentioned_candidate_codes(
             user_query, routing_workflow_state
         )
         analysis_memory = routing_workflow_state.get("analysis_memory") or {}
@@ -432,10 +633,11 @@ class BomAgentNode:
             "일반 MATERIAL ADD에서 parent가 명시되지 않은 후보 탐색은 VERSION을 임시 Parent로 분석할 수 있으며, "
             "ASSY ADD는 Parent를 추측하지 마세요. '삭제/제거/없애기/빼기'는 DELETE로 해석합니다. "
             "DELETE는 별도 EOL/원가 사유가 없어도 명시적 설계변경 Action이며 후보 선택 없이 영향분석으로 진행합니다. "
-            "사용자가 품목명만 말해 old_item_code가 불명확해 get_bom을 조회했다면, BOM Observation에서 요청 품목과 정확히 일치하는 관계를 식별해 같은 턴의 다음 단계에서 analyze_design_change_candidates로 계속 진행하고 BOM 조회만으로 종료하지 마세요. "
+            "REPLACE/DELETE/QUANTITY_CHANGE 대상이 품목명으로만 표현되어 old_item_code가 불명확하면 "
+            "get_bom을 먼저 호출하지 말고 target_item_name에 사용자의 품목명을 보존한 채 "
+            "analyze_design_change_candidates를 바로 호출하세요. Service가 지정된 VERSION/PLANT의 실제 활성 BOM에서 "
+            "정확한 source item을 resolve한 뒤 같은 Tool 호출에서 후보/Rule/재고/공급사 평가까지 수행합니다. "
             "QUANTITY_CHANGE는 변경 전/후 BOM QUANTITY를 기준으로 검증합니다. "
-            "수량 변경 대상이 품목명으로만 표현되어 old_item_code가 불명확하면 제품 BOM을 조회해 정확한 관계를 식별한 뒤, "
-            "같은 턴의 다음 단계에서 analyze_design_change_candidates로 계속 진행하세요. BOM 조회만으로 종료하지 마세요. "
             "target_type, parent_item_code, location_code, as_of_date, effective_date는 명확하지 않으면 추측하지 말고 생략하세요. "
             "수량 평가는 생산계획을 사용하지 않고 BOM의 QUANTITY만 사용합니다. Service가 실제 Item/BOM/Metadata를 조회해 보완합니다. "
             "get_bom은 사용자가 BOM 자체를 보고 싶어 하거나 대상 식별이 불명확할 때만 "
@@ -508,6 +710,16 @@ class BomAgentNode:
         # reason, the Service records the neutral USER_REQUEST reason. Explicit
         # reason language (EOL/COST/COMMONIZATION/...) still takes precedence.
 
+        plain_bom_intent = routing_decision.plain_bom
+        analysis_routing_query = (
+            design_change_context
+            if (plant_slot_continuation or short_entity_followup)
+            else user_query
+        )
+        named_change_target = self.domain_intent_router.extract_named_change_target(
+            analysis_routing_query
+        )
+
         required_tool_name = None
         available_tool_names = {
             str(tool.get("function", {}).get("name") or "")
@@ -519,6 +731,13 @@ class BomAgentNode:
         ):
             required_tool_name = "list_plants"
         elif (
+            plain_bom_intent
+            and plant_context_ready
+            and not bom_context_ready
+            and "get_bom" in available_tool_names
+        ):
+            required_tool_name = "get_bom"
+        elif (
             product_cost_scan_intent
             and plant_context_ready
             and not product_cost_scan_observed
@@ -529,7 +748,7 @@ class BomAgentNode:
             where_used_intent
             and plant_context_ready
             and not where_used_observed
-            and self._where_used_item_code(design_change_context)
+            and routing_decision.where_used_item_code
             and "get_bom_where_used" in available_tool_names
         ):
             required_tool_name = "get_bom_where_used"
@@ -543,27 +762,11 @@ class BomAgentNode:
             phase3_mode
             and routing_step == "NOT_STARTED"
             and plant_context_ready
-            and not bom_context_ready
             and (
-                self._is_delete_instruction(design_change_context)
-                or self._is_quantity_change_instruction(design_change_context)
-            )
-            and not self._has_explicit_design_change_target(design_change_context)
-            and plant_reference_code
-            and "get_bom" in available_tool_names
-        ):
-            # Name-based DELETE/QUANTITY_CHANGE needs a product-scoped BOM
-            # Observation to resolve the exact child code. Force only the read
-            # step first; the next Agent step sees bom_context_ready and is forced
-            # into analyze_design_change_candidates instead of ending with a plain
-            # BOM response.
-            required_tool_name = "get_bom"
-        elif (
-            phase3_mode
-            and routing_step == "NOT_STARTED"
-            and plant_context_ready
-            and (
-                self._has_explicit_design_change_target(design_change_context)
+                self.domain_intent_router.has_explicit_design_change_target(
+                    analysis_routing_query
+                )
+                or named_change_target
                 or bom_context_ready
             )
             and "analyze_design_change_candidates" in allowed_phase3_tools
@@ -575,9 +778,14 @@ class BomAgentNode:
                 user_query=design_change_context,
                 workflow_state=routing_workflow_state,
             )
+        elif required_tool_name == "get_bom" and plain_bom_intent:
+            ai_message = self._build_bom_tool_message(
+                user_query=design_change_context,
+                plant_code=active_plant_code or plant_code_in_context,
+            )
         elif required_tool_name == "get_bom_where_used":
             ai_message = self._build_where_used_tool_message(
-                user_query=design_change_context,
+                user_query=user_query,
                 plant_code=active_plant_code or plant_code_in_context,
             )
         elif (
@@ -600,7 +808,91 @@ class BomAgentNode:
                 user_query=user_query,
                 workflow_state=workflow_state,
             )
+        elif required_tool_name == "analyze_design_change_candidates":
+            macro_message = self.analysis_macro_dispatch.build_tool_message(
+                user_query=analysis_routing_query,
+                active_bom_context=state.get("active_bom_context"),
+                workflow_state={
+                    **routing_workflow_state,
+                    "current_step": routing_step,
+                    # pending slot has already been consumed and normalized above.
+                    "pending_quantity_request": None,
+                },
+            )
+            if macro_message is not None:
+                ai_message = macro_message
+            else:
+                effective_messages = self._messages_with_effective_user_query(
+                    messages,
+                    user_query,
+                )
+                compacted_messages, _context_diet_stats = (
+                    self.llm_context_compactor.compact(
+                        effective_messages,
+                        current_user_query=user_query,
+                    )
+                )
+                record_performance_event(
+                    category="context",
+                    name="llm.context_diet",
+                    metadata={
+                        "message_count": len(effective_messages),
+                        "compacted_message_count": len(compacted_messages),
+                    },
+                    metrics={
+                        "original_tool_chars": _context_diet_stats.original_tool_chars,
+                        "compacted_tool_chars": _context_diet_stats.compacted_tool_chars,
+                        "saved_tool_chars": _context_diet_stats.saved_tool_chars,
+                        "compacted_tool_messages": _context_diet_stats.compacted_tool_messages,
+                    },
+                )
+                openai_messages = self._convert_messages(compacted_messages)
+                self._record_prompt_budget(
+                    compacted_messages=compacted_messages,
+                    openai_messages=openai_messages,
+                    tool_definitions=tool_definitions,
+                    runtime_skill_context=runtime_skill_context,
+                )
+                assistant_message = self.client.create_agent_completion(
+                    messages=openai_messages,
+                    tools=tool_definitions,
+                    skill_context=runtime_skill_context,
+                    tool_choice=required_tool_name,
+                )
+                ai_message = self._convert_assistant_message(assistant_message)
         else:
+            effective_messages = self._messages_with_effective_user_query(
+                messages,
+                user_query,
+            )
+            compacted_messages, _context_diet_stats = (
+                self.llm_context_compactor.compact(
+                    effective_messages,
+                    current_user_query=user_query,
+                )
+            )
+            record_performance_event(
+                category="context",
+                name="llm.context_diet",
+                metadata={
+                    "message_count": len(effective_messages),
+                    "compacted_message_count": len(compacted_messages),
+                },
+                metrics={
+                    "original_tool_chars": _context_diet_stats.original_tool_chars,
+                    "compacted_tool_chars": _context_diet_stats.compacted_tool_chars,
+                    "saved_tool_chars": _context_diet_stats.saved_tool_chars,
+                    "compacted_tool_messages": _context_diet_stats.compacted_tool_messages,
+                },
+            )
+            openai_messages = self._convert_messages(compacted_messages)
+            self._record_prompt_budget(
+                compacted_messages=compacted_messages,
+                openai_messages=openai_messages,
+                tool_definitions=tool_definitions,
+                runtime_skill_context=runtime_skill_context,
+            )
+
             assistant_message = (
                 self.client
                 .create_agent_completion(
@@ -617,23 +909,125 @@ class BomAgentNode:
                 )
             )
 
-        return {
+        result = {
             "messages": [ai_message],
             "error": None,
         }
+        if pending_quantity_consumed or pending_add_target_consumed:
+            result["design_change"] = dict(workflow_state)
+        return result
+
+    def _record_prompt_budget(
+        self,
+        *,
+        compacted_messages: list[BaseMessage],
+        openai_messages: list[dict[str, Any]],
+        tool_definitions: list[dict[str, Any]],
+        runtime_skill_context: str,
+    ) -> None:
+        """Record prompt-size components without storing prompt contents."""
+        base_skill_chars = len(str(self.skill_context or ""))
+        runtime_skill_chars = len(str(runtime_skill_context or ""))
+        runtime_gate_chars = max(
+            0,
+            runtime_skill_chars - base_skill_chars - 2,  # separating newlines
+        )
+
+        # Profiling must never depend on a mocked/injected client implementation.
+        # Use the real static prompt builder so unit tests with Mock clients keep
+        # exercising Agent behavior instead of failing inside instrumentation.
+        core_system_prompt = AzureOpenAIClient._build_agent_system_prompt(None)
+        full_system_prompt = AzureOpenAIClient._build_agent_system_prompt(
+            runtime_skill_context
+        )
+        skill_wrapper_chars = max(
+            0,
+            len(full_system_prompt)
+            - len(core_system_prompt)
+            - runtime_skill_chars,
+        )
+
+        message_payload_chars = len(
+            json.dumps(
+                openai_messages,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            )
+        )
+        tool_definition_chars = len(
+            json.dumps(
+                tool_definitions,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            )
+        )
+
+        human_content_chars = 0
+        assistant_content_chars = 0
+        tool_content_chars = 0
+        for message in compacted_messages:
+            content_chars = len(str(getattr(message, "content", "") or ""))
+            if isinstance(message, HumanMessage):
+                human_content_chars += content_chars
+            elif isinstance(message, ToolMessage):
+                tool_content_chars += content_chars
+            elif isinstance(message, AIMessage):
+                assistant_content_chars += content_chars
+
+        approx_total_chars = (
+            len(core_system_prompt)
+            + skill_wrapper_chars
+            + base_skill_chars
+            + runtime_gate_chars
+            + message_payload_chars
+            + tool_definition_chars
+        )
+
+        record_performance_event(
+            category="prompt",
+            name="llm.prompt_budget",
+            metadata={
+                "message_count": len(compacted_messages),
+                "tool_definition_count": len(tool_definitions),
+            },
+            metrics={
+                "core_system_chars": len(core_system_prompt),
+                "skill_wrapper_chars": skill_wrapper_chars,
+                "base_skill_chars": base_skill_chars,
+                "runtime_gate_chars": runtime_gate_chars,
+                "message_payload_chars": message_payload_chars,
+                "human_content_chars": human_content_chars,
+                "assistant_content_chars": assistant_content_chars,
+                "tool_content_chars": tool_content_chars,
+                "tool_definition_chars": tool_definition_chars,
+                "tool_definition_count": len(tool_definitions),
+                "approx_total_chars": approx_total_chars,
+            },
+        )
+
+        for definition in tool_definitions:
+            function = definition.get("function") or {}
+            tool_name = str(function.get("name") or "unknown")
+            schema_chars = len(
+                json.dumps(
+                    definition,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            )
+            record_performance_event(
+                category="prompt",
+                name="llm.tool_schema_budget",
+                metadata={"tool_name": tool_name},
+                metrics={"schema_chars": schema_chars},
+            )
 
     @classmethod
     def _comparison_criterion(cls, user_query: str) -> str:
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        if any(marker in normalized for marker in ("원가", "가격", "저렴", "싼")):
-            return "COST"
-        if "납기" in normalized:
-            return "LEAD_TIME"
-        if "재고" in normalized:
-            return "INVENTORY"
-        if any(marker in normalized for marker in ("점수", "등급", "score")):
-            return "TOTAL_SCORE"
-        return "SPEC_SIMILARITY"
+        return DEFAULT_DOMAIN_INTENT_ROUTER.comparison_criterion(user_query)
 
     @classmethod
     def _build_restart_analysis_tool_message(cls, workflow_state: dict) -> AIMessage:
@@ -730,7 +1124,7 @@ class BomAgentNode:
             name = "compare_design_change_candidates" if request_id else "compare_design_change_analysis_candidates"
             args = {
                 "candidate_item_codes": mentioned or None,
-                "criterion": cls._comparison_criterion(user_query),
+                "criterion": DEFAULT_DOMAIN_INTENT_ROUTER.comparison_criterion(user_query),
             }
             if request_id:
                 args["request_id"] = request_id
@@ -795,28 +1189,42 @@ class BomAgentNode:
         return filtered
 
     @classmethod
-    def _is_product_cost_scan_request(cls, user_query: str) -> bool:
-        """Detect model/BOM-wide cost opportunity questions.
+    def _fast_chat_response(cls, user_query: str) -> str | None:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.fast_chat_response(user_query)
 
-        This intent is intentionally narrower than ordinary candidate recommendation:
-        it requires product/BOM scope, a cost concept, and an alternative/change verb.
-        """
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        return (
-            any(marker in normalized for marker in cls.PRODUCT_COST_SCAN_SCOPE_MARKERS)
-            and any(marker in normalized for marker in cls.PRODUCT_COST_SCAN_COST_MARKERS)
-            and any(marker in normalized for marker in cls.PRODUCT_COST_SCAN_ACTION_MARKERS)
+    @classmethod
+    def _is_plain_bom_query(cls, user_query: str, *, phase3_mode: bool) -> bool:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_plain_bom_query(
+            user_query, phase3_mode=phase3_mode
         )
+
+    @classmethod
+    def _build_bom_tool_message(
+        cls, *, user_query: str, plant_code: str | None
+    ) -> AIMessage:
+        product_id = cls._reference_code_for_plant_lookup(user_query, {})
+        if not product_id or not plant_code:
+            raise ValueError("BOM 조회에는 product_id와 plant_code가 필요합니다.")
+        return AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "get_bom",
+                "args": {
+                    "plant_code": str(plant_code).strip().upper(),
+                    "product_id": product_id,
+                },
+                "id": f"bom-fast-{uuid.uuid4().hex[:12]}",
+                "type": "tool_call",
+            }],
+        )
+
+    @classmethod
+    def _is_product_cost_scan_request(cls, user_query: str) -> bool:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_product_cost_scan_request(user_query)
 
     @staticmethod
     def _active_version_code(workflow_state: dict) -> str | None:
-        request = workflow_state.get("analysis_request") or {}
-        value = request.get("version_code")
-        if value:
-            return str(value).strip().upper()
-        context = workflow_state.get("analysis_context") or {}
-        value = context.get("version_code")
-        return str(value).strip().upper() if value else None
+        return DEFAULT_DOMAIN_INTENT_ROUTER.active_version_code(workflow_state)
 
     @classmethod
     def _excluded_items_for_product_scan(cls, user_query: str) -> tuple[list[str], list[str]]:
@@ -836,13 +1244,11 @@ class BomAgentNode:
 
     @classmethod
     def _is_where_used_request(cls, user_query: str) -> bool:
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        return any(marker in normalized for marker in cls.WHERE_USED_MARKERS)
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_where_used_request(user_query)
 
     @classmethod
     def _where_used_item_code(cls, user_query: str) -> str | None:
-        codes = [match.group(0).upper() for match in cls.ITEM_CODE_PATTERN.finditer(str(user_query or ""))]
-        return codes[-1] if codes else None
+        return DEFAULT_DOMAIN_INTENT_ROUTER.where_used_item_code(user_query)
 
     @classmethod
     def _build_where_used_tool_message(
@@ -865,13 +1271,12 @@ class BomAgentNode:
         )
 
     @classmethod
-    def _reference_code_for_plant_lookup(cls, user_query: str, workflow_state: dict) -> str | None:
-        """Prefer the explicit product/target code for a PLANT-scoped lookup."""
-        active_version = cls._active_version_code(workflow_state)
-        if active_version:
-            return active_version
-        codes = [match.group(0).upper() for match in cls.ITEM_CODE_PATTERN.finditer(str(user_query or ""))]
-        return codes[0] if codes else None
+    def _reference_code_for_plant_lookup(
+        cls, user_query: str, workflow_state: dict
+    ) -> str | None:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.reference_code_for_plant_lookup(
+            user_query, workflow_state
+        )
 
     @classmethod
     def _build_plant_list_tool_message(
@@ -923,62 +1328,149 @@ class BomAgentNode:
 
     @classmethod
     def _is_phase3_recommendation_request(cls, user_query: str) -> bool:
-        normalized = " ".join(str(user_query).strip().lower().split())
-        return any(
-            marker in normalized
-            for marker in cls.PHASE3_RECOMMENDATION_MARKERS
-        )
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_phase3_recommendation_request(user_query)
 
     @classmethod
     def _has_phase3_reason_language(cls, user_query: str) -> bool:
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        return any(
-            marker in normalized for marker in cls.PHASE3_REASON_LANGUAGE_MARKERS
-        )
+        return DEFAULT_DOMAIN_INTENT_ROUTER.has_phase3_reason_language(user_query)
 
     @classmethod
     def _is_delete_instruction(cls, user_query: str) -> bool:
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        return any(marker in normalized for marker in (
-            "삭제", "제거", "없애", "빼", "제외",
-        ))
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_delete_instruction(user_query)
+
+    @staticmethod
+    def _extract_quantity_only_input(user_query: str) -> float | None:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.extract_quantity_only_input(user_query)
+
+    @staticmethod
+    def _format_quantity(value: float) -> str:
+        return str(int(value)) if float(value).is_integer() else str(value)
+
+    def _inherit_active_bom_context_for_change(
+        self,
+        *,
+        user_query: str,
+        workflow_state: dict,
+        active_bom_context: dict | None,
+    ) -> str:
+        """Scope a fresh design-change follow-up to the currently active BOM.
+
+        Example:
+            active BOM = LTA400HR01-001 / P01
+            current turn = "LJ94-100006 수량 바꾸고싶어"
+
+        becomes internally:
+            "LTA400HR01-001 P01 모델에서 LJ94-100006 수량 바꾸고싶어"
+
+        This uses explicit Graph State from the latest successful get_bom,
+        not an arbitrary model string found somewhere in conversation history.
+        """
+        context = active_bom_context or {}
+        product_id = str(context.get("product_id") or "").strip().upper()
+        plant_code = str(context.get("plant_code") or "").strip().upper()
+        if not product_id or not plant_code:
+            return user_query
+
+        current_step = str(
+            workflow_state.get("current_step") or "NOT_STARTED"
+        ).strip().upper()
+        if (
+            current_step in self.PHASE3_ACTIVE_STEPS
+            and current_step not in {"APPLIED", "BLOCKED"}
+        ):
+            return user_query
+
+        decision = self.domain_intent_router.route(
+            user_query,
+            workflow_active=False,
+            workflow_state={},
+        )
+        if not decision.change:
+            return user_query
+
+        explicit_plant = self.domain_intent_router.extract_plant_code(user_query)
+        if explicit_plant and explicit_plant != plant_code:
+            # The user deliberately changed PLANT scope. Do not reuse the old BOM.
+            return user_query
+
+        explicit_model = self.domain_intent_router.explicit_model_scope_code(
+            user_query
+        )
+        if explicit_model:
+            # The user explicitly restated MODEL/PRODUCT scope. Treat it as a
+            # fresh scoped request and do not silently carry PLANT from the
+            # previously viewed BOM, even when the model code happens to match.
+            #
+            # Only queries that omit MODEL/PRODUCT may inherit active BOM scope.
+            return user_query
+
+        normalized_upper = str(user_query or "").upper()
+        parts: list[str] = []
+
+        if product_id not in normalized_upper:
+            parts.append(product_id)
+        if not explicit_plant:
+            parts.append(plant_code)
+
+        if not parts:
+            return user_query
+
+        # "모델에서" makes the inherited role explicit to both deterministic
+        # extraction and the LLM fallback without changing the user's chat text.
+        prefix = " ".join(parts)
+        if product_id in parts:
+            prefix += " 모델에서"
+
+        return f"{prefix} {user_query}".strip()
+
+    @staticmethod
+    def _messages_with_effective_user_query(
+        messages: list[BaseMessage],
+        effective_user_query: str,
+    ) -> list[BaseMessage]:
+        """Use the restored full request only for current Agent reasoning.
+
+        The actual chat history still keeps the user's compact input ("2").
+        """
+        updated = list(messages)
+        for index in range(len(updated) - 1, -1, -1):
+            if isinstance(updated[index], HumanMessage):
+                updated[index] = HumanMessage(content=effective_user_query)
+                break
+        return updated
+
+    @classmethod
+    def _extract_new_quantity(cls, user_query: str) -> float | None:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.extract_new_quantity(user_query)
 
     @classmethod
     def _is_quantity_change_instruction(cls, user_query: str) -> bool:
-        """Return True only for an actual BOM quantity-change instruction.
-
-        A read-only question such as '현재 수량이 얼마야?' must not enter the
-        Phase3 write workflow merely because it contains the word '수량'.
-        """
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        if any(marker in normalized for marker in ("증량", "감량")):
-            return True
-        if "수량" not in normalized:
-            return False
-        return any(marker in normalized for marker in (
-            "변경", "바꾸", "바꿔", "조정", "수정",
-            "늘리", "늘려", "줄이", "줄여", "증가", "감소",
-        ))
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_quantity_change_instruction(user_query)
 
     @classmethod
     def _is_phase3_change_request(cls, user_query: str) -> bool:
-        """Detect a natural-language Phase3 change instruction.
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_phase3_change_request(user_query)
 
-        REPLACE recommendation often carries a business reason such as EOL/COST.
-        DELETE/ADD/QUANTITY_CHANGE, however, are themselves explicit write intents
-        and must enter Analysis even when the user does not state a separate reason.
-        """
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        has_change_action = any(
-            marker in normalized for marker in cls.PHASE3_CHANGE_INTENT_MARKERS
-        )
-        if not has_change_action:
-            return False
-        if any(marker in normalized for marker in cls.PHASE3_REASON_LANGUAGE_MARKERS):
-            return True
-        if any(marker in normalized for marker in cls.PHASE3_EXPLICIT_ACTION_MARKERS):
-            return True
-        return cls._is_quantity_change_instruction(user_query)
+    @staticmethod
+    def _previous_user_query(
+        messages: list[BaseMessage],
+        current_query: str,
+    ) -> str | None:
+        """Return the immediately preceding distinct HumanMessage."""
+        current = str(current_query or "").strip()
+        skipped_current = False
+        for message in reversed(messages):
+            if not isinstance(message, HumanMessage):
+                continue
+            value = str(message.content or "").strip()
+            if not value:
+                continue
+            if not skipped_current and value == current:
+                skipped_current = True
+                continue
+            if value != current:
+                return value
+        return None
 
     @staticmethod
     def _recent_user_context(messages: list[BaseMessage], current_query: str) -> str:
@@ -999,78 +1491,33 @@ class BomAgentNode:
     def _classify_analysis_follow_up(
         cls, user_query: str, workflow_state: dict
     ) -> str | None:
-        """Classify follow-up questions against the persisted analysis context."""
-        step = workflow_state.get("current_step")
-        if step not in cls.PHASE3_ACTIVE_STEPS:
-            return None
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        if not normalized:
-            return None
-        if workflow_state.get("analysis_id") and not workflow_state.get("request_id"):
-            if any(marker in normalized for marker in cls.ANALYSIS_RESTART_MARKERS):
-                return "RESTART_ANALYSIS"
-        if not workflow_state.get("candidates"):
-            return None
-        if any(marker in normalized for marker in cls.FOLLOW_UP_COMPARE_MARKERS):
-            if any(marker in normalized for marker in ("가장", "비슷", "유사", "저렴", "납기", "재고", "점수")):
-                return "RANK_CANDIDATES"
-            return "COMPARE_CANDIDATES"
-        if any(marker in normalized for marker in cls.FOLLOW_UP_EXPLAIN_MARKERS):
-            mentioned = cls._mentioned_candidate_codes(user_query, workflow_state)
-            return "EXPLAIN_CANDIDATE" if mentioned else "EXPLAIN_ANALYSIS"
-        return None
+        return DEFAULT_DOMAIN_INTENT_ROUTER.classify_analysis_follow_up(
+            user_query,
+            workflow_state,
+            active_steps=cls.PHASE3_ACTIVE_STEPS,
+        )
 
     @classmethod
-    def _mentioned_candidate_codes(cls, user_query: str, workflow_state: dict) -> list[str]:
-        available = {
-            str(value.get("candidate_item_code") or "").upper()
-            for value in workflow_state.get("candidates", [])
-            if value.get("candidate_item_code")
-        }
-        mentioned = []
-        for match in cls.ITEM_CODE_PATTERN.finditer(str(user_query or "")):
-            code = match.group(0).upper()
-            if code in available and code not in mentioned:
-                mentioned.append(code)
-        return mentioned
+    def _mentioned_candidate_codes(
+        cls, user_query: str, workflow_state: dict
+    ) -> list[str]:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.mentioned_candidate_codes(
+            user_query, workflow_state
+        )
 
     @classmethod
     def _extract_plant_code(cls, user_query: str) -> str | None:
-        match = cls.PLANT_CODE_PATTERN.search(str(user_query or ""))
-        return match.group(0).upper() if match else None
+        return DEFAULT_DOMAIN_INTENT_ROUTER.extract_plant_code(user_query)
 
     @classmethod
     def _requires_plant_context(cls, user_query: str, phase3_mode: bool) -> bool:
-        normalized = " ".join(str(user_query or "").strip().lower().split())
-        return (
-            phase3_mode
-            or cls._is_where_used_request(user_query)
-            or any(marker in normalized for marker in cls.PLANT_REQUIRED_QUERY_MARKERS)
+        return DEFAULT_DOMAIN_INTENT_ROUTER.requires_plant_context(
+            user_query, phase3_mode=phase3_mode
         )
 
     @classmethod
     def _has_explicit_design_change_target(cls, user_query: str) -> bool:
-        """Detect enough target context to force read-only Phase3 Analysis.
-
-        REPLACE/DELETE/QUANTITY_CHANGE normally need a product + existing item code.
-        ADD candidate discovery is different: the user may know only the product and
-        the business requirement (for example "차폐 테이프를 추가할 후보를 찾아줘").
-        In that case one product code plus explicit ADD/recommendation language is
-        enough; Service/RuleEngine must discover the new item rather than the LLM.
-        """
-        query = str(user_query or "")
-        codes = {
-            match.group(0).upper()
-            for match in cls.ITEM_CODE_PATTERN.finditer(query)
-        }
-        if len(codes) >= 2:
-            return True
-        normalized = " ".join(query.strip().lower().split())
-        return (
-            len(codes) >= 1
-            and "추가" in normalized
-            and any(marker in normalized for marker in cls.PHASE3_RECOMMENDATION_MARKERS)
-        )
+        return DEFAULT_DOMAIN_INTENT_ROUTER.has_explicit_design_change_target(user_query)
 
     @staticmethod
     def _current_user_query(

@@ -55,7 +55,8 @@ def test_request_detail_can_resume_pending_workflow_from_history():
     assert 'workflow_status == "CANDIDATE_APPROVED"' in SOURCE
     assert 'workflow_status == "WAITING_FINAL_APPROVAL"' in SOURCE
     assert 'workflow_status == "FINAL_APPROVED"' in SOURCE
-    assert '"통합 영향 Preview 생성"' in SOURCE
+    assert '"통합 영향 Preview 생성"' not in SOURCE
+    assert '적용 전 최종 확인 정보' in SOURCE
     assert '"설계변경 확정"' in SOURCE
     assert '"설계변경 BOM 반영"' in SOURCE
 

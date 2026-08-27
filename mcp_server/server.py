@@ -369,7 +369,9 @@ def analyze_design_change_candidates(
     REPLACE뿐 아니라 ADD/DELETE/QUANTITY_CHANGE를 지원합니다. ADD는 new_item_code를
     모르는 경우에도 target_type과 Reason/Rule을 기준으로 후보 전체를 탐색할 수 있습니다.
     DELETE는 후보 없이 영향분석으로 진행하고, QUANTITY_CHANGE는 변경 후 BOM 소요량 기준
-    생산계획/재고를 검증합니다.
+    재고를 검증합니다. REPLACE/DELETE/QUANTITY_CHANGE에서 old_item_code를 모르는 경우
+    target_item_name만 전달하면 지정된 VERSION/PLANT 활성 BOM 안에서 source item을
+    resolve한 뒤 같은 Tool 호출에서 분석까지 계속합니다.
     """
     return analyze_design_change_candidates_data(request, actions)
 

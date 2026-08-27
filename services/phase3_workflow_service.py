@@ -10,6 +10,7 @@ from services.impact_analysis_service import ImpactAnalysisService
 from services.analysis_explain_service import DesignChangeAnalysisExplainService
 from services.change_reason_resolver import ChangeReasonResolver
 from services.multi_action_change_service import MultiActionApplyService
+from services.query_normalizer import QueryNormalizer
 from services.recommendation_service import RecommendationService
 from services.supply_evaluation_service import SupplyEvaluationService
 
@@ -21,6 +22,7 @@ class Phase3WorkflowService:
         self.repository = SQLiteDesignChangeRepository(database)
         self.reason_resolver = ChangeReasonResolver(self.repository)
         self.recommendation = RecommendationService(self.repository)
+        self.query_normalizer = QueryNormalizer(database)
         self.supply = SupplyEvaluationService(self.repository)
         self.impact = ImpactAnalysisService(self.repository)
         self.explain = DesignChangeAnalysisExplainService(self.repository)
@@ -29,6 +31,55 @@ class Phase3WorkflowService:
     @staticmethod
     def _id(prefix: str) -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12].upper()}"
+
+    def _apply_candidate_ranking_score(
+        self,
+        value: dict,
+        supplier: dict,
+        inventory: dict,
+    ) -> None:
+        """Expose a ranking score only after technical suitability is PASS.
+
+        ``total_score`` remains populated for backward-compatible persistence,
+        but ``ranking_score``/``ranking_grade`` are the only values the UI should
+        present as a comparative recommendation score.  Missing/CONDITIONAL/FAIL
+        technical evidence therefore produces no numeric ranking.
+        """
+        technical_status = str(value.get("technical_status") or value.get("status") or "").upper()
+        if technical_status != "PASS":
+            value["ranking_score"] = None
+            value["ranking_grade"] = None
+            return
+
+        supplier_score = (
+            float(supplier["recommended"]["score"])
+            if supplier.get("recommended") else 0.0
+        )
+        inventory_score = {"PASS": 100.0, "CONDITIONAL": 50.0, "FAIL": 0.0}[
+            inventory["status"]
+        ]
+        total_score = round(
+            float(value.get("rule_score") or 0.0) * 0.6
+            + supplier_score * 0.3
+            + inventory_score * 0.1,
+            2,
+        )
+        grade = self.recommendation.rule_engine.grade(total_score)
+        value["total_score"] = total_score
+        value["grade"] = grade
+        value["ranking_score"] = total_score
+        value["ranking_grade"] = grade
+
+    @staticmethod
+    def _candidate_sort_key(row: dict) -> tuple:
+        status_order = {"PASS": 0, "CONDITIONAL": 1, "FAIL": 2}
+        ranking_score = row.get("ranking_score")
+        return (
+            status_order.get(str(row.get("status") or "FAIL"), 9),
+            1 if ranking_score is None else 0,
+            -float(ranking_score or 0.0),
+            str(row.get("candidate_item_code") or ""),
+        )
 
     def create_request(self, request: dict, actions: list[dict]) -> dict:
         if not actions:
@@ -150,6 +201,31 @@ class Phase3WorkflowService:
 
         old_code = str(action.get("old_item_code") or "").strip().upper() or None
         new_code = str(action.get("new_item_code") or "").strip().upper() or None
+        target_item_name = str(action.get("target_item_name") or "").strip()
+
+        if action_type == "ADD" and not new_code and not target_item_name:
+            raise ValueError(
+                "추가하려는 자재 또는 ASSY가 지정되지 않았습니다. "
+                "자재코드, 자재명 또는 품목군을 먼저 입력해 주세요."
+            )
+
+        # SPEED2B Macro Target Resolution:
+        # For REPLACE/DELETE/QUANTITY_CHANGE the caller may provide only a
+        # business target name such as SEALANT / 실런트 / TFT. Resolve the
+        # source item from the actual scoped product BOM inside this Service,
+        # instead of requiring get_bom -> LLM row selection -> analysis.
+        if (
+            action_type != "ADD"
+            and not old_code
+            and target_item_name
+        ):
+            old_code = self._resolve_source_item_code_by_name(
+                request=request,
+                target_item_name=target_item_name,
+            )
+            action["old_item_code"] = old_code
+            action["target_resolution_source"] = "SCOPED_BOM_NAME_MATCH"
+
         if old_code:
             action["old_item_code"] = old_code
         if new_code:
@@ -160,11 +236,22 @@ class Phase3WorkflowService:
         target_item = self.repository.get_item(target_item_code) if target_item_code else None
 
         if action_type == "ADD" and target_item is None:
-            # Candidate-discovery ADD does not know new_item_code yet.  In that case
-            # the LLM may only classify the broad business target type; the actual
-            # candidate master items are discovered and verified by Service/RuleEngine.
+            # Candidate-discovery ADD does not know new_item_code yet.  Prefer an
+            # explicit target_type from the caller, but recover safely from natural
+            # language when the user clearly said "자재/MATERIAL" or "ASSY/어셈블리".
+            # This prevents a backend schema hint from leaking into the chat UI.
             if supplied_target not in {"MATERIAL", "ASSY"}:
-                raise ValueError("ADD candidate discovery requires target_type MATERIAL or ASSY")
+                request_text = str(request.get("original_request") or "").lower()
+                material_explicit = any(marker in request_text for marker in ("자재", "material"))
+                assy_explicit = any(marker in request_text for marker in ("assy", "어셈블리", "어셈블리"))
+                if material_explicit != assy_explicit:
+                    supplied_target = "MATERIAL" if material_explicit else "ASSY"
+                    action["target_type_resolution_source"] = "EXPLICIT_REQUEST_TEXT"
+                else:
+                    raise ValueError(
+                        "추가 대상 유형을 확인할 수 없습니다. 일반 자재를 추가하려면 '자재', "
+                        "조립품을 추가하려면 'ASSY'를 요청에 명시해 주세요."
+                    )
             inferred_target = supplied_target
         else:
             if not target_item or target_item["active_yn"] != "Y":
@@ -180,7 +267,6 @@ class Phase3WorkflowService:
             if supplied_target and supplied_target != inferred_target:
                 raise ValueError("target_type does not match the target item")
         action["target_type"] = inferred_target
-        target_item_name = str(action.get("target_item_name") or "").strip()
         if target_item_name:
             action["target_item_name"] = target_item_name
 
@@ -226,6 +312,88 @@ class Phase3WorkflowService:
             if quantity is None or float(quantity) <= 0:
                 raise ValueError("QUANTITY_CHANGE requires new_quantity greater than zero")
             action["new_quantity"] = float(quantity)
+
+    @staticmethod
+    def _clean_source_target_hint(value: str) -> str:
+        text = " ".join(str(value or "").strip().split())
+        # Generic role words should not influence item matching.
+        for suffix in (
+            " 자재", " 품목", " 부품", " MATERIAL", " ASSY", " 어셈블리",
+        ):
+            if text.upper().endswith(suffix.upper()):
+                text = text[: -len(suffix)].strip()
+        return text
+
+    def _resolve_source_item_code_by_name(
+        self,
+        *,
+        request: dict,
+        target_item_name: str,
+    ) -> str:
+        """Resolve a name-only design-change target inside one scoped product BOM.
+
+        This is deliberately product/plant scoped. It never searches the whole
+        item master and guesses a write target.
+
+        Matching uses the DB-managed QueryNormalizer aliases, so examples such
+        as ``실런트`` -> ``SEALANT`` remain metadata driven.
+        """
+        hint = self._clean_source_target_hint(target_item_name)
+        if not hint:
+            raise ValueError("SOURCE_ITEM_NAME_REQUIRED")
+
+        relations = self.repository.list_version_component_relations(
+            version_code=request["version_code"],
+            plant_code=request["plant_code"],
+            as_of_date=request["as_of_date"],
+        )
+        if not relations:
+            raise ValueError(
+                "ACTIVE_PRODUCT_BOM_NOT_FOUND: "
+                f"{request['plant_code']} PLANT의 {request['version_code']} 활성 BOM이 없습니다."
+            )
+
+        scored: list[tuple[int, dict]] = []
+        for relation in relations:
+            score = self.query_normalizer.match_score(
+                hint,
+                relation.get("child_item_code"),
+                relation.get("item_name"),
+                relation.get("description"),
+            )
+            # Require a meaningful semantic/lexical match. A weak one-token
+            # overlap must not silently become a design-change write target.
+            if score >= 500:
+                scored.append((score, relation))
+
+        if not scored:
+            raise ValueError(
+                "SOURCE_ITEM_NAME_NOT_FOUND: "
+                f"{request['version_code']} / {request['plant_code']} BOM에서 "
+                f"'{target_item_name}'에 해당하는 활성 품목을 찾을 수 없습니다."
+            )
+
+        best_score = max(score for score, _ in scored)
+        best_rows = [row for score, row in scored if score == best_score]
+
+        unique_items: dict[str, dict] = {}
+        for row in best_rows:
+            code = str(row.get("child_item_code") or "").strip().upper()
+            if code:
+                unique_items.setdefault(code, row)
+
+        if len(unique_items) != 1:
+            labels = ", ".join(
+                f"{code}({row.get('item_name') or '-'})"
+                for code, row in sorted(unique_items.items())
+            )
+            raise ValueError(
+                "SOURCE_ITEM_NAME_AMBIGUOUS: "
+                f"'{target_item_name}'에 해당하는 품목이 둘 이상입니다: {labels}. "
+                "품목 코드를 지정해 주세요."
+            )
+
+        return next(iter(unique_items))
 
     def _resolve_source_relation(self, action: dict, request: dict) -> dict:
         old_code = action["old_item_code"]
@@ -773,21 +941,17 @@ class Phase3WorkflowService:
                     "FAIL" if "FAIL" in statuses else
                     "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
                 )
-            supplier_score = float(supplier["recommended"]["score"]) if supplier.get("recommended") else 0.0
-            inventory_score = {"PASS": 100.0, "CONDITIONAL": 50.0, "FAIL": 0.0}[inventory["status"]]
-            value["total_score"] = round(float(value["rule_score"]) * 0.6 + supplier_score * 0.3 + inventory_score * 0.1, 2)
-            value["grade"] = self.recommendation.rule_engine.grade(value["total_score"])
+            self._apply_candidate_ranking_score(value, supplier, inventory)
             missing = list(value.get("missing_data", [])) + list(supplier.get("missing_data", []))
             value["missing_data"] = sorted(set(missing))
             value["decision_reasons"] = self._candidate_decision_reasons(value)
             value["action_id"] = action["action_id"]
 
-        order = {"PASS": 0, "CONDITIONAL": 1, "FAIL": 2}
-        results.sort(key=lambda row: (order[row["status"]], -row["total_score"], row["candidate_item_code"]))
+        results.sort(key=self._candidate_sort_key)
         rank = 0
         for index, value in enumerate(results, 1):
             value["candidate_id"] = f"{action['action_id']}-C{index}"
-            if value["status"] == "FAIL":
+            if value["status"] == "FAIL" or value.get("ranking_score") is None:
                 value["rank"] = None
             else:
                 rank += 1
@@ -879,17 +1043,73 @@ class Phase3WorkflowService:
 
     def explain_analysis_session(self, analysis: dict) -> dict:
         candidates = list(analysis.get("candidates") or [])
-        counts = {status: sum(row.get("status") == status for row in candidates) for status in ("PASS", "CONDITIONAL", "FAIL")}
+        actions = list(analysis.get("actions") or [])
+        counts = {
+            status: sum(row.get("status") == status for row in candidates)
+            for status in ("PASS", "CONDITIONAL", "FAIL")
+        }
         eligible = counts["PASS"] + counts["CONDITIONAL"]
-        if not candidates:
-            summary = "검색된 대체 후보가 없습니다."
+
+        action_explanations = []
+        for action in actions:
+            inventory = action.get("inventory") or {}
+            action_explanations.append({
+                "action_id": action.get("action_id"),
+                "action_type": action.get("action_type"),
+                "item_code": action.get("old_item_code") or action.get("new_item_code"),
+                "status": str(action.get("evaluation_status") or "-").upper(),
+                "old_quantity": action.get("old_quantity"),
+                "new_quantity": action.get("new_quantity"),
+                "decision_reasons": action.get("decision_reasons") or [],
+                "inventory_status": action.get("inventory_status") or inventory.get("status"),
+                "available_quantity": inventory.get("available_quantity"),
+                "shortage_quantity": inventory.get("shortage_quantity"),
+            })
+
+        if not candidates and action_explanations:
+            first = action_explanations[0]
+            reason_text = " ".join(
+                str(value)
+                for value in (first.get("decision_reasons") or [])
+                if value
+            )
+            if first.get("action_type") == "QUANTITY_CHANGE":
+                summary = (
+                    f"QUANTITY_CHANGE 평가 결과는 {first.get('status')}입니다. "
+                    f"변경 전 수량 {first.get('old_quantity')}에서 "
+                    f"변경 후 수량 {first.get('new_quantity')}로 검증했으며, "
+                    f"가용재고는 {first.get('available_quantity')}, "
+                    f"부족수량은 {first.get('shortage_quantity')}입니다."
+                )
+                if reason_text:
+                    summary += f" {reason_text}"
+            elif first.get("action_type") == "DELETE":
+                summary = f"DELETE 평가 결과는 {first.get('status')}입니다."
+                if reason_text:
+                    summary += f" {reason_text}"
+            else:
+                summary = f"Action 평가 결과는 {first.get('status')}입니다."
+        elif not candidates:
+            summary = "분석 결과를 설명할 후보 또는 Action 정보가 없습니다."
         elif not eligible:
-            summary = f"후보 {len(candidates)}건이 검색되었지만 모두 FAIL하여 선택 가능한 후보가 없습니다."
+            summary = (
+                f"후보 {len(candidates)}건이 검색되었지만 모두 FAIL하여 "
+                "선택 가능한 후보가 없습니다."
+            )
         else:
-            summary = f"후보 {len(candidates)}건 중 PASS {counts['PASS']}건, CONDITIONAL {counts['CONDITIONAL']}건, FAIL {counts['FAIL']}건입니다."
+            summary = (
+                f"후보 {len(candidates)}건 중 PASS {counts['PASS']}건, "
+                f"CONDITIONAL {counts['CONDITIONAL']}건, "
+                f"FAIL {counts['FAIL']}건입니다."
+            )
+
         return {
-            "analysis_id": analysis.get("analysis_id"), "candidate_count": len(candidates),
-            "status_counts": counts, "summary": summary, "request_created": False,
+            "analysis_id": analysis.get("analysis_id"),
+            "candidate_count": len(candidates),
+            "status_counts": counts,
+            "summary": summary,
+            "actions": action_explanations,
+            "request_created": False,
             "production_bom_modified": False,
         }
 
@@ -1114,31 +1334,17 @@ class Phase3WorkflowService:
                 "FAIL" if "FAIL" in statuses else
                 "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
             )
-            supplier_score = (
-                float(supplier["recommended"]["score"])
-                if supplier.get("recommended") else 0.0
-            )
-            inventory_score = {"PASS": 100.0, "CONDITIONAL": 50.0, "FAIL": 0.0}[
-                inventory["status"]
-            ]
-            value["total_score"] = round(
-                float(value["rule_score"]) * 0.6 + supplier_score * 0.3 +
-                inventory_score * 0.1, 2,
-            )
-            value["grade"] = self.recommendation.rule_engine.grade(value["total_score"])
+            self._apply_candidate_ranking_score(value, supplier, inventory)
             missing = list(value.get("missing_data", []))
             missing.extend(supplier.get("missing_data", []))
             if demand["quantity"] is None:
                 missing.append("demand_quantity")
             value["missing_data"] = sorted(set(missing))
             value["decision_reasons"] = self._candidate_decision_reasons(value)
-        status_order = {"PASS": 0, "CONDITIONAL": 1, "FAIL": 2}
-        results.sort(key=lambda row: (
-            status_order[row["status"]], -row["total_score"], row["candidate_item_code"],
-        ))
+        results.sort(key=self._candidate_sort_key)
         rank = 0
         for value in results:
-            if value["status"] == "FAIL":
+            if value["status"] == "FAIL" or value.get("ranking_score") is None:
                 value["rank"] = None
             else:
                 rank += 1

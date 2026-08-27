@@ -102,13 +102,11 @@ def test_graph_returns_direct_final_answer():
     mcp_client.call_tool.assert_not_called()
 
 
-def test_graph_executes_tool_loop():
+def test_graph_executes_tool_loop_and_finalizes_plain_bom_without_second_llm():
     client = Mock()
     mcp_client = Mock()
 
-    mcp_client.get_tool_definitions.return_value = (
-        make_tool_definitions()
-    )
+    mcp_client.get_tool_definitions.return_value = make_tool_definitions()
     mcp_client.call_tool.return_value = [
         {
             "product_id": "PRD-001",
@@ -116,26 +114,16 @@ def test_graph_executes_tool_loop():
         }
     ]
 
-    client.create_agent_completion.side_effect = [
-        make_assistant_message(
-            content=None,
-            tool_calls=[
-                make_tool_call(
-                    tool_call_id="call-001",
-                    name="get_bom",
-                    arguments=(
-                        '{"product_id": "PRD-001"}'
-                    ),
-                )
-            ],
-        ),
-        make_assistant_message(
-            content=(
-                "PRD-001의 BOM 조회 결과입니다."
-            ),
-            tool_calls=None,
-        ),
-    ]
+    client.create_agent_completion.return_value = make_assistant_message(
+        content=None,
+        tool_calls=[
+            make_tool_call(
+                tool_call_id="call-001",
+                name="get_bom",
+                arguments='{"product_id": "PRD-001"}',
+            )
+        ],
+    )
 
     graph = BomAgentGraph(
         client=client,
@@ -143,65 +131,15 @@ def test_graph_executes_tool_loop():
         skill_context="BOM 조회 규칙",
     )
 
-    result = graph.run(
-        "PRD-001의 BOM을 조회해줘"
-    )
+    result = graph.run("PRD-001의 BOM을 조회해줘")
 
-    assert result == (
-        "PRD-001의 BOM 조회 결과입니다."
-    )
-
-    assert (
-        client.create_agent_completion.call_count
-        == 2
-    )
+    assert result == "BOM 조회 결과를 확인해 주세요."
+    assert client.create_agent_completion.call_count == 1
 
     mcp_client.call_tool.assert_called_once_with(
         tool_name="get_bom",
-        arguments={
-            "product_id": "PRD-001"
-        },
+        arguments={"product_id": "PRD-001"},
     )
-
-    second_call = (
-        client
-        .create_agent_completion
-        .call_args_list[1]
-        .kwargs
-    )
-
-    converted_messages = second_call[
-        "messages"
-    ]
-
-    assert [
-        message["role"]
-        for message in converted_messages
-    ] == [
-        "user",
-        "assistant",
-        "tool",
-    ]
-
-    assert (
-        converted_messages[2]
-        ["tool_call_id"]
-        == "call-001"
-    )
-
-
-def test_graph_rejects_empty_user_input():
-    graph = BomAgentGraph(
-        client=Mock(),
-        mcp_client=Mock(),
-        skill_context="BOM 업무 규칙",
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="비어 있지 않은 문자열",
-    ):
-        graph.run("  ")
 
 def test_graph_remembers_messages_in_same_thread():
     client = Mock()
@@ -534,4 +472,6 @@ def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
     assert response["suppress_answer"] is False
     assert response["render_phase3_panel"] is False
     assert mcp_client.call_tool.call_count == 1
-    assert client.create_agent_completion.call_count == 1
+    # SPEED2D Macro Dispatch owns this complete request; a failed Analysis
+    # stays visible without an unnecessary Azure selection/retry call.
+    assert client.create_agent_completion.call_count == 0

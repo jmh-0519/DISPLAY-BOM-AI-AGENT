@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import streamlit as st
 
+from core.datetime_display import format_utc_timestamp
 from mcp_client.client import DisplayBomMcpClient
 
 
@@ -112,7 +113,7 @@ def _history_rows(requests: list[dict]) -> list[dict]:
         "BOM 반영": _apply_status_label(row.get("apply_status")),
         "업무 상태": _status_label(row.get("workflow_status")),
         "요청자": row.get("requested_by"),
-        "생성시각": row.get("created_at"),
+        "생성시각(KST)": format_utc_timestamp(row.get("created_at")),
     } for row in requests]
 
 
@@ -297,17 +298,12 @@ def _render_history_next_step(
 
     try:
         if workflow_status == "CANDIDATE_APPROVED":
-            st.info("변경자재 확정이 완료되었습니다. 다음 단계인 통합 영향 Preview를 생성할 수 있습니다.")
-            if st.button(
-                "통합 영향 Preview 생성",
-                type="primary",
-                key=f"history_next_preview_{request_id}",
-            ):
-                client.create_multi_action_preview(request_id, actor)
-                st.rerun()
+            st.info("변경자재 확정이 완료되었습니다. 적용 전 최종 확인 정보를 자동으로 준비합니다.")
+            client.create_multi_action_preview(request_id, actor)
+            st.rerun()
 
         elif workflow_status == "WAITING_FINAL_APPROVAL":
-            st.info("Preview 확인이 완료되었습니다. 설계변경을 확정할 수 있습니다.")
+            st.info("적용 전 최종 확인 정보가 준비되었습니다. 설계변경을 확정할 수 있습니다.")
             if st.button(
                 "설계변경 확정",
                 type="primary",
@@ -372,6 +368,7 @@ def render_phase3_request_detail(
         {"항목": "요청 원문", "값": detail.get("original_request")},
         {"항목": "변경 사유", "값": _reasons(detail.get("reasons") or detail.get("reasons_json"))},
         {"항목": "요청자", "값": detail.get("requested_by")},
+        {"항목": "생성시각(KST)", "값": format_utc_timestamp(detail.get("created_at"))},
     ]))
 
     actions = detail.get("actions") or []

@@ -12,6 +12,10 @@ from core.observability import (
     summarize_messages,
     summarize_value,
 )
+from core.performance_profiler import (
+    performance_span,
+    record_performance_event,
+)
 
 
 class AzureOpenAIClient:
@@ -61,7 +65,20 @@ class AzureOpenAIClient:
             },
             model=self.settings.azure_openai_deployment,
         ) as generation:
-            response = self.client.chat.completions.create(**request)
+            prompt_chars = sum(
+                len(str(message.get("content") or ""))
+                for message in messages
+            )
+            with performance_span(
+                "llm",
+                "azure_openai.chat_completion",
+                metadata={
+                    "message_count": len(messages),
+                    "tool_definition_count": len(request.get("tools") or []),
+                    "prompt_chars": prompt_chars,
+                },
+            ):
+                response = self.client.chat.completions.create(**request)
             usage = getattr(response, "usage", None)
             usage_details = None
             if usage is not None:
@@ -70,6 +87,17 @@ class AzureOpenAIClient:
                     "output": int(getattr(usage, "completion_tokens", 0) or 0),
                     "total": int(getattr(usage, "total_tokens", 0) or 0),
                 }
+            if usage_details:
+                record_performance_event(
+                    category="llm",
+                    name="azure_openai.usage",
+                    metadata={
+                        "message_count": len(messages),
+                        "tool_definition_count": len(request.get("tools") or []),
+                    },
+                    metrics=usage_details,
+                )
+
             message = response.choices[0].message
             generation.finish(
                 output=summarize_value({
@@ -328,6 +356,15 @@ class AzureOpenAIClient:
             "temperature": 0,
         }
 
+        record_performance_event(
+            category="prompt",
+            name="llm.system_prompt_budget",
+            metrics={
+                "system_prompt_chars": len(system_content),
+                "request_message_count": len(request_messages),
+            },
+        )
+
         # STEP31: Explain Tool 실행 후 최종 자연어 답변만 생성해야 하는
         # 턴에서는 허용 Tool이 0개일 수 있습니다. 이 경우 Azure OpenAI에
         # tools/tool_choice 자체를 보내지 않아 모델의 반복 Tool 호출을 막습니다.
@@ -346,6 +383,108 @@ class AzureOpenAIClient:
             .choices[0]
             .message
         )
+
+    # =========================================================
+    # SPEED2F1 Dedicated Analysis Finalizer
+    # =========================================================
+
+    def create_analysis_final_answer(
+        self,
+        *,
+        user_message: str,
+        analysis_evidence: str,
+    ) -> str:
+        """Explain completed Phase3 Analysis evidence without Agent baggage.
+
+        This call intentionally sends:
+        - no Skill context
+        - no Runtime Gate
+        - no Tool definitions
+        - no previous conversation history
+
+        Business authority remains in the deterministic Tool/Service result.
+        The LLM only converts verified evidence into concise Korean prose.
+        """
+
+        if not isinstance(user_message, str) or not user_message.strip():
+            raise ValueError("user_message는 비어 있지 않은 문자열이어야 합니다.")
+        if not isinstance(analysis_evidence, str) or not analysis_evidence.strip():
+            raise ValueError("analysis_evidence는 비어 있지 않은 문자열이어야 합니다.")
+
+        system_content = (
+            "당신은 Display BOM 설계변경 분석 결과 설명자입니다. "
+            "반드시 제공된 Analysis Evidence만 근거로 한국어로 간결하게 답하세요. "
+            "후보, 상태, 수량, 사유, 점수, 공급/재고 정보는 Evidence에 있는 값만 사용하세요. "
+            "Evidence에 없는 후보나 사유를 만들거나 추측하지 마세요. "
+            "PASS/CONDITIONAL/FAIL을 구분하고 주요 판단 이유를 설명하세요. "
+            "후보 순서를 임의로 바꾸지 말고, Evidence가 추천이라고 명시하지 않았다면 "
+            "임의로 최종 추천 또는 승인으로 표현하지 마세요. "
+            "Analysis는 설계변경 Request 생성이나 Production E-BOM Apply가 아님을 유지하세요. "
+            "사용자가 다음 단계에서 후보 확인·재검증·진행 여부를 결정할 수 있음을 필요할 때만 안내하세요."
+        )
+
+        user_content = (
+            f"사용자 요청:\n{user_message.strip()}\n\n"
+            "Analysis Evidence(JSON):\n"
+            f"{analysis_evidence.strip()}"
+        )
+
+        # Keep SPEED2F0 prompt-budget reporting comparable. This is the same
+        # metric schema as the full Agent call, but Skill/Runtime/Tools are zero.
+        message_payload_chars = len(user_content)
+        approx_total_chars = len(system_content) + message_payload_chars
+
+        record_performance_event(
+            category="prompt",
+            name="llm.prompt_budget",
+            metadata={
+                "message_count": 1,
+                "tool_definition_count": 0,
+                "finalizer": True,
+            },
+            metrics={
+                "core_system_chars": len(system_content),
+                "skill_wrapper_chars": 0,
+                "base_skill_chars": 0,
+                "runtime_gate_chars": 0,
+                "message_payload_chars": message_payload_chars,
+                "human_content_chars": message_payload_chars,
+                "assistant_content_chars": 0,
+                "tool_content_chars": 0,
+                "tool_definition_chars": 0,
+                "tool_definition_count": 0,
+                "approx_total_chars": approx_total_chars,
+            },
+        )
+        record_performance_event(
+            category="prompt",
+            name="llm.system_prompt_budget",
+            metadata={"finalizer": True},
+            metrics={
+                "system_prompt_chars": len(system_content),
+                "request_message_count": 2,
+            },
+        )
+
+        response = self._create_completion(
+            model=self.settings.azure_openai_deployment,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_content,
+                },
+                {
+                    "role": "user",
+                    "content": user_content,
+                },
+            ],
+            temperature=0,
+        )
+
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("Azure OpenAI에서 Analysis 최종 답변을 반환하지 않았습니다.")
+        return str(content).strip()
 
     # =========================================================
     # 기존 Final Answer
