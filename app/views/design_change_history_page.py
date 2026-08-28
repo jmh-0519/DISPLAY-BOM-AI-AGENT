@@ -238,43 +238,43 @@ def _render_action_item_detail_table(rows: list[dict]) -> None:
     st.markdown(
         f"""
         <style>
-        .phase3-item-detail-wrap {{
+        .design-change-item-detail-wrap {{
             overflow-x: auto;
             margin-bottom: 0.75rem;
         }}
-        table.phase3-item-detail {{
+        table.design-change-item-detail {{
             width: 100%;
             border-collapse: collapse;
             font-size: 0.90rem;
         }}
-        table.phase3-item-detail th,
-        table.phase3-item-detail td {{
+        table.design-change-item-detail th,
+        table.design-change-item-detail td {{
             border: 1px solid #E5E7EB;
             padding: 0.52rem 0.58rem;
             text-align: left;
             vertical-align: middle;
             white-space: nowrap;
         }}
-        table.phase3-item-detail th {{
+        table.design-change-item-detail th {{
             background: #F8FAFC;
             font-weight: 500;
         }}
-        table.phase3-item-detail td.action-seq {{
+        table.design-change-item-detail td.action-seq {{
             text-align: center;
             font-weight: 600;
             background: #FFFFFF;
         }}
-        table.phase3-item-detail td.before {{
+        table.design-change-item-detail td.before {{
             color: #1565C0;
             font-weight: 700;
         }}
-        table.phase3-item-detail td.after {{
+        table.design-change-item-detail td.after {{
             color: #D32F2F;
             font-weight: 700;
         }}
         </style>
-        <div class="phase3-item-detail-wrap">
-          <table class="phase3-item-detail">
+        <div class="design-change-item-detail-wrap">
+          <table class="design-change-item-detail">
             <thead><tr>{head}</tr></thead>
             <tbody>{''.join(body_parts)}</tbody>
           </table>
@@ -336,14 +336,14 @@ def _render_history_next_step(
         st.error(f"다음 단계 진행에 실패했습니다: {error}")
 
 
-def render_phase3_request_detail(
+def render_design_change_request_detail(
     client: DisplayBomMcpClient,
     request_id: str,
     *,
     heading: str = "설계변경 Request 상세",
     show_completion_report: bool = True,
 ) -> dict | None:
-    """Render one Phase3 Request using the same detail layout everywhere.
+    """Render one Design Change Request using the same detail layout everywhere.
 
     This is shared by the history page and the Agent-chat workflow so a Request
     looks identical immediately after creation and when it is reviewed days later.
@@ -460,7 +460,7 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
     st.markdown(
         """
         <style>
-        div[class*="st-key-phase3_history_req_"] button {
+        div[class*="st-key-design_change_history_req_"] button {
             color: #1565C0 !important;
             font-weight: 700 !important;
             background: transparent !important;
@@ -470,7 +470,7 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
             min-height: 1.6rem !important;
             text-decoration: underline;
         }
-        div[class*="st-key-phase3_history_req_"] button:hover {
+        div[class*="st-key-design_change_history_req_"] button:hover {
             color: #0D47A1 !important;
         }
         </style>
@@ -491,18 +491,18 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
         safe_key = "".join(ch if ch.isalnum() else "_" for ch in request_id)
         if row_cols[0].button(
             request_id,
-            key=f"phase3_history_req_{safe_key}",
+            key=f"design_change_history_req_{safe_key}",
             type="tertiary",
             help=f"{request_id} 상세 조회",
         ):
-            st.session_state["phase3_history_selected_request_id"] = request_id
+            st.session_state["design_change_history_selected_request_id"] = request_id
 
         for col, name in zip(row_cols[1:], columns[1:]):
             col.write(_display_value(display.get(name)))
 
 
 def render_design_change_history_page() -> None:
-    """Active Phase3 Request history with field filters and 15-row paging.
+    """Active Design Change Request history with field filters and 15-row paging.
 
     Analysis Sessions are intentionally excluded. Request details are opened by
     clicking the blue Request ID button in the list; there is no second lookup control.
@@ -527,26 +527,26 @@ def render_design_change_history_page() -> None:
     with f1:
         request_id_query = st.text_input(
             "Request ID",
-            key="phase3_history_request_id_filter",
+            key="design_change_history_request_id_filter",
             placeholder="예: REQ-7CF4...",
         )
     with f2:
         version_query = st.text_input(
             "제품",
-            key="phase3_history_version_filter",
+            key="design_change_history_version_filter",
             placeholder="예: LTA650HR11-001",
         )
     with f3:
         plant_query = st.text_input(
             "PLANT",
-            key="phase3_history_plant_filter",
+            key="design_change_history_plant_filter",
             placeholder="예: P03",
         )
     with f4:
         status = st.selectbox(
             "업무 상태",
             ["전체", *statuses],
-            key="phase3_history_status_filter",
+            key="design_change_history_status_filter",
             format_func=lambda value: "전체" if value == "전체" else _status_label(value),
         )
 
@@ -566,14 +566,14 @@ def render_design_change_history_page() -> None:
         plant_query.strip().upper(),
         status,
     ))
-    previous_signature = st.session_state.get("phase3_history_filter_signature")
+    previous_signature = st.session_state.get("design_change_history_filter_signature")
     if previous_signature != filter_signature:
-        st.session_state["phase3_history_filter_signature"] = filter_signature
-        st.session_state["phase3_history_page"] = 1
+        st.session_state["design_change_history_filter_signature"] = filter_signature
+        st.session_state["design_change_history_page"] = 1
 
-    current_page = int(st.session_state.get("phase3_history_page", 1))
+    current_page = int(st.session_state.get("design_change_history_page", 1))
     page_pairs, current_page, total_pages = _paginate_history_pairs(filtered_pairs, current_page, page_size=15)
-    st.session_state["phase3_history_page"] = current_page
+    st.session_state["design_change_history_page"] = current_page
 
     if not filtered_pairs:
         st.info("검색 조건에 해당하는 설계변경 Request가 없습니다.")
@@ -588,8 +588,8 @@ def render_design_change_history_page() -> None:
     if total_pages > 1:
         p1, p2, p3 = st.columns([1, 2, 1])
         with p1:
-            if st.button("← 이전", disabled=current_page <= 1, key="phase3_history_prev", width="stretch"):
-                st.session_state["phase3_history_page"] = current_page - 1
+            if st.button("← 이전", disabled=current_page <= 1, key="design_change_history_prev", width="stretch"):
+                st.session_state["design_change_history_page"] = current_page - 1
                 st.rerun()
         with p2:
             st.markdown(
@@ -598,13 +598,13 @@ def render_design_change_history_page() -> None:
                 unsafe_allow_html=True,
             )
         with p3:
-            if st.button("다음 →", disabled=current_page >= total_pages, key="phase3_history_next", width="stretch"):
-                st.session_state["phase3_history_page"] = current_page + 1
+            if st.button("다음 →", disabled=current_page >= total_pages, key="design_change_history_next", width="stretch"):
+                st.session_state["design_change_history_page"] = current_page + 1
                 st.rerun()
 
-    selected = str(st.session_state.get("phase3_history_selected_request_id", "") or "").strip()
+    selected = str(st.session_state.get("design_change_history_selected_request_id", "") or "").strip()
     filtered_request_ids = {str(source.get("request_id") or "") for source, _ in filtered_pairs}
     if selected and selected in filtered_request_ids:
         st.divider()
-        render_phase3_request_detail(client, selected)
+        render_design_change_request_detail(client, selected)
 

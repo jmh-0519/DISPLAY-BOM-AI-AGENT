@@ -7,11 +7,11 @@ MASTER = (ROOT / "app" / "views" / "master_query_page.py").read_text(encoding="u
 
 
 def test_history_selection_is_session_local_and_cleared_when_leaving_page():
-    assert "phase3_history_selected_request_id" in HISTORY
+    assert "design_change_history_selected_request_id" in HISTORY
     assert "history_request_id=" not in HISTORY
     assert "st.query_params" not in HISTORY
     assert 'st.session_state.pop(' in APP
-    assert '"phase3_history_selected_request_id"' in APP
+    assert '"design_change_history_selected_request_id"' in APP
 
 
 def test_master_views_are_nested_directly_under_master_main_menu():

@@ -14,17 +14,17 @@ def test_agent_sidebar_has_no_fixed_plant_selector_or_review_history_menu():
 
 
 def test_revalidation_history_is_rendered_after_candidate_interaction():
-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
     function = source.split("def _render_pre_workflow_analysis", 1)[1].split("def _render_workflow", 1)[0]
     assert function.index("_render_candidate_selection") < function.index("_render_revalidation_history")
     assert "_analysis_selection_rows(workflow)" in function
 
 
 def test_revalidation_navigation_has_result_autoscroll_and_return_buttons():
-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
     assert '"후보 다시 선택"' in source
     assert '"이 후보 조건 다시 수정"' in source
-    assert "phase3_scroll_target" in source
+    assert "design_change_scroll_target" in source
     assert "scrollIntoView" in source
     assert "_candidate_selection_anchor(workflow)" in source
     assert "_revalidation_input_anchor(workflow, action_id, candidate_code)" in source
@@ -33,15 +33,15 @@ def test_revalidation_navigation_has_result_autoscroll_and_return_buttons():
 
 
 def test_condition_navigation_restores_history_candidate_before_selectbox_creation():
-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
-    assert 'st.session_state["phase3_pending_candidate_navigation"]' in source
+    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+    assert 'st.session_state["design_change_pending_candidate_navigation"]' in source
     assert 'st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]' in source
     assert source.index('st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]') < source.index('selected_code = st.selectbox(')
 
 
 def test_repeated_scroll_to_same_anchor_uses_unique_navigation_event_and_modern_iframe():
-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
-    assert 'phase3_scroll_event_seq' in source
+    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+    assert 'design_change_scroll_event_seq' in source
     assert '"event_id": event_id' in source
     assert 'const navigationEventId' in source
     assert 'st.iframe(' in source
@@ -50,7 +50,7 @@ def test_repeated_scroll_to_same_anchor_uses_unique_navigation_event_and_modern_
 
 
 def test_business_tables_are_arrow_safe_display_strings():
-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
     assert 'def _display_value' in source
     assert 'def _display_df' in source
     assert 'st.table(_display_df(rows)' in source

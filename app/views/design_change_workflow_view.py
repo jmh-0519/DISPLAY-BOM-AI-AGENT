@@ -5,7 +5,7 @@ import streamlit as st
 
 from agents.design_change_workflow_state import apply_phase3_tool_result
 from mcp_client.client import DisplayBomMcpClient
-from app.views.design_change_history_page import render_phase3_request_detail
+from app.views.design_change_history_page import render_design_change_request_detail
 
 
 ANALYSIS_STEPS = {
@@ -35,20 +35,20 @@ def _dom_token(value) -> str:
 
 def _candidate_selection_anchor(workflow: dict) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
-    return f"phase3-candidate-selection-{_dom_token(context_id)}"
+    return f"design-change-candidate-selection-{_dom_token(context_id)}"
 
 
 def _revalidation_input_anchor(workflow: dict, action_id, candidate_code) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
     return (
-        f"phase3-revalidation-input-{_dom_token(context_id)}-"
+        f"design-change-revalidation-input-{_dom_token(context_id)}-"
         f"{_dom_token(action_id)}-{_dom_token(candidate_code)}"
     )
 
 
 def _revalidation_result_anchor(workflow: dict, index: int) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
-    return f"phase3-revalidation-result-{_dom_token(context_id)}-{index}"
+    return f"design-change-revalidation-result-{_dom_token(context_id)}-{index}"
 
 
 def _render_anchor(anchor_id: str) -> None:
@@ -62,24 +62,24 @@ def _schedule_scroll(anchor_id: str) -> None:
     # The target can legitimately be the same on consecutive clicks.  Keep a
     # monotonically increasing event id so Streamlit receives a different iframe
     # payload every time and re-executes the scroll script.
-    event_id = int(st.session_state.get("phase3_scroll_event_seq", 0)) + 1
-    st.session_state["phase3_scroll_event_seq"] = event_id
-    st.session_state["phase3_scroll_target"] = {
+    event_id = int(st.session_state.get("design_change_scroll_event_seq", 0)) + 1
+    st.session_state["design_change_scroll_event_seq"] = event_id
+    st.session_state["design_change_scroll_target"] = {
         "anchor_id": anchor_id,
         "event_id": event_id,
     }
 
 
 def _render_pending_scroll() -> None:
-    pending = st.session_state.pop("phase3_scroll_target", None)
+    pending = st.session_state.pop("design_change_scroll_target", None)
     if not pending:
         return
 
     # Backward compatibility for sessions created by STEP35-B.
     if isinstance(pending, str):
         target = pending
-        event_id = int(st.session_state.get("phase3_scroll_event_seq", 0)) + 1
-        st.session_state["phase3_scroll_event_seq"] = event_id
+        event_id = int(st.session_state.get("design_change_scroll_event_seq", 0)) + 1
+        st.session_state["design_change_scroll_event_seq"] = event_id
     else:
         target = pending.get("anchor_id")
         event_id = pending.get("event_id")
@@ -370,7 +370,7 @@ def _complete_workflow_action(
     workflow.update(updated)
     if on_workflow_update is not None:
         on_workflow_update(updated)
-    st.session_state["phase3_workflow_notice"] = {
+    st.session_state["design_change_workflow_notice"] = {
         "context_id": updated.get("request_id") or updated.get("analysis_id"),
         "message": success_message,
     }
@@ -783,7 +783,7 @@ def _render_revalidation_history(workflow: dict) -> None:
                     # The selectbox was already instantiated earlier in this run, so do not
                     # mutate its widget key here. Store a pending navigation command and
                     # apply it before the selectbox is created on the next rerun.
-                    st.session_state["phase3_pending_candidate_navigation"] = {
+                    st.session_state["design_change_pending_candidate_navigation"] = {
                         "context_id": context_id,
                         "action_id": action_id,
                         "candidate_item_code": candidate_code,
@@ -964,7 +964,7 @@ def _proceed_analysis_to_final_confirmation(
     workflow.update(updated)
     if on_workflow_update is not None:
         on_workflow_update(updated)
-    st.session_state["phase3_workflow_notice"] = {
+    st.session_state["design_change_workflow_notice"] = {
         "context_id": updated.get("request_id"),
         "message": (
             f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
@@ -1077,14 +1077,14 @@ def _render_candidate_selection(workflow: dict, rows: list[dict], client: Displa
             continue
         codes = [row["candidate_item_code"] for row in action_rows]
         selectbox_key = f"analysis_candidate_{context_id}_{action_id}"
-        pending_navigation = st.session_state.get("phase3_pending_candidate_navigation") or {}
+        pending_navigation = st.session_state.get("design_change_pending_candidate_navigation") or {}
         if (
             pending_navigation.get("context_id") == context_id
             and pending_navigation.get("action_id") == action_id
             and pending_navigation.get("candidate_item_code") in codes
         ):
             st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]
-            st.session_state.pop("phase3_pending_candidate_navigation", None)
+            st.session_state.pop("design_change_pending_candidate_navigation", None)
         select_label = (
             f"추천 후보 선택 · Action {action_index}"
             if selection_mode == "PASS"
@@ -1290,7 +1290,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
         workflow.clear(); workflow.update(updated)
         if on_workflow_update is not None:
             on_workflow_update(updated)
-        st.session_state["phase3_workflow_notice"] = {
+        st.session_state["design_change_workflow_notice"] = {
             "context_id": updated.get("request_id"),
             "message": (
                 f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
@@ -1534,7 +1534,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
     request_id = workflow.get("request_id")
     current_step = workflow.get("current_step")
     if request_id and current_step != "WAITING_FINAL_APPROVAL":
-        render_phase3_request_detail(
+        render_design_change_request_detail(
             client,
             request_id,
             heading="현재 진행 중인 설계변경 Request 상세",
@@ -1548,7 +1548,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
     actor = "streamlit-user"
     if workflow.get("current_step") == "REPORT_COMPLETED":
         st.success("설계변경 적용과 Word 완료 보고서 생성이 완료되었습니다. 업무가 종료되었습니다.")
-        cache_key = f"phase3_completion_report_{workflow.get('request_id')}"
+        cache_key = f"design_change_completion_report_{workflow.get('request_id')}"
         report = st.session_state.get(cache_key)
         if report and report.get("success") and report.get("file_bytes"):
             st.download_button(
@@ -1557,7 +1557,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 file_name=report.get("file_name") or f"{workflow['request_id']}_design_change_completion_report.docx",
                 mime=report.get("mime_type") or "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 type="primary",
-                key=f"download_phase3_report_completed_{workflow.get('request_id')}",
+                key=f"download_design_change_report_completed_{workflow.get('request_id')}",
             )
         return
 
@@ -1643,7 +1643,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             )
     elif action == "REPORT":
         st.success("설계변경이 Production E-BOM에 반영되었습니다. 품평회 단계 없이 완료 보고서를 생성하여 업무를 종료합니다.")
-        cache_key = f"phase3_completion_report_{workflow.get('request_id')}"
+        cache_key = f"design_change_completion_report_{workflow.get('request_id')}"
         report = st.session_state.get(cache_key)
         if report is None:
             try:
@@ -1664,7 +1664,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             st.error(report.get("message") or "완료 보고서를 생성할 수 없습니다.")
 
 
-def render_phase3_workflow(
+def render_design_change_workflow(
     workflow: dict,
     client: DisplayBomMcpClient | None = None,
     on_workflow_update=None,
@@ -1673,10 +1673,10 @@ def render_phase3_workflow(
         return
     client = client or DisplayBomMcpClient()
 
-    notice = st.session_state.get("phase3_workflow_notice")
+    notice = st.session_state.get("design_change_workflow_notice")
     if notice and notice.get("context_id") == (workflow.get("request_id") or workflow.get("analysis_id")):
         st.success(str(notice.get("message") or "상태가 갱신되었습니다."))
-        st.session_state.pop("phase3_workflow_notice", None)
+        st.session_state.pop("design_change_workflow_notice", None)
 
     if workflow.get("current_step") in ANALYSIS_STEPS:
         _render_pre_workflow_analysis(workflow, client, on_workflow_update)

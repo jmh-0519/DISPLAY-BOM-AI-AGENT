@@ -55,7 +55,7 @@ def test_recommendation_service_ranks_only_pass_candidates():
 
 
 def test_candidate_ui_uses_pending_labels_and_pass_first_selection():
-    source = Path("app/views/phase3_agent_view.py").read_text(encoding="utf-8")
+    source = Path("app/views/design_change_workflow_view.py").read_text(encoding="utf-8")
 
     assert '"순위": row.get("rank") if row.get("rank") is not None else "-"' in source
     assert '"추천 점수": row.get("score") if row.get("score") is not None else "평가 보류"' in source
@@ -67,7 +67,7 @@ def test_candidate_ui_uses_pending_labels_and_pass_first_selection():
 
 
 def test_candidate_ui_separates_pass_conditional_and_fail_groups():
-    source = Path("app/views/phase3_agent_view.py").read_text(encoding="utf-8")
+    source = Path("app/views/design_change_workflow_view.py").read_text(encoding="utf-8")
 
     assert "추천 가능 후보 (PASS)" in source
     assert "평가 보류 후보 (CONDITIONAL)" in source

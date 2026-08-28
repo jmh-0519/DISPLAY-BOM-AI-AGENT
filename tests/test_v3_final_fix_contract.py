@@ -8,7 +8,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 ROOT = Path(__file__).resolve().parents[1]
 STREAMLIT_SOURCE = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
-AGENT_VIEW_SOURCE = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+AGENT_VIEW_SOURCE = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
 HISTORY_SOURCE = (ROOT / "app" / "views" / "design_change_history_page.py").read_text(encoding="utf-8")
 
 
