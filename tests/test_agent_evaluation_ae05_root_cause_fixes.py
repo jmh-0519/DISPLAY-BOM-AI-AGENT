@@ -33,21 +33,21 @@ def _observation(case_id: str, turn_index: int, *, intent: str, route: str, tool
 def test_replace_wish_language_is_change_intent():
     router = DomainIntentRouter()
     decision = router.route("LTA400HR01-001 모델에서 DRIVE-IC 바꾸고 싶어")
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.change is True
 
 
 def test_replacement_candidate_recommendation_is_not_write_intent():
     router = DomainIntentRouter()
     decision = router.route("LTA400HR01-001 P02 DRIVE-IC 대체 후보 추천해줘")
-    assert decision.intent == "PHASE3_RECOMMENDATION"
+    assert decision.intent == "DESIGN_CHANGE_RECOMMENDATION"
     assert decision.change is False
 
 
 def test_candidate_analysis_wording_is_not_write_intent():
     router = DomainIntentRouter()
     decision = router.route("LTA400HR01-001 P02 0001-200003 교체 후보 분석해줘")
-    assert decision.intent == "PHASE3_RECOMMENDATION"
+    assert decision.intent == "DESIGN_CHANGE_RECOMMENDATION"
     assert decision.change is False
 
 

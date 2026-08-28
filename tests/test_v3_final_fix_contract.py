@@ -61,13 +61,13 @@ def test_add_without_specific_target_is_rejected_before_analysis(tmp_path):
         )
 
 def test_phase3_management_menu_is_not_exposed_in_main_navigation():
-    assert '"phase3": "Phase3 Rule / History"' not in STREAMLIT_SOURCE
-    assert '_menu_link("Phase3 Rule / History", "phase3")' not in STREAMLIT_SOURCE
-    assert 'elif menu == "Phase3 Rule / History"' not in STREAMLIT_SOURCE
+    assert '"phase3": "Design Change Rule / History"' not in STREAMLIT_SOURCE
+    assert '_menu_link("Design Change Rule / History", "phase3")' not in STREAMLIT_SOURCE
+    assert 'elif menu == "Design Change Rule / History"' not in STREAMLIT_SOURCE
 
 
 def test_report_footer_phase3_caption_is_removed():
-    assert "현재 Phase3 활성 프로세스" not in AGENT_VIEW_SOURCE
+    assert "현재 Design Change 활성 프로세스" not in AGENT_VIEW_SOURCE
 
 
 def test_request_proceed_prepares_preview_without_separate_preview_button():

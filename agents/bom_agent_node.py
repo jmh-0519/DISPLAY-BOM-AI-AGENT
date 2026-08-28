@@ -30,7 +30,7 @@ class BomAgentNode:
     Tool을 직접 실행하지 않습니다.
     """
 
-    PHASE3_TOOLS = {
+    DESIGN_CHANGE_TOOLS = {
         # Analysis Session (Request 미생성)
         "analyze_design_change_candidates",
         "scan_product_cost_reduction_candidates",
@@ -40,7 +40,7 @@ class BomAgentNode:
         "explain_design_change_analysis_session",
         "explain_design_change_analysis_candidate",
         "compare_design_change_analysis_candidates",
-        # 기존 Request-first Phase3 Tool은 호환성/이력 조회를 위해 보존
+        # 기존 Request-first Design Change Tool은 호환성/이력 조회를 위해 보존
         "create_design_change_request",
         "evaluate_replacement_candidates",
         "submit_candidate_additional_data",
@@ -57,7 +57,7 @@ class BomAgentNode:
         "compare_design_change_candidates",
     }
 
-    UI_ONLY_PHASE3_TOOLS = {
+    UI_ONLY_DESIGN_CHANGE_TOOLS = {
         "preview_design_change_analysis_impact",
         "create_design_change_request_from_analysis",
         "select_candidate_and_supplier",
@@ -69,7 +69,7 @@ class BomAgentNode:
         "apply_approved_change_request",
     }
 
-    PHASE3_EXPLAIN_TOOLS = {
+    DESIGN_CHANGE_EXPLAIN_TOOLS = {
         "explain_design_change_analysis_session",
         "explain_design_change_analysis_candidate",
         "compare_design_change_analysis_candidates",
@@ -96,14 +96,14 @@ class BomAgentNode:
         "apply_reviewed_bom",
     }
 
-    PHASE3_RECOMMENDATION_MARKERS = DomainIntentRouter.PHASE3_RECOMMENDATION_MARKERS
+    DESIGN_CHANGE_RECOMMENDATION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_RECOMMENDATION_MARKERS
     PRODUCT_COST_SCAN_SCOPE_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_SCOPE_MARKERS
     PRODUCT_COST_SCAN_COST_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_COST_MARKERS
     PRODUCT_COST_SCAN_ACTION_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_ACTION_MARKERS
     ASSY_PROCESS_NAMES = DomainIntentRouter.ASSY_PROCESS_NAMES
-    PHASE3_CHANGE_INTENT_MARKERS = DomainIntentRouter.PHASE3_CHANGE_INTENT_MARKERS
-    PHASE3_EXPLICIT_ACTION_MARKERS = DomainIntentRouter.PHASE3_EXPLICIT_ACTION_MARKERS
-    PHASE3_REASON_LANGUAGE_MARKERS = DomainIntentRouter.PHASE3_REASON_LANGUAGE_MARKERS
+    DESIGN_CHANGE_INTENT_MARKERS = DomainIntentRouter.DESIGN_CHANGE_INTENT_MARKERS
+    DESIGN_CHANGE_EXPLICIT_ACTION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_EXPLICIT_ACTION_MARKERS
+    DESIGN_CHANGE_REASON_LANGUAGE_MARKERS = DomainIntentRouter.DESIGN_CHANGE_REASON_LANGUAGE_MARKERS
     ITEM_CODE_PATTERN = DomainIntentRouter.ITEM_CODE_PATTERN
     PLANT_CODE_PATTERN = DomainIntentRouter.PLANT_CODE_PATTERN
     PLANT_REQUIRED_QUERY_MARKERS = DomainIntentRouter.PLANT_REQUIRED_QUERY_MARKERS
@@ -111,7 +111,7 @@ class BomAgentNode:
     PLAIN_BOM_QUERY_MARKERS = DomainIntentRouter.PLAIN_BOM_QUERY_MARKERS
     SIMPLE_CHAT_EXACT = DomainIntentRouter.SIMPLE_CHAT_EXACT
 
-    PHASE3_ACTIVE_STEPS = {
+    DESIGN_CHANGE_ACTIVE_STEPS = {
         "ANALYSIS_READY",
         "ANALYSIS_REVALIDATED",
         "ANALYSIS_IMPACT_REVIEW",
@@ -131,14 +131,14 @@ class BomAgentNode:
     # Analysis Session exists, but no Design Change Request has been created yet.
     # A clearly scoped new change request may replace this temporary Analysis
     # context without touching persisted Request/Production BOM state.
-    PHASE3_PRE_REQUEST_ANALYSIS_STEPS = {
+    DESIGN_CHANGE_PRE_REQUEST_ANALYSIS_STEPS = {
         "ANALYSIS_READY",
         "ANALYSIS_REVALIDATED",
         "ANALYSIS_IMPACT_REVIEW",
         "ANALYSIS_CONFIRMED",
     }
 
-    PHASE3_ALLOWED_TOOLS = {
+    DESIGN_CHANGE_ALLOWED_TOOLS = {
         "NOT_STARTED": {"analyze_design_change_candidates"},
         "ANALYSIS_READY": {
             "analyze_design_change_candidates",
@@ -446,7 +446,7 @@ class BomAgentNode:
         # route the new instruction exactly like a fresh Analysis Session.
         initial_routing = self.domain_intent_router.route(
             user_query,
-            workflow_active=current_step in self.PHASE3_ACTIVE_STEPS,
+            workflow_active=current_step in self.DESIGN_CHANGE_ACTIVE_STEPS,
             workflow_state=workflow_state,
         )
         fresh_change_intent = (
@@ -476,16 +476,16 @@ class BomAgentNode:
             self.domain_intent_router.classify_analysis_follow_up(
                 user_query,
                 workflow_state,
-                active_steps=self.PHASE3_ACTIVE_STEPS,
+                active_steps=self.DESIGN_CHANGE_ACTIVE_STEPS,
             )
-            if current_step in self.PHASE3_PRE_REQUEST_ANALYSIS_STEPS
+            if current_step in self.DESIGN_CHANGE_PRE_REQUEST_ANALYSIS_STEPS
             else None
         )
         explicit_current_model = (
             self.domain_intent_router.explicit_model_scope_code(user_query)
         )
         start_fresh_analysis_scope = (
-            current_step in self.PHASE3_PRE_REQUEST_ANALYSIS_STEPS
+            current_step in self.DESIGN_CHANGE_PRE_REQUEST_ANALYSIS_STEPS
             and fresh_change_intent
             and current_analysis_follow_up is None
             and bool(explicit_current_model)
@@ -503,7 +503,7 @@ class BomAgentNode:
         # - history may supply missing entity/slot context.
         #
         # A PLANT-only reply is an explicit slot-completion turn, not a new
-        # arbitrary intent, so the immediately preceding Phase3 request may be
+        # arbitrary intent, so the immediately preceding Design Change request may be
         # restored only for this narrow case.
         previous_user_query = self._previous_user_query(messages, user_query)
         plant_slot_continuation = (
@@ -514,7 +514,7 @@ class BomAgentNode:
                 previous_user_query,
                 workflow_active=False,
                 workflow_state={},
-            ).phase3_mode
+            ).design_change_mode
         )
 
         current_routing_query = (
@@ -527,7 +527,7 @@ class BomAgentNode:
         # PLANT-slot continuation above.
         routing_decision = self.domain_intent_router.route(
             current_routing_query,
-            workflow_active=routing_step in self.PHASE3_ACTIVE_STEPS,
+            workflow_active=routing_step in self.DESIGN_CHANGE_ACTIVE_STEPS,
             workflow_state=routing_workflow_state,
         )
 
@@ -538,7 +538,7 @@ class BomAgentNode:
         )
         short_entity_followup = (
             routing_step == "NOT_STARTED"
-            and routing_decision.phase3_mode
+            and routing_decision.design_change_mode
             and not current_has_entity_scope
             and bool(previous_user_query)
         )
@@ -562,8 +562,8 @@ class BomAgentNode:
                 user_query
             )
         )
-        phase3_mode = (
-            False if explicit_pair_analysis else routing_decision.phase3_mode
+        design_change_mode = (
+            False if explicit_pair_analysis else routing_decision.design_change_mode
         )
         plant_required = (
             False if explicit_pair_analysis else routing_decision.requires_plant
@@ -575,13 +575,13 @@ class BomAgentNode:
             design_change_context, routing_workflow_state
         )
         product_cost_scan_observed = "scan_product_cost_reduction_candidates" in current_turn_tools
-        follow_up_complete = bool(current_turn_tools & self.PHASE3_EXPLAIN_TOOLS)
+        follow_up_complete = bool(current_turn_tools & self.DESIGN_CHANGE_EXPLAIN_TOOLS)
         follow_up_intent = (
             None if (follow_up_complete or product_cost_scan_intent)
             else self.domain_intent_router.classify_analysis_follow_up(
                 user_query,
                 routing_workflow_state,
-                active_steps=self.PHASE3_ACTIVE_STEPS,
+                active_steps=self.DESIGN_CHANGE_ACTIVE_STEPS,
             )
         )
         bom_context_ready = "get_bom" in current_turn_tools
@@ -603,7 +603,7 @@ class BomAgentNode:
                 "messages": [AIMessage(content="조회할 PLANT를 선택해 주세요.")],
                 "error": None,
             }
-        if "get_bom" in current_turn_tools and not phase3_mode:
+        if "get_bom" in current_turn_tools and not design_change_mode:
             return {
                 "messages": [AIMessage(content="BOM 조회 결과를 확인해 주세요.")],
                 "error": None,
@@ -612,7 +612,7 @@ class BomAgentNode:
         tool_definitions = self._filter_tool_definitions(
             self.mcp_client.get_tool_definitions(),
             routing_step,
-            phase3_mode=phase3_mode,
+            design_change_mode=design_change_mode,
             bom_context_ready=bom_context_ready,
             follow_up_intent=follow_up_intent,
             follow_up_complete=follow_up_complete,
@@ -649,11 +649,11 @@ class BomAgentNode:
             # list_plants Observation을 받은 같은 턴에서는 다른 업무 Tool을 호출하지 않고
             # LLM이 사용자에게 PLANT 선택지만 설명하도록 한다.
             tool_definitions = []
-        allowed_phase3_tools = sorted({
+        allowed_design_change_tools = sorted({
             str(tool.get("function", {}).get("name") or "")
             for tool in tool_definitions
             if str(tool.get("function", {}).get("name") or "")
-            in self.PHASE3_TOOLS
+            in self.DESIGN_CHANGE_TOOLS
         })
         active_request_id = routing_workflow_state.get("request_id")
         active_action_ids = [
@@ -666,8 +666,8 @@ class BomAgentNode:
         )
         analysis_memory = routing_workflow_state.get("analysis_memory") or {}
 
-        phase3_instruction = (
-            "현재 요청은 Phase3 설계변경 후보 추천 Workflow입니다. "
+        design_change_instruction = (
+            "현재 요청은 설계변경 후보 추천 Workflow입니다. "
             "analyze_design_change는 호출하지 마세요. "
             "제품과 변경 대상 기존 품목이 현재 또는 직전 대화에 명확하면 "
             "analyze_design_change_candidates를 호출해 Request 생성 없이 Analysis Session을 시작하세요. "
@@ -693,7 +693,7 @@ class BomAgentNode:
             "사용자가 분석 결과를 확인하고 설계변경 진행을 명시적으로 승인한 뒤에만 실제 Request를 생성합니다. "
             "후보 선택·공용 영향 확인·Preview·최종 Apply 승인은 반드시 "
             "사용자 UI 조작으로만 진행하며 Agent가 자동 호출하지 마세요."
-            if phase3_mode
+            if design_change_mode
             else (
                 "기존 자재와 사용자가 지정한 신규 자재가 모두 명확한 "
                 "교체 적합성 분석에만 analyze_design_change를 사용하세요."
@@ -701,9 +701,9 @@ class BomAgentNode:
         )
         runtime_skill_context = (
             f"{self.skill_context}\n\n"
-            "[Phase3 Runtime Workflow Gate]\n"
+            "[Design Change Runtime Workflow Gate]\n"
             f"현재 단계: {routing_step}\n"
-            f"후보 추천 Workflow 여부: {phase3_mode}\n"
+            f"후보 추천 Workflow 여부: {design_change_mode}\n"
             f"현재 턴 BOM 확인 여부: {bom_context_ready}\n"
             f"현재 Analysis ID: {routing_workflow_state.get('analysis_id') or '없음'}\n"
             f"현재 Request ID: {active_request_id or '없음'}\n"
@@ -745,9 +745,9 @@ class BomAgentNode:
             "UNAVAILABLE은 기술적으로 대체 가능하지만 현재품/후보 단가 근거 부족으로 원가절감 여부를 확정할 수 없다고 설명하세요. "
             "이 Scan은 탐색용 read-only 작업이며 현재 Analysis Session을 다른 단일 target으로 덮어쓰지 않습니다. "
             "Explain Tool Observation을 이미 받은 턴에는 추가 Tool을 반복 호출하지 말고 그 근거로 최종 답변하세요.\n"
-            "현재 허용된 Phase3 Tool: "
-            f"{', '.join(allowed_phase3_tools) if allowed_phase3_tools else '없음'}\n"
-            f"{phase3_instruction} "
+            "현재 허용된 Design Change Tool: "
+            f"{', '.join(allowed_design_change_tools) if allowed_design_change_tools else '없음'}\n"
+            f"{design_change_instruction} "
             "Tool 결과에서 반환된 request_id와 action_id만 다음 단계에 사용하세요."
         )
 
@@ -805,14 +805,14 @@ class BomAgentNode:
             and "get_bom_where_used" in available_tool_names
         ):
             required_tool_name = "get_bom_where_used"
-        elif follow_up_intent == "EXPLAIN_ANALYSIS" and "get_design_change_analysis" in allowed_phase3_tools:
+        elif follow_up_intent == "EXPLAIN_ANALYSIS" and "get_design_change_analysis" in allowed_design_change_tools:
             required_tool_name = "get_design_change_analysis"
-        elif follow_up_intent == "EXPLAIN_CANDIDATE" and "get_candidate_evaluation_detail" in allowed_phase3_tools:
+        elif follow_up_intent == "EXPLAIN_CANDIDATE" and "get_candidate_evaluation_detail" in allowed_design_change_tools:
             required_tool_name = "get_candidate_evaluation_detail"
-        elif follow_up_intent in {"COMPARE_CANDIDATES", "RANK_CANDIDATES"} and "compare_design_change_candidates" in allowed_phase3_tools:
+        elif follow_up_intent in {"COMPARE_CANDIDATES", "RANK_CANDIDATES"} and "compare_design_change_candidates" in allowed_design_change_tools:
             required_tool_name = "compare_design_change_candidates"
         elif (
-            phase3_mode
+            design_change_mode
             and routing_step == "NOT_STARTED"
             and plant_context_ready
             and (
@@ -823,7 +823,7 @@ class BomAgentNode:
                 or add_target_name
                 or bom_context_ready
             )
-            and "analyze_design_change_candidates" in allowed_phase3_tools
+            and "analyze_design_change_candidates" in allowed_design_change_tools
         ):
             required_tool_name = "analyze_design_change_candidates"
 
@@ -1206,16 +1206,16 @@ class BomAgentNode:
         definitions: list[dict[str, Any]],
         current_step: str,
         *,
-        phase3_mode: bool,
+        design_change_mode: bool,
         bom_context_ready: bool,
         follow_up_intent: str | None = None,
         follow_up_complete: bool = False,
         product_cost_scan_intent: bool = False,
     ) -> list[dict[str, Any]]:
-        """현재 Phase3 단계와 후속질문 Intent에 맞는 Tool만 LLM에 노출합니다."""
+        """현재 설계변경 단계와 후속질문 Intent에 맞는 Tool만 LLM에 노출합니다."""
         if follow_up_complete:
             return []
-        allowed_phase3 = cls.PHASE3_ALLOWED_TOOLS.get(
+        allowed_design_change = cls.DESIGN_CHANGE_ALLOWED_TOOLS.get(
             current_step,
             {"get_change_request_result"},
         )
@@ -1231,17 +1231,17 @@ class BomAgentNode:
                 if follow_up_intent == "RESTART_ANALYSIS":
                     if name != "analyze_design_change_candidates":
                         continue
-                elif name not in cls.PHASE3_EXPLAIN_TOOLS:
+                elif name not in cls.DESIGN_CHANGE_EXPLAIN_TOOLS:
                     continue
-            if phase3_mode:
+            if design_change_mode:
                 if name in cls.LEGACY_DESIGN_CHANGE_TOOLS:
                     continue
-                if name in cls.PHASE3_TOOLS:
-                    if name in cls.UI_ONLY_PHASE3_TOOLS:
+                if name in cls.DESIGN_CHANGE_TOOLS:
+                    if name in cls.UI_ONLY_DESIGN_CHANGE_TOOLS:
                         continue
-                    if name not in allowed_phase3:
+                    if name not in allowed_design_change:
                         continue
-            elif name in cls.PHASE3_TOOLS:
+            elif name in cls.DESIGN_CHANGE_TOOLS:
                 continue
             filtered.append(definition)
         return filtered
@@ -1251,9 +1251,9 @@ class BomAgentNode:
         return DEFAULT_DOMAIN_INTENT_ROUTER.fast_chat_response(user_query)
 
     @classmethod
-    def _is_plain_bom_query(cls, user_query: str, *, phase3_mode: bool) -> bool:
+    def _is_plain_bom_query(cls, user_query: str, *, design_change_mode: bool) -> bool:
         return DEFAULT_DOMAIN_INTENT_ROUTER.is_plain_bom_query(
-            user_query, phase3_mode=phase3_mode
+            user_query, design_change_mode=design_change_mode
         )
 
     @classmethod
@@ -1385,12 +1385,12 @@ class BomAgentNode:
         )
 
     @classmethod
-    def _is_phase3_recommendation_request(cls, user_query: str) -> bool:
-        return DEFAULT_DOMAIN_INTENT_ROUTER.is_phase3_recommendation_request(user_query)
+    def _is_design_change_recommendation_request(cls, user_query: str) -> bool:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_design_change_recommendation_request(user_query)
 
     @classmethod
-    def _has_phase3_reason_language(cls, user_query: str) -> bool:
-        return DEFAULT_DOMAIN_INTENT_ROUTER.has_phase3_reason_language(user_query)
+    def _has_design_change_reason_language(cls, user_query: str) -> bool:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.has_design_change_reason_language(user_query)
 
     @classmethod
     def _is_delete_instruction(cls, user_query: str) -> bool:
@@ -1433,7 +1433,7 @@ class BomAgentNode:
             workflow_state.get("current_step") or "NOT_STARTED"
         ).strip().upper()
         if (
-            current_step in self.PHASE3_ACTIVE_STEPS
+            current_step in self.DESIGN_CHANGE_ACTIVE_STEPS
             and current_step not in {"APPLIED", "BLOCKED"}
         ):
             return user_query
@@ -1506,8 +1506,8 @@ class BomAgentNode:
         return DEFAULT_DOMAIN_INTENT_ROUTER.is_quantity_change_instruction(user_query)
 
     @classmethod
-    def _is_phase3_change_request(cls, user_query: str) -> bool:
-        return DEFAULT_DOMAIN_INTENT_ROUTER.is_phase3_change_request(user_query)
+    def _is_design_change_request(cls, user_query: str) -> bool:
+        return DEFAULT_DOMAIN_INTENT_ROUTER.is_design_change_request(user_query)
 
     @staticmethod
     def _previous_user_query(
@@ -1552,7 +1552,7 @@ class BomAgentNode:
         return DEFAULT_DOMAIN_INTENT_ROUTER.classify_analysis_follow_up(
             user_query,
             workflow_state,
-            active_steps=cls.PHASE3_ACTIVE_STEPS,
+            active_steps=cls.DESIGN_CHANGE_ACTIVE_STEPS,
         )
 
     @classmethod
@@ -1568,9 +1568,9 @@ class BomAgentNode:
         return DEFAULT_DOMAIN_INTENT_ROUTER.extract_plant_code(user_query)
 
     @classmethod
-    def _requires_plant_context(cls, user_query: str, phase3_mode: bool) -> bool:
+    def _requires_plant_context(cls, user_query: str, design_change_mode: bool) -> bool:
         return DEFAULT_DOMAIN_INTENT_ROUTER.requires_plant_context(
-            user_query, phase3_mode=phase3_mode
+            user_query, design_change_mode=design_change_mode
         )
 
     @classmethod

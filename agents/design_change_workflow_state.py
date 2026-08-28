@@ -172,12 +172,12 @@ def create_initial_design_change_state() -> DesignChangeWorkflowState:
     }
 
 
-def apply_phase3_tool_result(
+def apply_design_change_tool_result(
     tool_name: str,
     workflow_state: DesignChangeWorkflowState | None,
     tool_result: dict,
 ) -> DesignChangeWorkflowState:
-    """Phase3 MCP Tool 결과를 Agent/UI 공통 Workflow 상태로 변환합니다."""
+    """Design Change MCP Tool 결과를 Agent/UI 공통 Workflow 상태로 변환합니다."""
 
     if not isinstance(tool_result, dict):
         raise RuntimeError(f"{tool_name} result must be an object")
@@ -381,7 +381,7 @@ def apply_phase3_tool_result(
             "apply_result": tool_result,
             "current_step": "APPLIED",
         })
-    elif tool_name == "export_phase3_completion_report":
+    elif tool_name == "export_design_change_completion_report":
         updated.update({
             "report_status": "COMPLETED",
             "report_result": {

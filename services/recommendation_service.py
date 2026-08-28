@@ -102,7 +102,7 @@ class RecommendationService:
         """Discover and rank candidates for an ADD without a preselected item.
 
         Discovery is master-data driven.  Active items of the requested type are
-        evaluated by the same active Rule revisions used by normal Phase3 candidate
+        evaluated by the same active Rule revisions used by normal Design Change candidate
         evaluation.  If no applicable Rule exists the candidates remain
         CONDITIONAL instead of the service inventing suitability.
         """

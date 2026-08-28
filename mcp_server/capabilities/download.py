@@ -79,7 +79,7 @@ def export_design_change_report_data(change_id: str) -> dict:
     )
 
 
-def export_phase3_completion_report_data(request_id: str) -> dict:
+def export_design_change_completion_report_data(request_id: str) -> dict:
     normalized = str(request_id or "").strip().upper()
     if not normalized:
         raise ValueError("request_id는 필수입니다.")

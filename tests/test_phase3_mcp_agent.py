@@ -11,7 +11,7 @@ from mcp_server import server
 from mcp_server.capabilities import design_change_workflow
 
 
-PHASE3_TOOLS = {
+DESIGN_CHANGE_TOOLS = {
     "analyze_design_change_candidates", "scan_product_cost_reduction_candidates", "revalidate_design_change_analysis",
     "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
     "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
@@ -28,7 +28,7 @@ PHASE3_TOOLS = {
 
 
 def test_phase3_mcp_tools_are_registered():
-    for name in PHASE3_TOOLS:
+    for name in DESIGN_CHANGE_TOOLS:
         assert callable(getattr(server, name))
 
 
@@ -41,8 +41,8 @@ def test_create_request_tool_schema_exposes_phase3_enums():
     )
     schema = tool.input_schema
     definitions = schema["$defs"]
-    request_schema = definitions["Phase3ChangeRequestInput"]
-    action_schema = definitions["Phase3ChangeActionInput"]
+    request_schema = definitions["DesignChangeRequestInput"]
+    action_schema = definitions["DesignChangeActionInput"]
 
     assert request_schema["properties"]["demand_source"]["enum"] == [
         "USER",
@@ -92,7 +92,7 @@ def test_phase3_capability_delegates_to_service(monkeypatch):
 
 def test_agent_phase3_analysis_state_does_not_have_request_until_explicit_commit():
     state = create_initial_design_change_state()
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "analyze_design_change_candidates", state,
         {
             "analysis_id": "ANA-1",
@@ -109,14 +109,14 @@ def test_agent_phase3_analysis_state_does_not_have_request_until_explicit_commit
     assert state["request_id"] is None
     assert state["analysis_base_request"]["version_code"] == "MODEL"
 
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "preview_design_change_analysis_impact", state,
         {"requires_impact_approval": False, "production_bom_modified": False},
     )
     assert state["current_step"] == "ANALYSIS_CONFIRMED"
     assert state["request_id"] is None
 
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "create_design_change_request_from_analysis", state,
         {
             "request_id": "REQ-1",
@@ -132,12 +132,12 @@ def test_agent_phase3_analysis_state_does_not_have_request_until_explicit_commit
 
 def test_agent_phase3_state_progression():
     state = create_initial_design_change_state()
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "create_design_change_request", state,
         {"request_id": "REQ", "actions": [{"action_id": "A1"}]},
     )
     assert state["current_step"] == "REQUESTED"
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "evaluate_replacement_candidates", state,
         {
             "action_id": "A1",
@@ -149,7 +149,7 @@ def test_agent_phase3_state_progression():
     assert state["analysis_context"]["version_code"] == "MODEL"
     assert state["analysis_memory"]["candidate_count"] == 1
 
-    explained = BomMcpToolNode._build_phase3_workflow_state(
+    explained = BomMcpToolNode._build_design_change_workflow_state(
         "get_design_change_analysis", state,
         {"request_id": "REQ", "summary": "후보 분석 설명"},
     )
@@ -159,7 +159,7 @@ def test_agent_phase3_state_progression():
     state = explained
 
     # Shared BOM candidate selection stops before Workflow starts.
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "select_candidate_and_supplier", state,
         {
             "workflow_status": "IMPACT_REVIEW_REQUIRED",
@@ -170,21 +170,21 @@ def test_agent_phase3_state_progression():
     assert state["current_step"] == "IMPACT_REVIEW_REQUIRED"
     assert state["candidate_approval_id"] is None
 
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "approve_candidate_impact", state,
         {"approval_id": "APR-C", "requires_exception": False},
     )
     assert state["current_step"] == "CANDIDATE_APPROVED"
 
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "create_multi_action_preview", state,
         {"preview_id": "PRE", "validation_status": "PASS", "impacts": []},
     )
     assert state["current_step"] == "WAITING_FINAL_APPROVAL"
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "record_final_apply_approval", state, {"approval_id": "APR-F"},
     )
-    state = BomMcpToolNode._build_phase3_workflow_state(
+    state = BomMcpToolNode._build_design_change_workflow_state(
         "apply_approved_change_request", state,
         {"apply_id": "APPLY", "result": "APPLIED"},
     )
@@ -194,7 +194,7 @@ def test_agent_phase3_state_progression():
 
 
 def test_fail_preview_moves_agent_to_blocked():
-    result = BomMcpToolNode._build_phase3_workflow_state(
+    result = BomMcpToolNode._build_design_change_workflow_state(
         "create_multi_action_preview", create_initial_design_change_state(),
         {"preview_id": "PRE", "validation_status": "FAIL", "impacts": []},
     )
@@ -202,7 +202,7 @@ def test_fail_preview_moves_agent_to_blocked():
 
 
 def test_dedicated_candidate_selection_can_start_workflow_without_impact_gate():
-    result = BomMcpToolNode._build_phase3_workflow_state(
+    result = BomMcpToolNode._build_design_change_workflow_state(
         "select_candidate_and_supplier",
         {
             **create_initial_design_change_state(),
@@ -224,14 +224,14 @@ def test_dedicated_candidate_selection_can_start_workflow_without_impact_gate():
 
 def test_phase3_agent_rejects_invalid_transition_and_request_mismatch():
     with pytest.raises(ValueError, match="cannot run"):
-        BomMcpToolNode._validate_phase3_request(
+        BomMcpToolNode._validate_design_change_request(
             "apply_approved_change_request", create_initial_design_change_state(),
             {"request_id": "REQ"},
         )
     state = create_initial_design_change_state()
     state.update({"current_step": "WAITING_FINAL_APPROVAL", "request_id": "REQ-A"})
     with pytest.raises(ValueError, match="does not match"):
-        BomMcpToolNode._validate_phase3_request(
+        BomMcpToolNode._validate_design_change_request(
             "record_final_apply_approval", state, {"request_id": "REQ-B"},
         )
 
@@ -267,7 +267,7 @@ def test_invalid_phase3_transition_returns_recovery_message_without_tool_executi
     message = result["messages"][0]
     assert isinstance(message, ToolMessage)
     payload = json.loads(message.content)
-    assert payload["error_code"] == "INVALID_PHASE3_TRANSITION"
+    assert payload["error_code"] == "INVALID_DESIGN_CHANGE_TRANSITION"
     assert payload["current_step"] == "NOT_STARTED"
     assert payload["allowed_next_tools"] == ["analyze_design_change_candidates"]
     assert payload["production_bom_modified"] is False

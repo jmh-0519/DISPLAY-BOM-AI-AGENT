@@ -228,7 +228,7 @@ class DesignChangeWorkflowService:
         request["as_of_date"] = as_of_date
         request["effective_date"] = effective_date
 
-        # Active Phase3 quantity policy: use the BOM relation QUANTITY only.
+        # Active Design Change quantity policy: use the BOM relation QUANTITY only.
         # Legacy request columns remain for schema/backward compatibility but no
         # production-plan or separate requested-demand calculation is performed.
         request["demand_quantity"] = None

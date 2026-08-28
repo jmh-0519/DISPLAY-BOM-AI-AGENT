@@ -210,7 +210,7 @@ def test_phase3_recommendation_exposes_analysis_without_request_creation():
         content="요청을 확인했습니다.",
         tool_calls=None,
     )
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     node(
         {
@@ -245,7 +245,7 @@ def test_phase3_recommendation_exposes_analysis_after_bom_result():
         content="요청을 생성합니다.",
         tool_calls=None,
     )
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     node(
         {
@@ -286,7 +286,7 @@ def test_phase3_explicit_product_and_item_uses_deterministic_analysis_macro():
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -341,7 +341,7 @@ def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
 def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
     """REQUESTED is a legacy/backward-compatible state after STEP34.
 
-    In the active Phase3 path, candidate discovery/evaluation is completed in the
+    In the active Design Change path, candidate discovery/evaluation is completed in the
     Analysis Session before a real Design Change Request is created. Therefore an
     existing legacy REQUESTED request may still expose the evaluation tool, but the
     agent must not force candidate evaluation automatically.
@@ -357,7 +357,7 @@ def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_fo
         content="요청 상태를 확인합니다.",
         tool_calls=None,
     )
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     node(
         {
@@ -383,7 +383,7 @@ def test_phase3_multi_reason_change_request_uses_macro_without_new_item():
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "analyze_design_change"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -412,7 +412,7 @@ def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [
@@ -443,7 +443,7 @@ def test_phase3_missing_plant_forces_target_scoped_plant_discovery_before_analys
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
     client.create_agent_completion.return_value = make_assistant_message(content="", tool_calls=None)
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -470,7 +470,7 @@ def test_phase3_selected_plant_in_followup_reuses_original_request_and_forces_an
         {"type": "function", "function": {"name": "list_plants"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [
@@ -499,7 +499,7 @@ def test_step40n_exact_delete_without_reason_uses_macro_default_reason_policy():
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -525,7 +525,7 @@ def test_step40g_exact_delete_with_reason_uses_macro_without_bom_lookup():
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -544,13 +544,13 @@ def test_step40g_exact_delete_with_reason_uses_macro_without_bom_lookup():
     assert action["old_item_code"] == "0001-310701"
 
 def test_step40g_delete_without_business_reason_is_phase3_change_intent():
-    assert BomAgentNode._is_phase3_change_request(
+    assert BomAgentNode._is_design_change_request(
         "LTA650HR11-001 P03에서 0001-310701 자재를 제거하자"
     )
-    assert BomAgentNode._is_phase3_change_request(
+    assert BomAgentNode._is_design_change_request(
         "LTA650HR11-001 P03에서 자재를 삭제하자"
     )
-    assert BomAgentNode._is_phase3_change_request(
+    assert BomAgentNode._is_design_change_request(
         "LTA650HR11-001 P03에서 GATE-IC 수량을 2로 바꾸자"
     )
 
@@ -562,7 +562,7 @@ def test_step40g_bom_observation_name_delete_continues_with_macro_analysis():
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
     query = (
         "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 "
         "브라켓 자재를 제거하자."
@@ -602,7 +602,7 @@ def test_step40g_completed_request_does_not_block_new_delete_macro_analysis():
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "get_change_request_result"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -676,7 +676,7 @@ def test_step40n_quantity_change_without_business_reason_uses_macro_analysis():
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -700,7 +700,7 @@ def test_step40m_exact_quantity_change_with_reason_uses_macro_without_bom_lookup
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
     result = node({
         "messages": [HumanMessage(content=(
@@ -727,7 +727,7 @@ def test_step40m_name_based_quantity_change_uses_macro_target_resolution():
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
     query = (
         "LTA650HR11-001 모델 P03 PLANT BOM에서 공용화를 위해 "
         "브라켓 자재 수량을 2로 변경하자."

@@ -33,7 +33,7 @@ class BomGraphGateway:
     """Workflow-aware LangGraph entry router.
 
     Routing priority:
-    1. pending slot / active non-terminal Phase3 workflow -> Agent
+    1. pending slot / active non-terminal Design Change workflow -> Agent
     2. Analysis follow-up -> Agent
     3. write/recommendation/product-cost-scan -> Agent
     4. high-confidence CHAT/BOM_READ/WHERE_USED with complete slots -> Fast Path
@@ -50,10 +50,10 @@ class BomGraphGateway:
         self,
         *,
         router: DomainIntentRouter | None = None,
-        phase3_active_steps: Iterable[str] = (),
+        design_change_active_steps: Iterable[str] = (),
     ) -> None:
         self.router = router or DEFAULT_DOMAIN_INTENT_ROUTER
-        self.phase3_active_steps = frozenset(phase3_active_steps)
+        self.design_change_active_steps = frozenset(design_change_active_steps)
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
             self.router
         )
@@ -137,7 +137,7 @@ class BomGraphGateway:
 
         # High-confidence fresh design-change analysis can bypass the first LLM
         # entirely. This creates only an Analysis Session Tool Call; Request/HITL/
-        # Apply authority remains in the existing Phase3 workflow.
+        # Apply authority remains in the existing Design Change workflow.
         if self.analysis_macro_dispatch.build_spec(
             user_query=user_query,
             active_bom_context=state.get("active_bom_context"),
@@ -146,7 +146,7 @@ class BomGraphGateway:
             return MACRO_ANALYZE
 
         # A read-only fact question about the currently viewed BOM is safe to
-        # answer without entering the LLM, even while a Phase3 analysis remains
+        # answer without entering the LLM, even while a Design Change analysis remains
         # active. It must not mutate the design-change workflow.
         current_turn_decision = self.router.route(
             user_query,
@@ -158,10 +158,10 @@ class BomGraphGateway:
             if read_scope.get("product_id") and read_scope.get("plant_code"):
                 return FAST_CURRENT_BOM_QUANTITY
 
-        # During a live Phase3 workflow, the Agent owns context, HITL and state
+        # During a live Design Change workflow, the Agent owns context, HITL and state
         # transitions. Terminal historical states may accept a new simple read.
         if (
-            current_step in self.phase3_active_steps
+            current_step in self.design_change_active_steps
             and current_step not in self.TERMINAL_WORKFLOW_STEPS
         ):
             return AGENT_PATH
@@ -170,7 +170,7 @@ class BomGraphGateway:
         follow_up_intent = self.router.classify_analysis_follow_up(
             user_query,
             workflow_state,
-            active_steps=self.phase3_active_steps,
+            active_steps=self.design_change_active_steps,
         )
         if follow_up_intent:
             return AGENT_PATH
@@ -186,8 +186,8 @@ class BomGraphGateway:
 
         if decision.intent in {
             "PRODUCT_COST_SCAN",
-            "PHASE3_CHANGE",
-            "PHASE3_RECOMMENDATION",
+            "DESIGN_CHANGE",
+            "DESIGN_CHANGE_RECOMMENDATION",
         }:
             return AGENT_PATH
 

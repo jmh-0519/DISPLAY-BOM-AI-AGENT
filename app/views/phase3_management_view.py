@@ -22,7 +22,7 @@ def history_rows(requests: list[dict]) -> list[dict]:
 
 def render_phase3_management(client: DisplayBomMcpClient | None = None) -> None:
     client = client or DisplayBomMcpClient()
-    st.subheader("Phase3 Rule / History / Learning Data")
+    st.subheader("Design Change Rule / History / Learning Data")
     rules_tab, history_tab, export_tab = st.tabs(["Rules", "History & Performance", "Dataset"])
     with rules_tab:
         rules = client.list_rules()
@@ -49,7 +49,7 @@ def render_phase3_management(client: DisplayBomMcpClient | None = None) -> None:
             if st.button("Deactivate selected revision"):
                 st.success(client.deactivate_rule(selected[0], selected[1]))
     with history_tab:
-        st.dataframe(pd.DataFrame(history_rows(client.list_phase3_change_history())), width="stretch")
+        st.dataframe(pd.DataFrame(history_rows(client.list_design_change_history())), width="stretch")
         with st.form("phase3_performance"):
             request_id = st.text_input("Applied request ID")
             measurement_day = st.selectbox("Measurement day", [30, 60, 90])

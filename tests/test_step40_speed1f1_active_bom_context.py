@@ -8,7 +8,7 @@ from agents.design_change_workflow_state import create_initial_design_change_sta
 
 
 def _agent():
-    return BomAgentNode(Mock(), Mock(), "Phase3 workflow")
+    return BomAgentNode(Mock(), Mock(), "Design Change workflow")
 
 
 def test_item_only_quantity_change_inherits_current_active_bom_and_asks_only_quantity():

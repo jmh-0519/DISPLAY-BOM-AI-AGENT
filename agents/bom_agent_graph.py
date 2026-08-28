@@ -104,7 +104,7 @@ class BomAgentGraph:
         )
 
         self.gateway = BomGraphGateway(
-            phase3_active_steps=self.agent_node.PHASE3_ACTIVE_STEPS,
+            design_change_active_steps=self.agent_node.DESIGN_CHANGE_ACTIVE_STEPS,
         )
         self.fast_path_nodes = BomFastPathNodes()
         self.macro_dispatch_node = BomMacroDispatchNode(
@@ -386,15 +386,15 @@ class BomAgentGraph:
         # STEP40-N2: a failed candidate-analysis Tool still leaves a ToolMessage
         # with the original Tool name.  Tool-name presence alone must therefore
         # never be used to hide the terminal error answer or render an empty
-        # Phase3 panel.  Successful structured outputs may suppress duplicate LLM
+        # Design Change panel.  Successful structured outputs may suppress duplicate LLM
         # prose; terminal errors must always remain visible to the user.
-        render_phase3_panel = (
+        render_design_change_panel = (
             bool(tool_names & candidate_panel_tools) and not terminal_error
         )
         suppress_answer = (
             bool(bom_views)
             or bool(where_used_views)
-            or render_phase3_panel
+            or render_design_change_panel
             or bool(plant_options)
         ) and not terminal_error
         return {
@@ -406,7 +406,7 @@ class BomAgentGraph:
             "plant_options": plant_options,
             "workflow": self.get_design_change_state(thread_id),
             "active_bom_context": self.get_active_bom_context(thread_id),
-            "render_phase3_panel": render_phase3_panel,
+            "render_design_change_panel": render_design_change_panel,
             "suppress_answer": suppress_answer,
             "tool_names": sorted(tool_names),
         }

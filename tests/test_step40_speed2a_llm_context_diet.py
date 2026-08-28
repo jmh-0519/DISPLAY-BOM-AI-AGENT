@@ -130,7 +130,7 @@ def test_agent_sends_compacted_explain_observation_to_azure_only():
     mcp.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "explain_design_change_analysis_session"}}
     ]
-    node = BomAgentNode(client, mcp, "Phase3 skill")
+    node = BomAgentNode(client, mcp, "Design Change skill")
 
     huge_result = {
         "analysis_id": "ANA-1",

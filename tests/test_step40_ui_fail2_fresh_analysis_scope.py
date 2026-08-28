@@ -42,7 +42,7 @@ def test_new_explicit_model_change_does_not_reuse_old_analysis_plant():
         },
     ]
 
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
     result = node({
         "messages": [
             HumanMessage(
@@ -74,7 +74,7 @@ def test_new_explicit_model_and_plant_can_start_fresh_analysis_directly():
         },
     ]
 
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
     result = node({
         "messages": [
             HumanMessage(
@@ -108,7 +108,7 @@ def test_analysis_explanation_followup_keeps_existing_analysis_context():
         },
     ]
 
-    node = BomAgentNode(client, mcp_client, "Phase3 workflow")
+    node = BomAgentNode(client, mcp_client, "Design Change workflow")
     # A true follow-up should not be interpreted as a fresh MODEL scope.
     result = node({
         "messages": [

@@ -13,7 +13,7 @@ from agents.design_change_workflow_state import create_initial_design_change_sta
 
 
 def _gateway():
-    return BomGraphGateway(phase3_active_steps=BomAgentNode.PHASE3_ACTIVE_STEPS)
+    return BomGraphGateway(design_change_active_steps=BomAgentNode.DESIGN_CHANGE_ACTIVE_STEPS)
 
 
 def _state(query, workflow=None):

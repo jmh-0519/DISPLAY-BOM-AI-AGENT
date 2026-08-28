@@ -36,7 +36,7 @@ def _node() -> tuple[BomAgentNode, Mock]:
             "compare_design_change_candidates",
         )
     ]
-    return BomAgentNode(client, mcp_client, "Phase3 skill"), client
+    return BomAgentNode(client, mcp_client, "Design Change skill"), client
 
 
 def test_followup_why_routes_to_read_only_analysis_tool_without_llm_selection():
@@ -155,7 +155,7 @@ def test_analysis_followup_why_uses_read_only_analysis_tool():
             "compare_design_change_analysis_candidates",
         )
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 skill")
+    node = BomAgentNode(client, mcp_client, "Design Change skill")
     result = node({
         "messages": [HumanMessage(content="왜 전부 FAIL이야?")],
         "user_query": "왜 전부 FAIL이야?",
@@ -174,7 +174,7 @@ def test_restart_analysis_reuses_original_analysis_input_without_request_creatio
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "revalidate_design_change_analysis"}},
     ]
-    node = BomAgentNode(client, mcp_client, "Phase3 skill")
+    node = BomAgentNode(client, mcp_client, "Design Change skill")
     state = _analysis_workflow_state()
     result = node({
         "messages": [HumanMessage(content="다시 처음부터 확인하자")],

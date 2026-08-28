@@ -5,7 +5,7 @@ from typing import Any
 
 
 class DesignChangeAnalysisExplainService:
-    """Read-only Phase3 analysis explanation and candidate comparison service.
+    """Read-only Design Change analysis explanation and candidate comparison service.
 
     STEP32 keeps the *persisted* evidence as the source of truth. The service may
     enrich that evidence with item master descriptions, but it never recomputes a

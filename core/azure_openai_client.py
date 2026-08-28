@@ -394,7 +394,7 @@ class AzureOpenAIClient:
         user_message: str,
         analysis_evidence: str,
     ) -> str:
-        """Explain completed Phase3 Analysis evidence without Agent baggage.
+        """Explain completed Design Change Analysis evidence without Agent baggage.
 
         This call intentionally sends:
         - no Skill context

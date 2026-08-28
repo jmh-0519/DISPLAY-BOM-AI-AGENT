@@ -1,5 +1,5 @@
 from agents.design_change_workflow_state import (
-    apply_phase3_tool_result,
+    apply_design_change_tool_result,
     create_initial_design_change_state,
 )
 
@@ -19,7 +19,7 @@ def test_revalidation_preserves_initial_analysis_snapshot_and_appends_history():
         "total_score": 65,
         "inventory": {"status": "CONDITIONAL", "demand_source": "UNAVAILABLE"},
     }
-    state = apply_phase3_tool_result(
+    state = apply_design_change_tool_result(
         "analyze_design_change_candidates",
         create_initial_design_change_state(),
         {
@@ -32,7 +32,7 @@ def test_revalidation_preserves_initial_analysis_snapshot_and_appends_history():
         },
     )
 
-    revalidated = apply_phase3_tool_result(
+    revalidated = apply_design_change_tool_result(
         "revalidate_design_change_analysis",
         state,
         {

@@ -7,7 +7,7 @@ from models.design_change import EvaluationStatus, RuleResult
 
 
 class RuleEngine:
-    """Deterministic Phase3 rule and attribute evaluator."""
+    """Deterministic Design Change rule and attribute evaluator."""
 
     @staticmethod
     def grade(score: float) -> str:

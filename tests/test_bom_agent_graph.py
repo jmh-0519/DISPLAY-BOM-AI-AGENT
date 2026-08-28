@@ -340,7 +340,7 @@ def test_graph_updates_workflow_after_streamlit_direct_action():
     graph = BomAgentGraph(
         client=client,
         mcp_client=mcp_client,
-        skill_context="Phase3 workflow",
+        skill_context="Design Change workflow",
     )
     thread_id = "phase3-ui-sync"
     graph.run("후보를 확인해줘", thread_id=thread_id)
@@ -458,7 +458,7 @@ def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
     graph = BomAgentGraph(
         client=client,
         mcp_client=mcp_client,
-        skill_context="Phase3 workflow",
+        skill_context="Design Change workflow",
     )
 
     response = graph.run_with_artifacts(
@@ -470,7 +470,7 @@ def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
     assert "analyze_design_change_candidates" not in response["answer"]
     assert "ACTIVE_SOURCE_BOM_RELATION_NOT_FOUND" not in response["answer"]
     assert response["suppress_answer"] is False
-    assert response["render_phase3_panel"] is False
+    assert response["render_design_change_panel"] is False
     assert mcp_client.call_tool.call_count == 1
     # SPEED2D Macro Dispatch owns this complete request; a failed Analysis
     # stays visible without an unnecessary Azure selection/retry call.

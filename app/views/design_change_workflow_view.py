@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from agents.design_change_workflow_state import apply_phase3_tool_result
+from agents.design_change_workflow_state import apply_design_change_tool_result
 from mcp_client.client import DisplayBomMcpClient
 from app.views.design_change_history_page import render_design_change_request_detail
 
@@ -361,7 +361,7 @@ def _complete_workflow_action(
     on_workflow_update=None,
     scroll_target: str | None = None,
 ) -> None:
-    updated = apply_phase3_tool_result(
+    updated = apply_design_change_tool_result(
         tool_name,
         workflow,
         tool_result,
@@ -907,7 +907,7 @@ def _proceed_analysis_to_final_confirmation(
         st.error(f"영향범위 분석에 실패했습니다: {error}")
         return
 
-    impact_state = apply_phase3_tool_result(
+    impact_state = apply_design_change_tool_result(
         "preview_design_change_analysis_impact",
         workflow,
         impact_result,
@@ -931,7 +931,7 @@ def _proceed_analysis_to_final_confirmation(
         st.error(f"설계변경 Request 생성에 실패했습니다: {error}")
         return
 
-    request_state = apply_phase3_tool_result(
+    request_state = apply_design_change_tool_result(
         "create_design_change_request_from_analysis",
         impact_state,
         request_result,
@@ -955,7 +955,7 @@ def _proceed_analysis_to_final_confirmation(
         )
         return
 
-    updated = apply_phase3_tool_result(
+    updated = apply_design_change_tool_result(
         "create_multi_action_preview",
         request_state,
         preview_result,
@@ -1268,7 +1268,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
         # Preserve the successfully created Request before attempting the read-only
         # final Preview. If Preview generation fails, the next render can recover
         # from CANDIDATE_APPROVED without creating a duplicate Request.
-        request_state = apply_phase3_tool_result(
+        request_state = apply_design_change_tool_result(
             "create_design_change_request_from_analysis", workflow, request_result
         )
         request_id = request_result.get("request_id")
@@ -1284,7 +1284,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
             )
             return
 
-        updated = apply_phase3_tool_result(
+        updated = apply_design_change_tool_result(
             "create_multi_action_preview", request_state, preview_result
         )
         workflow.clear(); workflow.update(updated)
@@ -1647,7 +1647,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
         report = st.session_state.get(cache_key)
         if report is None:
             try:
-                report = client.export_phase3_completion_report(workflow["request_id"])
+                report = client.export_design_change_completion_report(workflow["request_id"])
                 st.session_state[cache_key] = report
             except Exception as error:
                 st.error(f"완료 보고서 생성에 실패했습니다: {error}")
@@ -1655,7 +1655,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
         if report.get("success") and report.get("file_bytes"):
             _complete_workflow_action(
                 workflow,
-                "export_phase3_completion_report",
+                "export_design_change_completion_report",
                 {"success": True, "file_name": report.get("file_name")},
                 "Production E-BOM 반영과 Word 완료 보고서 생성이 완료되었습니다. 설계변경 업무를 종료합니다.",
                 on_workflow_update,

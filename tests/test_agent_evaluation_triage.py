@@ -23,7 +23,7 @@ def test_intent_mismatch_is_root_even_with_downstream_failures():
     report = {"evaluated_turn_count": 1, "turn_results": [_result(
         "REPLACE-001",
         ["INTENT_MISMATCH", "ROUTE_MISMATCH", "TOOL_SELECTION_MISMATCH"],
-        intent=("PHASE3_CHANGE", "LLM_FALLBACK"),
+        intent=("DESIGN_CHANGE", "LLM_FALLBACK"),
         route=("DETERMINISTIC_MACRO", "AGENT_PATH"),
         tool=("analyze_design_change_candidates", "search_material"),
     )]}
@@ -71,7 +71,7 @@ def test_summary_separates_semantic_and_architecture_roots():
     report = {
         "evaluated_turn_count": 3,
         "turn_results": [
-            _result("REPLACE-001", ["INTENT_MISMATCH"], intent=("PHASE3_CHANGE", "LLM_FALLBACK")),
+            _result("REPLACE-001", ["INTENT_MISMATCH"], intent=("DESIGN_CHANGE", "LLM_FALLBACK")),
             _result("DELETE-001", ["ROUTE_MISMATCH"], route=("DETERMINISTIC_MACRO", "AGENT_PATH")),
             _result("ADD-001", ["TOOL_ARGUMENT_MISMATCH"], tool=("analyze_design_change_candidates", "analyze_design_change_candidates"), args=([{"label": "MODEL"}], {}, "Missing argument evidence: MODEL")),
         ],

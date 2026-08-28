@@ -1,4 +1,4 @@
-"""Deterministic dispatch for high-confidence Phase3 Analysis requests.
+"""Deterministic dispatch for high-confidence Design Change Analysis requests.
 
 This module removes the first LLM call only when all routing slots required to
 start a read-only Analysis Session are already deterministic.
@@ -91,7 +91,7 @@ class DeterministicAnalysisMacroDispatch:
         # normal Agent path because its analysis objective may be ambiguous.
         reason_based_recommendation = (
             decision.recommendation
-            and self.router.has_phase3_reason_language(user_query)
+            and self.router.has_design_change_reason_language(user_query)
         )
         # A recommendation request with explicit MODEL + target item codes and
         # PLANT is also safe for the read-only Analysis macro.  The macro never

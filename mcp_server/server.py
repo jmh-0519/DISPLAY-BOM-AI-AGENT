@@ -40,7 +40,7 @@ from mcp_server.capabilities.design_change import (
 from mcp_server.capabilities.download import (
     export_bom_excel_data,
     export_design_change_report_data,
-    export_phase3_completion_report_data,
+    export_design_change_completion_report_data,
 )
 from mcp_server.capabilities.history import (
     get_bom_review_data,
@@ -74,12 +74,12 @@ from mcp_server.capabilities.design_change_workflow import (
 )
 from mcp_server.capabilities.management import (
     create_rule_data, deactivate_rule_data, export_training_dataset_data,
-    list_phase3_change_history_data, list_rules_data,
+    list_design_change_history_data, list_rules_data,
     record_performance_outcome_data, update_rule_data,
 )
 from mcp_server.schemas import (
-    Phase3ChangeActionInput,
-    Phase3ChangeRequestInput,
+    DesignChangeActionInput,
+    DesignChangeRequestInput,
 )
 
 
@@ -313,12 +313,12 @@ def export_design_change_report(change_id: str) -> dict:
 
 
 @mcp.tool()
-def export_phase3_completion_report(request_id: str) -> dict:
-    """Apply가 완료된 Phase3 Request의 설계변경 완료 Word 보고서를 생성합니다.
+def export_design_change_completion_report(request_id: str) -> dict:
+    """Apply가 완료된 Design Change Request의 설계변경 완료 Word 보고서를 생성합니다.
 
-    현재 Phase3 활성 프로세스는 별도 품평회 단계를 사용하지 않습니다.
+    현재 Design Change 활성 프로세스는 별도 품평회 단계를 사용하지 않습니다.
     """
-    return export_phase3_completion_report_data(request_id=request_id)
+    return export_design_change_completion_report_data(request_id=request_id)
 
 
 @mcp.tool()
@@ -359,8 +359,8 @@ def apply_reviewed_bom(
 
 @mcp.tool()
 def analyze_design_change_candidates(
-    request: Phase3ChangeRequestInput,
-    actions: list[Phase3ChangeActionInput],
+    request: DesignChangeRequestInput,
+    actions: list[DesignChangeActionInput],
 ) -> dict:
     """설계변경 후보를 분석합니다.
 
@@ -451,8 +451,8 @@ def compare_design_change_analysis_candidates(analysis: dict, candidate_item_cod
 
 @mcp.tool()
 def create_design_change_request(
-    request: Phase3ChangeRequestInput,
-    actions: list[Phase3ChangeActionInput],
+    request: DesignChangeRequestInput,
+    actions: list[DesignChangeActionInput],
 ) -> dict:
     """복수 Action 설계변경 요청을 등록합니다.
 
@@ -552,7 +552,7 @@ def apply_approved_change_request(request_id: str, final_approval_id: str,
 
 @mcp.tool()
 def get_change_request_result(request_id: str) -> dict:
-    """Phase3 설계변경 요청과 Action 상태를 읽기 전용으로 조회합니다."""
+    """설계변경 요청과 Action 상태를 읽기 전용으로 조회합니다."""
     return get_change_request_result_data(request_id)
 
 
@@ -621,8 +621,8 @@ def deactivate_rule(rule_id: str, revision_no: int) -> dict:
 
 
 @mcp.tool()
-def list_phase3_change_history() -> list[dict]:
-    return list_phase3_change_history_data()
+def list_design_change_history() -> list[dict]:
+    return list_design_change_history_data()
 
 
 @mcp.tool()

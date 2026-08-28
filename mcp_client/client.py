@@ -374,7 +374,7 @@ class DisplayBomMcpClient:
         tool_name: str,
         arguments: dict[str, Any],
     ) -> Any:
-        """Execute the Phase3 Analysis Macro capability in-process.
+        """Execute the Design Change Analysis Macro capability in-process.
 
         This bypasses only the stdio transport. The logical Tool boundary and
         the same MCP capability -> Service -> Repository -> SQLite path remain.
@@ -412,7 +412,7 @@ class DisplayBomMcpClient:
 
         This is a transport optimization for the local Streamlit demo. It keeps
         the same Tool names, input contract, Service and Repository path.
-        Phase3 analysis has its own separately guarded local transport policy;
+        Design Change analysis has its own separately guarded local transport policy;
         approval/apply mutations continue through the MCP stdio boundary.
         """
 
@@ -800,12 +800,12 @@ class DisplayBomMcpClient:
         )
         return self._decode_download(data, "export_design_change_report")
 
-    def export_phase3_completion_report(self, request_id: str) -> dict:
+    def export_design_change_completion_report(self, request_id: str) -> dict:
         data = self._ensure_dict(
-            self.call_tool("export_phase3_completion_report", {"request_id": request_id}),
-            "export_phase3_completion_report",
+            self.call_tool("export_design_change_completion_report", {"request_id": request_id}),
+            "export_design_change_completion_report",
         )
-        return self._decode_download(data, "export_phase3_completion_report")
+        return self._decode_download(data, "export_design_change_completion_report")
 
     def list_design_changes(self) -> list[dict]:
         return self._ensure_list(self.call_tool("list_design_changes", {}), "list_design_changes")
@@ -1077,9 +1077,9 @@ class DisplayBomMcpClient:
         return self._ensure_dict(self.call_tool("deactivate_rule", {
             "rule_id": rule_id, "revision_no": revision_no}), "deactivate_rule")
 
-    def list_phase3_change_history(self) -> list[dict]:
-        return self._ensure_list(self.call_tool("list_phase3_change_history", {}),
-                                 "list_phase3_change_history")
+    def list_design_change_history(self) -> list[dict]:
+        return self._ensure_list(self.call_tool("list_design_change_history", {}),
+                                 "list_design_change_history")
 
     def record_performance_outcome(self, **arguments) -> dict:
         return self._ensure_dict(self.call_tool("record_performance_outcome", arguments),

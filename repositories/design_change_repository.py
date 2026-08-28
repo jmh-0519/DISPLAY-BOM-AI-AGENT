@@ -10,7 +10,7 @@ from database import SQLiteDatabase
 
 
 class SQLiteDesignChangeRepository:
-    """Phase3 SQL/row mapping. Business decisions belong to services."""
+    """Design Change SQL/row mapping. Business decisions belong to services."""
 
     def __init__(self, database: SQLiteDatabase) -> None:
         self.database = database
@@ -486,7 +486,7 @@ class SQLiteDesignChangeRepository:
         """Return every active BOM edge reachable from one product version.
 
         This is intentionally a generic BOM traversal.  It does not know about
-        Phase3 sample scenario IDs or special item codes and is therefore safe to
+        Design Change sample scenario IDs or special item codes and is therefore safe to
         use for model-wide opportunity discovery.
         """
         with self.database.connection() as connection:

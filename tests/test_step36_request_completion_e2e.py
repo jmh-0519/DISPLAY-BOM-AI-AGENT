@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agents.design_change_workflow_state import apply_phase3_tool_result
+from agents.design_change_workflow_state import apply_design_change_tool_result
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
 from services.design_change_workflow_service import DesignChangeWorkflowService
@@ -88,8 +88,8 @@ def test_report_generation_moves_ui_workflow_to_report_completed():
         "current_step": "APPLIED",
         "report_status": "WAITING",
     }
-    updated = apply_phase3_tool_result(
-        "export_phase3_completion_report",
+    updated = apply_design_change_tool_result(
+        "export_design_change_completion_report",
         state,
         {"success": True, "file_name": "REQ-1_design_change_completion_report.docx"},
     )
@@ -108,8 +108,8 @@ def test_active_streamlit_menu_does_not_expose_legacy_review_workflow():
 
 def test_design_change_history_page_uses_phase3_requests_not_legacy_review_history():
     source = (ROOT / "app" / "views" / "design_change_history_page.py").read_text(encoding="utf-8")
-    assert "list_phase3_change_history" in source
+    assert "list_design_change_history" in source
     assert "get_change_request_result" in source
-    assert "export_phase3_completion_report" in source
+    assert "export_design_change_completion_report" in source
     assert "품평결과" not in source
     assert "review_id" not in source

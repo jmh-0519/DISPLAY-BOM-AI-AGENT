@@ -18,7 +18,7 @@ class DomainRoutingDecision:
 
     intent: str
     fast_path_candidate: bool
-    phase3_mode: bool
+    design_change_mode: bool
     product_cost_scan: bool
     recommendation: bool
     change: bool
@@ -63,7 +63,7 @@ class DomainIntentRouter:
         "다시 분석", "새로 분석", "분석 다시", "다시 조회", "처음부터 보자",
         "다시 확인하자", "새로 시작",
     )
-    PHASE3_RECOMMENDATION_MARKERS = (
+    DESIGN_CHANGE_RECOMMENDATION_MARKERS = (
         "추천", "후보", "찾아", "대체 가능", "대체가능", "대체재", "대체품",
         "변경 가능", "변경가능", "recommend", "candidate", "alternative",
         "replacement material",
@@ -78,14 +78,14 @@ class DomainIntentRouter:
     )
     ASSY_PROCESS_NAMES = ("OLB", "CP", "BIN", "LC", "CF", "TFT")
 
-    PHASE3_CHANGE_INTENT_MARKERS = (
+    DESIGN_CHANGE_INTENT_MARKERS = (
         "변경", "교체", "대체", "바꾸", "추가", "삭제", "제거",
         "없애", "빼", "제외", "수량", "증량", "감량",
     )
-    PHASE3_EXPLICIT_ACTION_MARKERS = (
+    DESIGN_CHANGE_EXPLICIT_ACTION_MARKERS = (
         "추가", "삭제", "제거", "없애", "빼", "제외", "증량", "감량",
     )
-    PHASE3_DIRECTIVE_LANGUAGE_MARKERS = (
+    DESIGN_CHANGE_DIRECTIVE_LANGUAGE_MARKERS = (
         "하고싶", "하고 싶",
         "해줘", "해 줘", "해주세요", "해 주세요",
         "하자", "진행하자",
@@ -95,11 +95,11 @@ class DomainIntentRouter:
         "대체해줘", "대체해 줘",
     )
     REPLACE_ACTION_MARKERS = ("변경", "교체", "대체", "바꾸", "바꿔")
-    PHASE3_APPLY_INTENT_MARKERS = (
+    DESIGN_CHANGE_APPLY_INTENT_MARKERS = (
         "설계변경 bom 반영", "설계변경 bom반영", "bom 반영", "bom반영",
         "production bom 반영", "production e-bom 반영", "apply",
     )
-    PHASE3_REASON_LANGUAGE_MARKERS = (
+    DESIGN_CHANGE_REASON_LANGUAGE_MARKERS = (
         "단종", "eol", "공급 중단", "공급중단", "납기", "원가", "비용", "재고",
         "품질", "불량", "고객 사양", "고객사양", "규제", "인증", "공용화", "공통화",
     )
@@ -145,8 +145,8 @@ class DomainIntentRouter:
         workflow_state = workflow_state or {}
         chat_response = self.fast_chat_response(user_query)
         product_cost_scan = self.is_product_cost_scan_request(user_query)
-        recommendation = self.is_phase3_recommendation_request(user_query)
-        change = self.is_phase3_change_request(user_query)
+        recommendation = self.is_design_change_recommendation_request(user_query)
+        change = self.is_design_change_request(user_query)
         delete = self.is_delete_instruction(user_query)
         quantity_change = self.is_quantity_change_instruction(user_query)
         new_quantity = self.extract_new_quantity(user_query)
@@ -165,11 +165,11 @@ class DomainIntentRouter:
             and not change
             and not recommendation
         )
-        phase3_mode = product_cost_scan or recommendation or change or workflow_active
-        plain_bom = self.is_plain_bom_query(user_query, phase3_mode=phase3_mode)
+        design_change_mode = product_cost_scan or recommendation or change or workflow_active
+        plain_bom = self.is_plain_bom_query(user_query, design_change_mode=design_change_mode)
         requires_plant = self.requires_plant_context(
             user_query,
-            phase3_mode=phase3_mode,
+            design_change_mode=design_change_mode,
             where_used=where_used,
         )
 
@@ -178,9 +178,9 @@ class DomainIntentRouter:
         elif product_cost_scan:
             intent = "PRODUCT_COST_SCAN"
         elif change:
-            intent = "PHASE3_CHANGE"
+            intent = "DESIGN_CHANGE"
         elif recommendation:
-            intent = "PHASE3_RECOMMENDATION"
+            intent = "DESIGN_CHANGE_RECOMMENDATION"
         elif where_used:
             intent = "WHERE_USED"
         elif current_bom_quantity:
@@ -195,7 +195,7 @@ class DomainIntentRouter:
             fast_path_candidate=intent in {
                 "CHAT", "WHERE_USED", "BOM_READ", "CURRENT_BOM_QUANTITY",
             },
-            phase3_mode=phase3_mode,
+            design_change_mode=design_change_mode,
             product_cost_scan=product_cost_scan,
             recommendation=recommendation,
             change=change,
@@ -218,8 +218,8 @@ class DomainIntentRouter:
             return None
         return "안녕하세요. Display BOM AI Agent입니다. 무엇을 도와드릴까요?"
 
-    def is_plain_bom_query(self, user_query: str, *, phase3_mode: bool) -> bool:
-        if phase3_mode or self.is_where_used_request(user_query):
+    def is_plain_bom_query(self, user_query: str, *, design_change_mode: bool) -> bool:
+        if design_change_mode or self.is_where_used_request(user_query):
             return False
         normalized = self.normalize(user_query)
         if "bom" not in normalized:
@@ -354,7 +354,7 @@ class DomainIntentRouter:
 
         Because both current and proposed replacement items are supplied, this
         remains the legacy `analyze_design_change` compatibility-analysis path
-        rather than Phase3 candidate discovery.
+        rather than Design Change candidate discovery.
         """
         normalized = self.normalize(user_query)
         version_code = self.explicit_model_scope_code(user_query)
@@ -381,7 +381,7 @@ class DomainIntentRouter:
         ):
             return False
 
-        # A direct execution instruction remains on the Phase3 write path.
+        # A direct execution instruction remains on the design-change write path.
         return not any(
             marker in normalized
             for marker in (
@@ -400,13 +400,13 @@ class DomainIntentRouter:
             )
         )
 
-    def is_phase3_recommendation_request(self, user_query: str) -> bool:
+    def is_design_change_recommendation_request(self, user_query: str) -> bool:
         normalized = self.normalize(user_query)
-        return any(marker in normalized for marker in self.PHASE3_RECOMMENDATION_MARKERS)
+        return any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS)
 
-    def has_phase3_reason_language(self, user_query: str) -> bool:
+    def has_design_change_reason_language(self, user_query: str) -> bool:
         normalized = self.normalize(user_query)
-        return any(marker in normalized for marker in self.PHASE3_REASON_LANGUAGE_MARKERS)
+        return any(marker in normalized for marker in self.DESIGN_CHANGE_REASON_LANGUAGE_MARKERS)
 
     def is_delete_instruction(self, user_query: str) -> bool:
         normalized = self.normalize(user_query)
@@ -456,7 +456,7 @@ class DomainIntentRouter:
             "늘리", "늘려", "줄이", "줄여", "증가", "감소",
         ))
 
-    def is_phase3_apply_instruction(self, user_query: str) -> bool:
+    def is_design_change_apply_instruction(self, user_query: str) -> bool:
         """Detect an explicit request to apply a design change to Production BOM.
 
         This is a write/safety intent even when the sentence also contains words
@@ -464,9 +464,9 @@ class DomainIntentRouter:
         the approval guard because the user is explicitly asking for BOM apply.
         """
         normalized = self.normalize(user_query)
-        return any(marker in normalized for marker in self.PHASE3_APPLY_INTENT_MARKERS)
+        return any(marker in normalized for marker in self.DESIGN_CHANGE_APPLY_INTENT_MARKERS)
 
-    def is_phase3_change_request(self, user_query: str) -> bool:
+    def is_design_change_request(self, user_query: str) -> bool:
         """Return True only for an actual design-change instruction.
 
         Recommendation/analysis wording such as ``대체 후보 추천해줘`` or
@@ -481,7 +481,7 @@ class DomainIntentRouter:
             return True
         if self.is_delete_instruction(user_query):
             return True
-        if self.is_phase3_apply_instruction(user_query):
+        if self.is_design_change_apply_instruction(user_query):
             return True
 
         # ADD is a concrete BOM action when phrased as an instruction/wish.
@@ -494,7 +494,7 @@ class DomainIntentRouter:
                 return True
             # Short imperative forms such as ``자재 추가`` are also treated
             # as an action unless the user explicitly asks only for candidates.
-            if not self.is_phase3_recommendation_request(user_query):
+            if not self.is_design_change_recommendation_request(user_query):
                 return True
             return False
 
@@ -510,8 +510,8 @@ class DomainIntentRouter:
         # Reason + terse action is still a concrete change request, but a
         # recommendation/analysis request remains read-only Analysis intent.
         if (
-            self.has_phase3_reason_language(user_query)
-            and not self.is_phase3_recommendation_request(user_query)
+            self.has_design_change_reason_language(user_query)
+            and not self.is_design_change_recommendation_request(user_query)
         ):
             return True
         return False
@@ -577,7 +577,7 @@ class DomainIntentRouter:
         self,
         user_query: str,
         *,
-        phase3_mode: bool,
+        design_change_mode: bool,
         where_used: bool | None = None,
     ) -> bool:
         normalized = self.normalize(user_query)
@@ -587,7 +587,7 @@ class DomainIntentRouter:
             else where_used
         )
         return (
-            phase3_mode
+            design_change_mode
             or resolved_where_used
             or any(marker in normalized for marker in self.PLANT_REQUIRED_QUERY_MARKERS)
         )
@@ -700,7 +700,7 @@ class DomainIntentRouter:
         happens in DesignChangeWorkflowService against the scoped product BOM.
         """
         raw = " ".join(str(user_query or "").strip().split())
-        if not raw or not self.is_phase3_change_request(raw):
+        if not raw or not self.is_design_change_request(raw):
             return None
 
         normalized = self.normalize(raw)
@@ -779,7 +779,7 @@ class DomainIntentRouter:
         return (
             len(codes) >= 1
             and "추가" in normalized
-            and any(marker in normalized for marker in self.PHASE3_RECOMMENDATION_MARKERS)
+            and any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS)
         )
 
     def comparison_criterion(self, user_query: str) -> str:

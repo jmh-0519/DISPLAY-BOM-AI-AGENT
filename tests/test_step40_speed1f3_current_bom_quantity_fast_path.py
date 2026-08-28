@@ -43,7 +43,7 @@ def test_router_classifies_quantity_question_as_read_only_context_fact():
 
 def test_gateway_allows_context_quantity_fast_path_during_active_analysis():
     gateway = BomGraphGateway(
-        phase3_active_steps={"ANALYSIS_READY"},
+        design_change_active_steps={"ANALYSIS_READY"},
     )
 
     route = gateway.route({
@@ -121,6 +121,6 @@ def test_quantity_change_is_not_misclassified_as_quantity_fact():
         "실런트 자재 수량을 2로 바꿔줘"
     )
 
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.quantity_change is True
     assert decision.current_bom_quantity is False

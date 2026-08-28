@@ -24,7 +24,7 @@ def make_repository(tmp_path):
 def test_management_tools_are_registered():
     names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
     assert {"list_rules", "create_rule", "update_rule", "deactivate_rule",
-            "list_phase3_change_history", "record_performance_outcome",
+            "list_design_change_history", "record_performance_outcome",
             "export_training_dataset"} <= names
 
 

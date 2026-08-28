@@ -25,7 +25,7 @@ def deactivate_rule_data(rule_id: str, revision_no: int) -> dict:
     return RuleManagementService(_repository()).deactivate(rule_id, revision_no)
 
 
-def list_phase3_change_history_data() -> list[dict]:
+def list_design_change_history_data() -> list[dict]:
     return _repository().list_change_requests()
 
 

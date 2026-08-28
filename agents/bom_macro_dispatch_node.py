@@ -1,4 +1,4 @@
-"""LangGraph Node for deterministic Phase3 Analysis Macro dispatch."""
+"""LangGraph Node for deterministic Design Change Analysis Macro dispatch."""
 
 from __future__ import annotations
 

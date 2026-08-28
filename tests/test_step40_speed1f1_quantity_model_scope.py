@@ -39,7 +39,7 @@ def test_explicit_model_scope_code_is_detected_by_current_router():
 
 
 def test_active_bom_context_allows_item_only_quantity_followup():
-    node = BomAgentNode(Mock(), Mock(), "Phase3 workflow")
+    node = BomAgentNode(Mock(), Mock(), "Design Change workflow")
     query = "LJ94-100006 자재의 수량을 바꾸고싶어"
 
     result = node({

@@ -16,8 +16,8 @@ ChangeReasonCode = Literal[
 ]
 
 
-class Phase3ChangeRequestInput(TypedDict):
-    """Phase3 설계변경 요청의 MCP 입력 계약입니다.
+class DesignChangeRequestInput(TypedDict):
+    """설계변경 요청의 MCP 입력 계약입니다.
 
     version_code와 plant_code만 업무 대상 식별에 필수입니다. 날짜, 수요 출처,
     표준 reason_code는 Service가 원문/DB를 기준으로 안전하게 보완할 수 있습니다.
@@ -41,8 +41,8 @@ class Phase3ChangeRequestInput(TypedDict):
     demand_quantity: NotRequired[float | None]
 
 
-class Phase3ChangeActionInput(TypedDict):
-    """Phase3 설계변경 Action의 MCP 입력 계약입니다.
+class DesignChangeActionInput(TypedDict):
+    """설계변경 Action의 MCP 입력 계약입니다.
 
     target_type/parent/location은 기존 품목과 제품 BOM 관계에서 Service가
     결정할 수 있으므로 자연어 요청에서 명확하지 않으면 생략할 수 있습니다.

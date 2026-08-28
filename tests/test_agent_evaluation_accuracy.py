@@ -75,7 +75,7 @@ def test_macro_argument_accuracy_accepts_nested_grounded_arguments():
     observation = _observation(
         "REPLACE-001",
         1,
-        intent="PHASE3_CHANGE",
+        intent="DESIGN_CHANGE",
         route="DETERMINISTIC_MACRO",
         tool="analyze_design_change_candidates",
         args={
@@ -93,7 +93,7 @@ def test_macro_argument_accuracy_requires_requested_quantity():
     good = _observation(
         "QUANTITY_CHANGE-001",
         1,
-        intent="PHASE3_CHANGE",
+        intent="DESIGN_CHANGE",
         route="DETERMINISTIC_MACRO",
         tool="analyze_design_change_candidates",
         args={

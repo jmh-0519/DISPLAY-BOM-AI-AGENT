@@ -388,7 +388,7 @@ def render_design_change_request_detail(
 
     if show_completion_report and detail.get("apply_status") == "APPLIED":
         try:
-            report = client.export_phase3_completion_report(request_id)
+            report = client.export_design_change_completion_report(request_id)
         except Exception as error:
             st.warning(f"완료 보고서를 다시 생성할 수 없습니다: {error}")
             return detail
@@ -514,7 +514,7 @@ def render_design_change_history_page() -> None:
     )
     client = _client()
     try:
-        rows = client.list_phase3_change_history()
+        rows = client.list_design_change_history()
     except Exception as error:
         st.error(f"설계변경 이력 조회에 실패했습니다: {error}")
         return

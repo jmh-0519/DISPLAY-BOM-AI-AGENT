@@ -7,7 +7,7 @@ from agents.design_change_workflow_state import create_initial_design_change_sta
 
 
 def _node():
-    return BomAgentNode(Mock(), Mock(), "Phase3 workflow")
+    return BomAgentNode(Mock(), Mock(), "Design Change workflow")
 
 
 def test_missing_quantity_sets_pending_slot_and_asks_only_quantity():

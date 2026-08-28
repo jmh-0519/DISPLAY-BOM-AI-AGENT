@@ -12,7 +12,7 @@ def test_where_used_routes_to_fast_path_without_llm():
     assert decision.where_used is True
     assert decision.plant_code == "P01"
     assert decision.where_used_item_code == "0001-310901"
-    assert decision.phase3_mode is False
+    assert decision.design_change_mode is False
 
 
 def test_plain_bom_routes_to_fast_path_without_llm():
@@ -30,12 +30,12 @@ def test_quantity_change_takes_precedence_over_read_intent():
         "LTA400HR01-001 P01 모델에서 LJ94-100006 자재의 수량을 바꾸고싶어"
     )
 
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.fast_path_candidate is False
     assert decision.change is True
     assert decision.quantity_change is True
     assert decision.where_used is False
-    assert decision.phase3_mode is True
+    assert decision.design_change_mode is True
     assert decision.new_quantity is None
 
 
@@ -44,7 +44,7 @@ def test_explicit_quantity_is_extracted_by_router():
         "LTA400HR01-001 P01 모델에서 LJ94-100006 자재 수량을 3으로 변경해줘"
     )
 
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.quantity_change is True
     assert decision.new_quantity == 3.0
 
@@ -61,7 +61,7 @@ def test_current_turn_only_intent_is_not_inherited_from_previous_where_used():
     current = "LTA400HR01-001 P01 모델에서 LJ94-100006 자재의 수량을 바꾸고싶어"
 
     assert ROUTER.route(previous).intent == "WHERE_USED"
-    assert ROUTER.route(current).intent == "PHASE3_CHANGE"
+    assert ROUTER.route(current).intent == "DESIGN_CHANGE"
 
 
 def test_candidate_free_fail_followup_is_analysis_explain():

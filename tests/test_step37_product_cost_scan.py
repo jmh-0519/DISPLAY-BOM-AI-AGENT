@@ -47,7 +47,7 @@ def _node() -> tuple[BomAgentNode, Mock]:
             "scan_product_cost_reduction_candidates",
         )
     ]
-    return BomAgentNode(client, mcp_client, "Phase3 skill"), client
+    return BomAgentNode(client, mcp_client, "Design Change skill"), client
 
 
 def test_broad_model_cost_question_does_not_choose_last_bom_item_as_single_target():
@@ -91,7 +91,7 @@ def test_cost_scan_observation_is_answered_without_repeating_tool():
 
 def test_read_only_cost_scan_does_not_replace_active_analysis_state():
     state = _active_analysis_state()
-    updated = BomMcpToolNode._build_phase3_workflow_state(
+    updated = BomMcpToolNode._build_design_change_workflow_state(
         "scan_product_cost_reduction_candidates",
         state,
         {

@@ -17,13 +17,13 @@ def _defs():
 
 def test_apply_without_final_approval_is_change_intent():
     decision = DomainIntentRouter().route("분석이나 최종 승인 없이 바로 설계변경 BOM 반영해줘")
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.change is True
 
 
 def test_fail_candidate_apply_attempt_is_change_not_recommendation():
     decision = DomainIntentRouter().route("FAIL 후보로 그냥 설계변경 BOM 반영해줘")
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.change is True
 
 
@@ -31,7 +31,7 @@ def test_add_then_score_request_keeps_add_as_change_intent():
     decision = DomainIntentRouter().route(
         "LTA400HR01-001 P01 모델에 FILM 자재를 추가하고 후보 점수도 보여줘"
     )
-    assert decision.intent == "PHASE3_CHANGE"
+    assert decision.intent == "DESIGN_CHANGE"
     assert decision.change is True
 
 
@@ -46,7 +46,7 @@ def test_explicit_code_recommendation_can_use_read_only_macro():
 
 
 def test_named_recommendation_stays_agent_path():
-    gateway = BomGraphGateway(phase3_active_steps=BomAgentNode.PHASE3_ACTIVE_STEPS)
+    gateway = BomGraphGateway(design_change_active_steps=BomAgentNode.DESIGN_CHANGE_ACTIVE_STEPS)
     state = {
         "messages": [HumanMessage(content="LTA400HR01-001 P01 DRIVE-IC 대체 후보 추천해줘")],
         "design_change": {"current_step": "NOT_STARTED"},

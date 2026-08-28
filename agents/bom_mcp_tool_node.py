@@ -9,7 +9,7 @@ from langchain_core.messages import (
 from agents.bom_agent_state import BomAgentState
 from agents.design_change_workflow_state import (
     DesignChangeWorkflowState,
-    apply_phase3_tool_result,
+    apply_design_change_tool_result,
     create_initial_design_change_state,
 )
 from mcp_client.client import DisplayBomMcpClient
@@ -133,13 +133,13 @@ class BomMcpToolNode:
                 "compare_design_change_candidates",
             }:
                 try:
-                    self._validate_phase3_request(
+                    self._validate_design_change_request(
                         tool_name,
                         design_change_update,
                         arguments,
                     )
                 except ValueError as error:
-                    recovery = self._phase3_transition_error(
+                    recovery = self._design_change_transition_error(
                         tool_name,
                         design_change_update,
                         str(error),
@@ -284,7 +284,7 @@ class BomMcpToolNode:
                 "get_design_change_analysis", "get_candidate_evaluation_detail",
                 "compare_design_change_candidates",
             }:
-                design_change_update = self._build_phase3_workflow_state(
+                design_change_update = self._build_design_change_workflow_state(
                     tool_name, design_change_update, tool_result
                 )
 
@@ -325,15 +325,15 @@ class BomMcpToolNode:
         return result
 
     @staticmethod
-    def _build_phase3_workflow_state(tool_name, workflow_state, tool_result):
-        return apply_phase3_tool_result(
+    def _build_design_change_workflow_state(tool_name, workflow_state, tool_result):
+        return apply_design_change_tool_result(
             tool_name,
             workflow_state,
             tool_result,
         )
 
     @staticmethod
-    def _validate_phase3_request(tool_name, workflow_state, arguments):
+    def _validate_design_change_request(tool_name, workflow_state, arguments):
         state = workflow_state or create_initial_design_change_state()
         step = state.get("current_step", "NOT_STARTED")
         allowed = {
@@ -388,7 +388,7 @@ class BomMcpToolNode:
             },
         }
         if step not in allowed[tool_name]:
-            raise ValueError(f"{tool_name} cannot run from Phase3 step {step}")
+            raise ValueError(f"{tool_name} cannot run from Design Change step {step}")
         analysis_tools = {
             "scan_product_cost_reduction_candidates",
             "analyze_design_change_candidates", "revalidate_design_change_analysis",
@@ -400,10 +400,10 @@ class BomMcpToolNode:
             expected_request = state.get("request_id")
             supplied_request = arguments.get("request_id")
             if expected_request and supplied_request and supplied_request != expected_request:
-                raise ValueError("Phase3 tool request_id does not match the active workflow")
+                raise ValueError("Design Change tool request_id does not match the active workflow")
 
     @staticmethod
-    def _phase3_transition_error(tool_name, workflow_state, message):
+    def _design_change_transition_error(tool_name, workflow_state, message):
         state = workflow_state or create_initial_design_change_state()
         step = state.get("current_step", "NOT_STARTED")
         allowed_next = {
@@ -447,7 +447,7 @@ class BomMcpToolNode:
         }.get(step, [])
         return {
             "success": False,
-            "error_code": "INVALID_PHASE3_TRANSITION",
+            "error_code": "INVALID_DESIGN_CHANGE_TRANSITION",
             "attempted_tool": tool_name,
             "current_step": step,
             "allowed_next_tools": allowed_next,

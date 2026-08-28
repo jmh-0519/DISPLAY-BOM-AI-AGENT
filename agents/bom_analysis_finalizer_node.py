@@ -1,4 +1,4 @@
-"""Dedicated final-answer node for deterministic Phase3 Macro Analysis.
+"""Dedicated final-answer node for deterministic Design Change Macro Analysis.
 
 The expensive Agent routing prompt, Skills and Tool catalog are not needed
 after a high-confidence Macro Analysis has already completed successfully.

@@ -189,7 +189,7 @@ def _append_agent_response(response: dict, pending_user_request: str | None = No
         "plant_options": response.get("plant_options", []),
         "pending_user_request": pending_user_request or "",
         "workflow": response.get("workflow", {}),
-        "render_phase3_panel": bool(response.get("render_phase3_panel", False)),
+        "render_design_change_panel": bool(response.get("render_design_change_panel", False)),
         "suppress_answer": bool(response.get("suppress_answer", False)),
         "id": str(uuid.uuid4()),
     })
@@ -234,7 +234,7 @@ def render_chat_history() -> None:
             bom_views = message.get("bom_views", [])
             workflow = message.get("workflow", {})
             suppress_answer = bool(message.get("suppress_answer", False))
-            render_design_change_panel = bool(message.get("render_phase3_panel", False))
+            render_design_change_panel = bool(message.get("render_design_change_panel", False))
             # 후보 분석을 생성한 턴만 구조화 패널을 보여주고, Explain 후속질문은
             # 자연어 답변만 표시하여 기존 후보표를 반복 렌더링하지 않습니다.
             if not suppress_answer:
@@ -404,7 +404,7 @@ def render_agent_chat() -> None:
                 bom_views = response.get("bom_views", [])
                 cost_scan_views = response.get("cost_scan_views", [])
                 workflow = response.get("workflow", {})
-                render_design_change_panel = bool(response.get("render_phase3_panel", False))
+                render_design_change_panel = bool(response.get("render_design_change_panel", False))
                 suppress_answer = bool(response.get("suppress_answer", False))
                 answer = sanitize_agent_download_links(answer, bool(artifacts))
 
@@ -456,7 +456,7 @@ def render_agent_chat() -> None:
             "plant_options": (response.get("plant_options", []) if 'response' in locals() else []),
             "pending_user_request": user_input,
             "workflow": workflow if 'workflow' in locals() else {},
-            "render_phase3_panel": render_design_change_panel if 'render_design_change_panel' in locals() else False,
+            "render_design_change_panel": render_design_change_panel if 'render_design_change_panel' in locals() else False,
             "suppress_answer": suppress_answer if 'suppress_answer' in locals() else False,
             "id": str(uuid.uuid4()),
         }
