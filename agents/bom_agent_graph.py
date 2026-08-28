@@ -58,7 +58,7 @@ from core.observability import (
     summarize_text,
     summarize_value,
 )
-from core.performance_profiler import performance_span
+from core.performance_profiler import performance_span, record_performance_event
 
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -112,6 +112,7 @@ class BomAgentGraph:
         )
         self.analysis_finalizer_node = BomAnalysisFinalizerNode(
             client=client,
+            deterministic=True,
         )
 
         self.checkpointer = (
@@ -233,6 +234,11 @@ class BomAgentGraph:
             metadata={"node": "gateway"},
         ) as span:
             route = self.gateway.route(state)
+            record_performance_event(
+                category="routing",
+                name="graph.gateway.route",
+                metadata={"route": route},
+            )
             span.finish(output={"route": route})
             return route
 

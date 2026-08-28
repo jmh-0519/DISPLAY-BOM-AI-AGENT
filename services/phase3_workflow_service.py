@@ -38,15 +38,19 @@ class Phase3WorkflowService:
         supplier: dict,
         inventory: dict,
     ) -> None:
-        """Expose a ranking score only after technical suitability is PASS.
+        """Expose a recommendation score only when the *final* candidate status is PASS.
 
-        ``total_score`` remains populated for backward-compatible persistence,
-        but ``ranking_score``/``ranking_grade`` are the only values the UI should
-        present as a comparative recommendation score.  Missing/CONDITIONAL/FAIL
-        technical evidence therefore produces no numeric ranking.
+        Technical suitability alone is not enough to rank a candidate.  Supplier
+        or inventory evidence may still downgrade an otherwise technical PASS to
+        CONDITIONAL/FAIL.  Therefore the final merged ``status`` is authoritative
+        for public recommendation scoring.
+
+        Legacy rule scores remain available internally as ``rule_score`` so DB
+        persistence can stay backward compatible, while the public Analysis/MCP
+        boundary never presents a pending candidate as a low-scored recommendation.
         """
-        technical_status = str(value.get("technical_status") or value.get("status") or "").upper()
-        if technical_status != "PASS":
+        final_status = str(value.get("status") or "").upper()
+        if final_status != "PASS":
             value["ranking_score"] = None
             value["ranking_grade"] = None
             return
@@ -80,6 +84,47 @@ class Phase3WorkflowService:
             -float(ranking_score or 0.0),
             str(row.get("candidate_item_code") or ""),
         )
+
+    @staticmethod
+    def _apply_public_candidate_score_policy(value: dict) -> None:
+        """Project internal candidate evidence to the public Agent/UI contract.
+
+        PASS candidates may expose recommendation score/grade/rank.
+        CONDITIONAL means evaluation is pending, so a numeric score or recommendation
+        grade would be misleading. FAIL is excluded from recommendation ranking.
+
+        ``rule_score`` is deliberately retained as internal technical evidence; it is
+        not a recommendation score and is also used to reconstruct legacy persistence
+        fields when an Analysis Session is later committed as a Request.
+        """
+        status = str(value.get("status") or "").upper()
+        if status == "PASS":
+            return
+
+        value["ranking_score"] = None
+        value["ranking_grade"] = None
+        value["rank"] = None
+        value["total_score"] = None
+        value["grade"] = "평가 보류" if status == "CONDITIONAL" else None
+
+    def _candidate_for_persistence(self, value: dict) -> dict:
+        """Restore legacy numeric fields only for repository persistence.
+
+        Candidate tables historically store ``total_score``/``grade`` as numeric
+        rule evidence.  The public Analysis contract intentionally hides those values
+        for CONDITIONAL/FAIL.  Reconstructing them here keeps existing DB/report
+        compatibility without leaking them back through MCP responses.
+        """
+        persisted = dict(value)
+        if persisted.get("total_score") is None:
+            score = float(persisted.get("rule_score") or 0.0)
+            persisted["total_score"] = score
+            persisted["grade"] = self.recommendation.rule_engine.grade(score)
+        elif persisted.get("grade") in {None, "", "평가 보류", "HOLD"}:
+            persisted["grade"] = self.recommendation.rule_engine.grade(
+                float(persisted.get("total_score") or 0.0)
+            )
+        return persisted
 
     def create_request(self, request: dict, actions: list[dict]) -> dict:
         if not actions:
@@ -956,6 +1001,7 @@ class Phase3WorkflowService:
             else:
                 rank += 1
                 value["rank"] = rank
+            self._apply_public_candidate_score_policy(value)
 
         target_code = action.get("old_item_code") or action.get("new_item_code")
         target = self._item_summary(target_code, as_of_date) if target_code else {
@@ -1230,7 +1276,12 @@ class Phase3WorkflowService:
         for analysis_action, db_action in zip(analysis_actions, created["actions"]):
             source_candidates = [dict(row) for row in analysis.get("candidates", []) if row.get("action_id") == analysis_action.get("action_id")]
             if source_candidates:
-                self.repository.save_candidate_evaluations(db_action["action_id"], source_candidates)
+                persistence_candidates = [
+                    self._candidate_for_persistence(row) for row in source_candidates
+                ]
+                self.repository.save_candidate_evaluations(
+                    db_action["action_id"], persistence_candidates
+                )
             if analysis_action.get("action_type") in {"REPLACE", "ADD"}:
                 selection = selection_by_action[analysis_action.get("action_id")]
                 persisted = next((row for row in self.repository.list_candidate_evaluations(db_action["action_id"]) if row.get("candidate_item_code") == selection.get("candidate_item_code")), None)
@@ -1349,7 +1400,32 @@ class Phase3WorkflowService:
             else:
                 rank += 1
                 value["rank"] = rank
-        self.repository.save_candidate_evaluations(action_id, results)
+        persistence_results = [self._candidate_for_persistence(row) for row in results]
+        self.repository.save_candidate_evaluations(action_id, persistence_results)
+
+        # save_candidate_evaluations historically enriched the same candidate dicts
+        # with persisted identity fields (candidate_id/action_id). AE-08R now saves
+        # persistence-safe copies so CONDITIONAL/FAIL public scores can stay hidden;
+        # therefore restore only the DB identity fields from the persisted rows.
+        persisted_rows = self.repository.list_candidate_evaluations(action_id)
+        persisted_by_code = {
+            str(row.get("candidate_item_code") or "").strip().upper(): row
+            for row in persisted_rows
+            if str(row.get("candidate_item_code") or "").strip()
+        }
+        for value in results:
+            persisted = persisted_by_code.get(
+                str(value.get("candidate_item_code") or "").strip().upper()
+            )
+            if persisted:
+                if persisted.get("candidate_id") is not None:
+                    value["candidate_id"] = persisted.get("candidate_id")
+                value["action_id"] = persisted.get("action_id") or action_id
+            else:
+                # Keep the action identity available even if a custom repository
+                # implementation does not expose list_candidate_evaluations rows.
+                value.setdefault("action_id", action_id)
+            self._apply_public_candidate_score_policy(value)
         target_summary = self._item_summary(
             action.get("old_item_code") or action.get("new_item_code"), authoritative_date
         )

@@ -130,6 +130,10 @@ class BomGraphGateway:
             # return to the Agent node so it can reconstruct the original ADD
             # request before any normal intent routing is applied.
             return AGENT_PATH
+        if workflow_state.get("pending_add_parent_request"):
+            # ASSY ADD requires an explicit Parent.  The next short Parent-code
+            # reply belongs to the pending ADD transaction, not a fresh query.
+            return AGENT_PATH
 
         # High-confidence fresh design-change analysis can bypass the first LLM
         # entirely. This creates only an Analysis Session Tool Call; Request/HITL/
@@ -149,14 +153,10 @@ class BomGraphGateway:
             workflow_active=False,
             workflow_state={},
         )
-        if (
-            current_turn_decision.intent == "CURRENT_BOM_QUANTITY"
-            and self.can_inherit_active_bom_context(
-                user_query,
-                state.get("active_bom_context"),
-            )
-        ):
-            return FAST_CURRENT_BOM_QUANTITY
+        if current_turn_decision.intent == "CURRENT_BOM_QUANTITY":
+            read_scope = self.read_scope_context(state)
+            if read_scope.get("product_id") and read_scope.get("plant_code"):
+                return FAST_CURRENT_BOM_QUANTITY
 
         # During a live Phase3 workflow, the Agent owns context, HITL and state
         # transitions. Terminal historical states may accept a new simple read.
@@ -211,6 +211,36 @@ class BomGraphGateway:
         # Missing PLANT/entity, ambiguous language, and unsupported simple
         # patterns intentionally fall back to the normal LLM Agent path.
         return AGENT_PATH
+
+    @staticmethod
+    def read_scope_context(state: BomAgentState) -> dict[str, str]:
+        """Return read-only MODEL/PLANT scope from active BOM or Analysis.
+
+        A read-only follow-up during an Analysis Session may safely reuse the
+        Analysis request scope without mutating the design-change workflow.
+        Explicit current-turn MODEL/PLANT handling remains in the normal router.
+        """
+        active = state.get("active_bom_context") or {}
+        product_id = str(active.get("product_id") or "").strip().upper()
+        plant_code = str(active.get("plant_code") or "").strip().upper()
+        if product_id and plant_code:
+            return {"product_id": product_id, "plant_code": plant_code}
+
+        workflow = state.get("design_change") or {}
+        request = workflow.get("analysis_request") or workflow.get("analysis_context") or {}
+        product_id = str(
+            request.get("version_code")
+            or request.get("product_id")
+            or ""
+        ).strip().upper()
+        plant_code = str(
+            workflow.get("plant_code")
+            or request.get("plant_code")
+            or ""
+        ).strip().upper()
+        if product_id and plant_code:
+            return {"product_id": product_id, "plant_code": plant_code}
+        return {}
 
     @staticmethod
     def last_user_query(state: BomAgentState) -> str:

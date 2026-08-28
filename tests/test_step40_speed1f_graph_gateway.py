@@ -1,5 +1,6 @@
 from langchain_core.messages import HumanMessage
 
+from agents.analysis_macro_dispatch import MACRO_ANALYZE
 from agents.bom_agent_node import BomAgentNode
 from agents.bom_graph_gateway import (
     AGENT_PATH,
@@ -50,7 +51,9 @@ def test_missing_plant_falls_back_to_agent_for_plant_gate():
 
 def test_design_change_never_enters_graph_read_fast_path():
     query = "LTA400HR01-001 P01에서 LJ94-100006 자재 수량을 3으로 변경해줘"
-    assert _gateway().route(_state(query)) == AGENT_PATH
+    # A high-confidence design change may bypass the LLM through the
+    # deterministic Analysis Macro, but it must never enter a read-only Fast Path.
+    assert _gateway().route(_state(query)) == MACRO_ANALYZE
 
 
 def test_pending_quantity_slot_always_stays_on_agent_path():

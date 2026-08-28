@@ -94,13 +94,22 @@ class DomainIntentRouter:
         "변경해줘", "변경해 줘",
         "대체해줘", "대체해 줘",
     )
+    REPLACE_ACTION_MARKERS = ("변경", "교체", "대체", "바꾸", "바꿔")
+    PHASE3_APPLY_INTENT_MARKERS = (
+        "설계변경 bom 반영", "설계변경 bom반영", "bom 반영", "bom반영",
+        "production bom 반영", "production e-bom 반영", "apply",
+    )
     PHASE3_REASON_LANGUAGE_MARKERS = (
         "단종", "eol", "공급 중단", "공급중단", "납기", "원가", "비용", "재고",
         "품질", "불량", "고객 사양", "고객사양", "규제", "인증", "공용화", "공통화",
     )
 
     ITEM_CODE_PATTERN = re.compile(
-        r"(?<![A-Z0-9])(?:[A-Z]{2,}[A-Z0-9]*-\d{3,}(?:-\d+)?|\d{4}-\d{6})(?![A-Z0-9])",
+        # Support both ordinary codes (LJ94-100006) and hierarchical ASSY
+        # codes with alpha segments (AS-FA-001) without matching only the
+        # trailing substring (FA-001).  The final numeric segment keeps this
+        # pattern from treating normal hyphenated words as item codes.
+        r"(?<![A-Z0-9])(?:[A-Z]{2,}[A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3,}(?:-\d+)?|\d{4}-\d{6})(?![A-Z0-9])",
         re.IGNORECASE,
     )
     PLANT_CODE_PATTERN = re.compile(r"(?<![A-Z0-9])P\d{2,}(?![A-Z0-9])", re.IGNORECASE)
@@ -447,20 +456,73 @@ class DomainIntentRouter:
             "늘리", "늘려", "줄이", "줄여", "증가", "감소",
         ))
 
-    def is_phase3_change_request(self, user_query: str) -> bool:
+    def is_phase3_apply_instruction(self, user_query: str) -> bool:
+        """Detect an explicit request to apply a design change to Production BOM.
+
+        This is a write/safety intent even when the sentence also contains words
+        such as ``후보`` or ``FAIL``.  Routing it as recommendation would weaken
+        the approval guard because the user is explicitly asking for BOM apply.
+        """
         normalized = self.normalize(user_query)
-        has_change_action = any(
-            marker in normalized for marker in self.PHASE3_CHANGE_INTENT_MARKERS
-        )
-        if not has_change_action:
+        return any(marker in normalized for marker in self.PHASE3_APPLY_INTENT_MARKERS)
+
+    def is_phase3_change_request(self, user_query: str) -> bool:
+        """Return True only for an actual design-change instruction.
+
+        Recommendation/analysis wording such as ``대체 후보 추천해줘`` or
+        ``교체 후보 분석해줘`` must not become a write/change intent merely
+        because the sentence contains a generic ``해줘`` attached to
+        ``추천``/``분석``.  Conversely, natural Korean directives such as
+        ``바꾸고 싶어`` and ``교체하고 싶어`` are explicit change requests.
+        """
+        normalized = self.normalize(user_query)
+
+        if self.is_quantity_change_instruction(user_query):
+            return True
+        if self.is_delete_instruction(user_query):
+            return True
+        if self.is_phase3_apply_instruction(user_query):
+            return True
+
+        # ADD is a concrete BOM action when phrased as an instruction/wish.
+        if any(marker in normalized for marker in ("추가", "넣어")):
+            if any(marker in normalized for marker in (
+                "추가하고 싶", "추가하고싶", "추가해줘", "추가해 줘",
+                "추가해주세요", "추가해 주세요", "추가하자", "추가하고",
+                "넣어줘", "넣어 줘", "넣고 싶", "넣고싶", "넣고",
+            )):
+                return True
+            # Short imperative forms such as ``자재 추가`` are also treated
+            # as an action unless the user explicitly asks only for candidates.
+            if not self.is_phase3_recommendation_request(user_query):
+                return True
             return False
-        if any(marker in normalized for marker in self.PHASE3_REASON_LANGUAGE_MARKERS):
+
+        has_replace_action = any(
+            marker in normalized for marker in self.REPLACE_ACTION_MARKERS
+        )
+        if not has_replace_action:
+            return False
+
+        if self._has_direct_replace_directive(normalized):
             return True
-        if any(marker in normalized for marker in self.PHASE3_EXPLICIT_ACTION_MARKERS):
+
+        # Reason + terse action is still a concrete change request, but a
+        # recommendation/analysis request remains read-only Analysis intent.
+        if (
+            self.has_phase3_reason_language(user_query)
+            and not self.is_phase3_recommendation_request(user_query)
+        ):
             return True
-        if any(marker in normalized for marker in self.PHASE3_DIRECTIVE_LANGUAGE_MARKERS):
-            return True
-        return self.is_quantity_change_instruction(user_query)
+        return False
+
+    @staticmethod
+    def _has_direct_replace_directive(normalized: str) -> bool:
+        patterns = (
+            r"(?:변경|교체|대체)\s*(?:하고\s*싶|하고싶|해\s*줘|해주세요|해\s*주세요|하자)",
+            r"(?:바꾸|바꿔)\s*(?:고\s*싶|고싶|줘|\s*줘|주세요|자)",
+        )
+        return any(re.search(pattern, normalized, flags=re.IGNORECASE) for pattern in patterns)
 
     def classify_analysis_follow_up(
         self,
@@ -595,16 +657,14 @@ class DomainIntentRouter:
             target,
             flags=re.IGNORECASE,
         ).strip()
-        # Quoted chat input can leave only punctuation (for example a leading
-        # double quote) after the MODEL/PLANT/generic role words are removed.
-        # Such punctuation is not a business target and must not start Analysis.
-        target = target.strip('\"\'`“”‘’[](){}<>.,:;!?·-_/\\')
+        # A whole-query quote or a quoted target must never become the target
+        # itself.  Strip only wrapping quote characters after the business
+        # suffixes have been removed so a quoted real name such as
+        # ``"SEALANT"`` still resolves to ``SEALANT``.
+        target = target.strip('"\'`“”‘’').strip()
 
-        # A parent/item code left inside the target is handled as an explicit code
-        # by the ADD Macro, not as a free-text item family/name.
+        # A parent code left inside the target makes this extraction ambiguous.
         if not target or self.item_codes(target):
-            return None
-        if not re.search(r"[0-9A-Za-z가-힣]", target):
             return None
         return target
 
@@ -643,6 +703,14 @@ class DomainIntentRouter:
         if not raw or not self.is_phase3_change_request(raw):
             return None
 
+        normalized = self.normalize(raw)
+        # ADD owns a dedicated target parser because Parent/target roles differ
+        # from REPLACE/DELETE/QUANTITY_CHANGE.  Treating ADD text as a generic
+        # named source target can accidentally start Analysis with a missing
+        # ASSY Parent.
+        if any(marker in normalized for marker in ("추가", "넣어")):
+            return None
+
         # Remove current product/PLANT scope from the front of an inherited
         # active-BOM follow-up.
         candidate = self.ITEM_CODE_PATTERN.sub(" ", raw, count=1)
@@ -670,15 +738,30 @@ class DomainIntentRouter:
             )[0]
 
         target = " ".join(str(target or "").strip().split())
+        # Remove an attached business-reason clause from the source item name.
+        # Example: ``DRIVE-IC가 단종이라 교체하고 싶어`` -> ``DRIVE-IC``.
+        target = re.sub(
+            r"(?:이|가|은|는)?\s*(?:단종|eol|공급\s*중단|공급중단|납기|원가|비용|재고|품질|불량|고객\s*사양|고객사양|규제|인증|공용화|공통화).*$",
+            "",
+            target,
+            flags=re.IGNORECASE,
+        ).strip()
         target = re.sub(
             r"(?:을|를|은|는|이|가|의)$",
             "",
             target,
         ).strip()
+        target = re.sub(
+            r"\s*(?:자재|품목|부품|MATERIAL|ASSY|어셈블리)\s*$",
+            "",
+            target,
+            flags=re.IGNORECASE,
+        ).strip()
 
         generic = {
-            "", "자재", "품목", "부품", "이 자재", "그 자재",
-            "이 품목", "그 품목", "MATERIAL", "ASSY", "어셈블리",
+            "", "자재", "품목", "부품", "자재 하나", "품목 하나", "부품 하나",
+            "이 자재", "그 자재", "이 품목", "그 품목",
+            "MATERIAL", "ASSY", "어셈블리",
         }
         if target.upper() in {value.upper() for value in generic}:
             return None

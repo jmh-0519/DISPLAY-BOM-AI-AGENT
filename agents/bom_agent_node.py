@@ -279,6 +279,31 @@ class BomAgentNode:
             active_bom_context=state.get("active_bom_context"),
         )
 
+        pending_add_parent_request = workflow_state.get("pending_add_parent_request") or None
+        pending_add_parent_consumed = False
+        if pending_add_parent_request:
+            pending = dict(pending_add_parent_request)
+            version_code = str(pending.get("version_code") or "").strip().upper()
+            plant_code = str(pending.get("plant_code") or "").strip().upper()
+            target_name = str(pending.get("target_name") or "").strip()
+            parent_codes = list(dict.fromkeys(
+                self.domain_intent_router.item_codes(user_query)
+            ))
+            if len(parent_codes) != 1:
+                return {
+                    "messages": [AIMessage(content="추가할 ASSY의 Parent ASSY 코드를 입력해 주세요.")],
+                    "design_change": dict(workflow_state),
+                    "error": None,
+                }
+            parent_code = parent_codes[0]
+            user_query = (
+                f"{version_code} {plant_code} 모델에서 "
+                f"{parent_code} 하위에 {target_name} ASSY를 추가해줘"
+            ).strip()
+            workflow_state = dict(workflow_state)
+            workflow_state["pending_add_parent_request"] = None
+            pending_add_parent_consumed = True
+
         pending_add_target_request = workflow_state.get("pending_add_target_request") or None
         pending_add_target_consumed = False
         if pending_add_target_request:
@@ -385,6 +410,27 @@ class BomAgentNode:
                     "design_change": updated_workflow_state,
                     "error": None,
                 }
+
+            if add_target_type == "ASSY" and add_target_name:
+                parent_code = self.domain_intent_router.extract_add_parent_code(
+                    user_query,
+                    version_code=explicit_version,
+                )
+                if not parent_code:
+                    updated_workflow_state = dict(workflow_state)
+                    updated_workflow_state["pending_add_parent_request"] = {
+                        "original_request": user_query,
+                        "version_code": explicit_version,
+                        "plant_code": self.domain_intent_router.extract_plant_code(user_query),
+                        "target_name": add_target_name,
+                    }
+                    return {
+                        "messages": [AIMessage(
+                            content="추가할 ASSY의 Parent ASSY 코드를 입력해 주세요."
+                        )],
+                        "design_change": updated_workflow_state,
+                        "error": None,
+                    }
 
         # Azure message conversion is intentionally deferred until an actual
         # LLM call is required. Deterministic Tool routing must not pay the
@@ -719,6 +765,13 @@ class BomAgentNode:
         named_change_target = self.domain_intent_router.extract_named_change_target(
             analysis_routing_query
         )
+        # ADD uses a dedicated target parser.  After a clarification reply such
+        # as "SEALANT", extract_named_change_target intentionally returns None,
+        # so the ADD target must also participate in deterministic Analysis
+        # routing or the turn unnecessarily falls back to the LLM.
+        add_target_name = self.domain_intent_router.extract_add_target_name(
+            analysis_routing_query
+        )
 
         required_tool_name = None
         available_tool_names = {
@@ -767,6 +820,7 @@ class BomAgentNode:
                     analysis_routing_query
                 )
                 or named_change_target
+                or add_target_name
                 or bom_context_ready
             )
             and "analyze_design_change_candidates" in allowed_phase3_tools
@@ -913,7 +967,11 @@ class BomAgentNode:
             "messages": [ai_message],
             "error": None,
         }
-        if pending_quantity_consumed or pending_add_target_consumed:
+        if (
+            pending_quantity_consumed
+            or pending_add_target_consumed
+            or pending_add_parent_consumed
+        ):
             result["design_change"] = dict(workflow_state)
         return result
 

@@ -62,3 +62,6 @@ logs/
 
 # Additional tool caches
 .ruff_cache/
+
+# Agent evaluation runtime artifacts
+.perf/

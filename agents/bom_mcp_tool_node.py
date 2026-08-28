@@ -13,6 +13,7 @@ from agents.design_change_workflow_state import (
     create_initial_design_change_state,
 )
 from mcp_client.client import DisplayBomMcpClient
+from core.performance_profiler import performance_span
 from core.observability import (
     LangfuseObservability,
     get_observability,
@@ -167,10 +168,15 @@ class BomMcpToolNode:
                     },
                     metadata={"tool_name": tool_name},
                 ) as span:
-                    tool_result = self.mcp_client.call_tool(
-                        tool_name=tool_name,
-                        arguments=arguments,
-                    )
+                    with performance_span(
+                        "mcp_tool",
+                        tool_name,
+                        metadata={"argument_count": len(arguments)},
+                    ):
+                        tool_result = self.mcp_client.call_tool(
+                            tool_name=tool_name,
+                            arguments=arguments,
+                        )
                     span.finish(output=summarize_value(tool_result))
             except Exception as error:
                 error_text = str(error).strip() or type(error).__name__

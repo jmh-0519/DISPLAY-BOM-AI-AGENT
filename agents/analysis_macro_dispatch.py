@@ -84,7 +84,29 @@ class DeterministicAnalysisMacroDispatch:
             workflow_active=False,
             workflow_state={},
         )
-        if not decision.change:
+        # A reason-grounded recommendation such as EOL/supply-stop is still a
+        # read-only design-change Analysis request.  It may safely use the
+        # deterministic macro when MODEL/PLANT/target are explicit.  A generic
+        # "candidate recommendation" without business reason remains on the
+        # normal Agent path because its analysis objective may be ambiguous.
+        reason_based_recommendation = (
+            decision.recommendation
+            and self.router.has_phase3_reason_language(user_query)
+        )
+        # A recommendation request with explicit MODEL + target item codes and
+        # PLANT is also safe for the read-only Analysis macro.  The macro never
+        # creates a Request or applies Production BOM.  Named/ambiguous targets
+        # remain on the Agent path for resolution.
+        explicit_code_recommendation = (
+            decision.recommendation
+            and bool(self.router.extract_plant_code(user_query))
+            and len(list(dict.fromkeys(self.router.item_codes(user_query)))) >= 2
+        )
+        if (
+            not decision.change
+            and not reason_based_recommendation
+            and not explicit_code_recommendation
+        ):
             return None
 
         action_type = self._action_type(user_query)
@@ -147,6 +169,9 @@ class DeterministicAnalysisMacroDispatch:
         explicit_version = self.router.explicit_model_scope_code(user_query)
         explicit_plant = self.router.extract_plant_code(user_query)
 
+        if explicit_version is None and explicit_plant:
+            explicit_version = self._positional_version_scope(user_query)
+
         if explicit_version:
             # Current-turn explicit MODEL always wins. Reuse the active PLANT only
             # when the explicit MODEL is the same currently viewed BOM.
@@ -167,6 +192,36 @@ class DeterministicAnalysisMacroDispatch:
             return active_version, active_plant
 
         return None, None
+
+
+    def _positional_version_scope(self, user_query: str) -> str | None:
+        """Resolve a high-confidence VERSION scope without a ``모델`` suffix.
+
+        Natural requests often omit the word ``모델``::
+
+            LTA... P02 0001-... 교체해줘
+            LTA... P02 DRIVE-IC가 단종이라 교체하고 싶어
+
+        When PLANT is explicit, the first code can safely serve as the scope if
+        another item code or an explicit named ADD/change target is also present.
+        A lone code is never promoted to VERSION because it may itself be the
+        source MATERIAL/ASSY.  Service validation remains authoritative.
+        """
+        if not self.router.extract_plant_code(user_query):
+            return None
+
+        codes = list(dict.fromkeys(self.router.item_codes(user_query)))
+        if len(codes) >= 2:
+            return codes[0]
+        if len(codes) != 1:
+            return None
+
+        if (
+            self.router.extract_named_change_target(user_query)
+            or self.router.extract_add_target_name(user_query)
+        ):
+            return codes[0]
+        return None
 
     def _add_action(
         self,

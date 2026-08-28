@@ -76,7 +76,7 @@ class BomFastPathNodes:
 
     def current_bom_quantity(self, state: BomAgentState) -> BomAgentState:
         decision = self._decision(state)
-        context = state.get("active_bom_context") or {}
+        context = BomGraphGateway.read_scope_context(state)
         product_id = str(context.get("product_id") or "").strip().upper()
         plant_code = str(context.get("plant_code") or "").strip().upper()
 
@@ -165,7 +165,7 @@ class BomFastPathNodes:
     ) -> str:
         user_query = BomGraphGateway.last_user_query(state)
         subject = self.router.extract_current_bom_quantity_subject(user_query)
-        context = state.get("active_bom_context") or {}
+        context = BomGraphGateway.read_scope_context(state)
         product_id = str(context.get("product_id") or "-").strip().upper()
         plant_code = str(context.get("plant_code") or "-").strip().upper()
 
