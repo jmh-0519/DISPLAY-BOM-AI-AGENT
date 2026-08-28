@@ -3,7 +3,7 @@ from unittest.mock import Mock
 from langchain_core.messages import HumanMessage
 
 from agents.bom_agent_node import BomAgentNode
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def _tool_defs():
@@ -64,7 +64,7 @@ def test_add_target_followup_resumes_original_scope_and_macro():
 
 
 def test_ranking_score_is_not_exposed_until_technical_pass():
-    service = object.__new__(Phase3WorkflowService)
+    service = object.__new__(DesignChangeWorkflowService)
     service.recommendation = Mock()
     service.recommendation.rule_engine.grade.return_value = "C"
 

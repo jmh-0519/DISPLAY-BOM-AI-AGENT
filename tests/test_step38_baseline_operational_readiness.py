@@ -5,19 +5,19 @@ from pathlib import Path
 
 from database import SQLiteDatabase
 from scripts.seed_phase3_business_sample import seed_phase3_business_sample
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_DB = PROJECT_ROOT / "data" / "display_bom_step27_seed.db"
 
 
-def _seeded_service(tmp_path) -> Phase3WorkflowService:
+def _seeded_service(tmp_path) -> DesignChangeWorkflowService:
     target = tmp_path / "step38.db"
     shutil.copy2(BASELINE_DB, target)
     database = SQLiteDatabase(target)
     seed_phase3_business_sample(database)
-    return Phase3WorkflowService(database)
+    return DesignChangeWorkflowService(database)
 
 
 def test_baseline_product_plant_pairs_receive_default_production_plan(tmp_path):

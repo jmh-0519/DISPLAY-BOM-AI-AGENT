@@ -5,7 +5,7 @@ import pytest
 from database import SQLiteDatabase, SchemaManager
 from repositories.multi_action_repository import SQLiteMultiActionRepository
 from services.multi_action_change_service import MultiActionApplyService
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 
 
@@ -292,7 +292,7 @@ def test_candidate_from_another_request_cannot_be_approved(tmp_path):
         "grade": "S", "rank": 1,
     }])
     with pytest.raises(ValueError, match="every REPLACE/ADD"):
-        Phase3WorkflowService(database).select_and_approve_candidates(
+        DesignChangeWorkflowService(database).select_and_approve_candidates(
             "REQ-B", [{"action_id": "ACT-A", "candidate_id": "ACT-A-C1"}], "tester",
         )
 

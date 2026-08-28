@@ -5,7 +5,7 @@ from pathlib import Path
 from agents.design_change_workflow_state import apply_phase3_tool_result
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from tests.test_phase3_e2e import iter_dynamic_replace_contexts
 
 
@@ -16,7 +16,7 @@ def _service(tmp_path):
     path = tmp_path / "step36.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    return Phase3WorkflowService(database), database
+    return DesignChangeWorkflowService(database), database
 
 
 def _history(database: SQLiteDatabase) -> list[dict]:
@@ -24,7 +24,7 @@ def _history(database: SQLiteDatabase) -> list[dict]:
     return SQLiteDesignChangeRepository(database).list_change_requests()
 
 
-def _analysis(service: Phase3WorkflowService, database: SQLiteDatabase) -> dict:
+def _analysis(service: DesignChangeWorkflowService, database: SQLiteDatabase) -> dict:
     context = next(iter(iter_dynamic_replace_contexts(database)))
     reason = context["reasons"][0]
     return service.analyze_candidates(

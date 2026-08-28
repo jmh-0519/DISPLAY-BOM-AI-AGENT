@@ -4,7 +4,7 @@ import shutil
 from datetime import date
 from database import SchemaManager, SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from services.rule_engine import RuleEngine
 
 
@@ -66,9 +66,9 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
     raise AssertionError("No dynamic explainability material case was found")
 
 
-def create_evaluated_request(database: SQLiteDatabase) -> tuple[Phase3WorkflowService, dict, dict]:
+def create_evaluated_request(database: SQLiteDatabase) -> tuple[DesignChangeWorkflowService, dict, dict]:
     case = find_dynamic_material_case(database)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     created = service.create_request(
         {
             "plant_code": case["plant_code"],

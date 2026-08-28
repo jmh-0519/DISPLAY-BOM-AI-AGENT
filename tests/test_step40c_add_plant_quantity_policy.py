@@ -7,7 +7,7 @@ import pytest
 from database import SQLiteDatabase
 from repositories.sqlite_repository import SQLiteBomRepository
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def _database(tmp_path) -> SQLiteDatabase:
@@ -49,7 +49,7 @@ def test_list_plants_for_version_matches_actual_active_bom_plants(tmp_path):
 
 def test_analysis_rejects_plant_where_version_has_no_active_bom(tmp_path):
     database = _database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     today = date.today().isoformat()
     with database.connection() as connection:
         row = connection.execute(
@@ -90,7 +90,7 @@ def test_analysis_rejects_plant_where_version_has_no_active_bom(tmp_path):
 
 def test_add_discovery_is_scoped_by_rule_identity_instead_of_all_materials(tmp_path):
     database = _database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     today = date.today().isoformat()
     with database.connection() as connection:
         rule = connection.execute(
@@ -140,7 +140,7 @@ def test_add_discovery_is_scoped_by_rule_identity_instead_of_all_materials(tmp_p
 
 def test_replace_inventory_uses_current_bom_quantity_not_production_plan(tmp_path):
     database = _database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     today = date.today().isoformat()
     with database.connection() as connection:
         row = connection.execute(

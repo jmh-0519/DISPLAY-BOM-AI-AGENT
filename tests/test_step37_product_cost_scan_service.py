@@ -2,20 +2,20 @@ from pathlib import Path
 import shutil
 
 from database import SQLiteDatabase
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASE_DB_PATH = PROJECT_ROOT / "data" / "display_bom.db"
 
 
-def _temp_service(tmp_path) -> Phase3WorkflowService:
+def _temp_service(tmp_path) -> DesignChangeWorkflowService:
     db_path = tmp_path / "step37.db"
     shutil.copy2(BASE_DB_PATH, db_path)
-    return Phase3WorkflowService(SQLiteDatabase(db_path))
+    return DesignChangeWorkflowService(SQLiteDatabase(db_path))
 
 
-def _find_scan_with_opportunities(service: Phase3WorkflowService) -> dict:
+def _find_scan_with_opportunities(service: DesignChangeWorkflowService) -> dict:
     with service.repository.database.connection() as connection:
         rows = connection.execute(
             """SELECT DISTINCT b.plant_code,b.parent_item_code AS version_code

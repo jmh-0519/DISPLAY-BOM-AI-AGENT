@@ -15,8 +15,8 @@ from services.recommendation_service import RecommendationService
 from services.supply_evaluation_service import SupplyEvaluationService
 
 
-class Phase3WorkflowService:
-    """Application service used by Phase3 MCP capabilities."""
+class DesignChangeWorkflowService:
+    """Application service for the active design-change workflow MCP capabilities."""
 
     def __init__(self, database) -> None:
         self.repository = SQLiteDesignChangeRepository(database)

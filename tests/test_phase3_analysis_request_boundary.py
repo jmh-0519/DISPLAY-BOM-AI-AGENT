@@ -5,8 +5,8 @@ from io import BytesIO
 from docx import Document
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_completion_word_report_service import Phase3CompletionWordReportService
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_completion_report_service import DesignChangeCompletionReportService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from tests.test_phase3_e2e import iter_dynamic_replace_contexts
 
 
@@ -14,7 +14,7 @@ def _service(tmp_path, name: str):
     path = tmp_path / f"{name}.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    return Phase3WorkflowService(database), database
+    return DesignChangeWorkflowService(database), database
 
 
 def _count(database: SQLiteDatabase, table: str) -> int:
@@ -22,7 +22,7 @@ def _count(database: SQLiteDatabase, table: str) -> int:
         return int(connection.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()["c"])
 
 
-def _analysis(service: Phase3WorkflowService, database: SQLiteDatabase) -> dict:
+def _analysis(service: DesignChangeWorkflowService, database: SQLiteDatabase) -> dict:
     context = next(iter(iter_dynamic_replace_contexts(database)))
     reason = context["reasons"][0]
     return service.analyze_candidates(
@@ -164,7 +164,7 @@ def test_active_phase3_completes_with_word_report_without_review_stage(tmp_path)
     assert isinstance(report_data["preview"].get("snapshot"), dict)
     assert isinstance(report_data["apply_result"].get("action_results"), list)
 
-    content = Phase3CompletionWordReportService().build(report_data)
+    content = DesignChangeCompletionReportService().build(report_data)
     assert isinstance(content, bytes)
     assert len(content) > 3000
     document = Document(BytesIO(content))

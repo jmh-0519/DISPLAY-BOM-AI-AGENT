@@ -12,13 +12,12 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 
-class Phase3CompletionWordReportService:
-    """Build a business-grade final Phase3 design-change completion report.
+class DesignChangeCompletionReportService:
+    """Build the final business-grade design-change completion report.
 
-    The active Phase3 process ends after final approval, Production E-BOM Apply and
-    Word report generation.  STEP39 expands the report from a processing log into
-    an evidence-oriented design-change completion document using persisted analysis,
-    approval, preview, impact and apply data.
+    The active design-change workflow ends after final approval, Production E-BOM
+    Apply and Word report generation. The report is an evidence-oriented completion
+    document built from persisted analysis, approval, preview, impact and apply data.
     """
 
     HEADER_FILL = "1F4E78"
@@ -34,7 +33,7 @@ class Phase3CompletionWordReportService:
 
     @staticmethod
     def _text(value: Any) -> str:
-        if Phase3CompletionWordReportService._is_blank(value):
+        if DesignChangeCompletionReportService._is_blank(value):
             return "-"
         if isinstance(value, bool):
             return "Y" if value else "N"
@@ -194,7 +193,7 @@ class Phase3CompletionWordReportService:
         preferred = []
         for key, label in labels.items():
             value = evidence.get(key)
-            if Phase3CompletionWordReportService._is_blank(value):
+            if DesignChangeCompletionReportService._is_blank(value):
                 continue
             if isinstance(value, list):
                 value = ", ".join(str(item) for item in value)
@@ -203,7 +202,7 @@ class Phase3CompletionWordReportService:
             return "; ".join(preferred)
         compact = {
             key: value for key, value in evidence.items()
-            if not Phase3CompletionWordReportService._is_blank(value)
+            if not DesignChangeCompletionReportService._is_blank(value)
         }
         if not compact:
             return "-"

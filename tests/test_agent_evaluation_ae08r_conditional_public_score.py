@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 class _RuleEngine:
@@ -15,8 +15,8 @@ class _RuleEngine:
         return "C"
 
 
-def _service_without_db() -> Phase3WorkflowService:
-    service = object.__new__(Phase3WorkflowService)
+def _service_without_db() -> DesignChangeWorkflowService:
+    service = object.__new__(DesignChangeWorkflowService)
     service.recommendation = SimpleNamespace(rule_engine=_RuleEngine())
     return service
 
@@ -32,7 +32,7 @@ def test_conditional_public_projection_hides_numeric_recommendation_fields():
         "rule_score": 0.0,
     }
 
-    Phase3WorkflowService._apply_public_candidate_score_policy(row)
+    DesignChangeWorkflowService._apply_public_candidate_score_policy(row)
 
     assert row["total_score"] is None
     assert row["grade"] == "평가 보류"
@@ -53,7 +53,7 @@ def test_fail_public_projection_hides_score_grade_and_rank():
         "rule_score": 72.0,
     }
 
-    Phase3WorkflowService._apply_public_candidate_score_policy(row)
+    DesignChangeWorkflowService._apply_public_candidate_score_policy(row)
 
     assert row["total_score"] is None
     assert row["grade"] is None
@@ -75,7 +75,7 @@ def test_pass_public_projection_preserves_recommendation_fields():
     }
     before = dict(row)
 
-    Phase3WorkflowService._apply_public_candidate_score_policy(row)
+    DesignChangeWorkflowService._apply_public_candidate_score_policy(row)
 
     assert row == before
 

@@ -1,0 +1,622 @@
+diff --git a/app/streamlit_app.py b/app/streamlit_app.py
+index 18af75e..8ad975c 100644
+--- a/app/streamlit_app.py
++++ b/app/streamlit_app.py
+@@ -19,7 +19,7 @@ from app.views.bom_view import render_bom_result_table
+ from app.views.where_used_view import render_where_used_result
+ import pandas as pd
+ from app.views.design_change_history_page import render_design_change_history_page
+-from app.views.phase3_agent_view import render_phase3_workflow
++from app.views.design_change_workflow_view import render_design_change_workflow
+ from app.views.product_cost_scan_view import render_product_cost_scan
+ from core.azure_openai_client import AzureOpenAIClient
+ from core.settings import Settings
+@@ -78,7 +78,7 @@ def initialize_session_state() -> None:
+         )
+ 
+ 
+-def synchronize_phase3_workflow(workflow: dict) -> None:
++def synchronize_design_change_workflow(workflow: dict) -> None:
+     """UI 직접 승인 결과를 채팅 Snapshot과 LangGraph Memory에 반영합니다."""
+ 
+     context_id = workflow.get("request_id") or workflow.get("analysis_id")
+@@ -234,7 +234,7 @@ def render_chat_history() -> None:
+             bom_views = message.get("bom_views", [])
+             workflow = message.get("workflow", {})
+             suppress_answer = bool(message.get("suppress_answer", False))
+-            render_phase3_panel = bool(message.get("render_phase3_panel", False))
++            render_design_change_panel = bool(message.get("render_phase3_panel", False))
+             # 후보 분석을 생성한 턴만 구조화 패널을 보여주고, Explain 후속질문은
+             # 자연어 답변만 표시하여 기존 후보표를 반복 렌더링하지 않습니다.
+             if not suppress_answer:
+@@ -253,10 +253,10 @@ def render_chat_history() -> None:
+                     mime=artifact["mime_type"],
+                     key=f"history_download_{message.get('id', index)}_{index}",
+                 )
+-            if render_phase3_panel:
+-                render_phase3_workflow(
++            if render_design_change_panel:
++                render_design_change_workflow(
+                     message.get("workflow", {}),
+-                    on_workflow_update=synchronize_phase3_workflow,
++                    on_workflow_update=synchronize_design_change_workflow,
+                 )
+ 
+ 
+@@ -404,7 +404,7 @@ def render_agent_chat() -> None:
+                 bom_views = response.get("bom_views", [])
+                 cost_scan_views = response.get("cost_scan_views", [])
+                 workflow = response.get("workflow", {})
+-                render_phase3_panel = bool(response.get("render_phase3_panel", False))
++                render_design_change_panel = bool(response.get("render_phase3_panel", False))
+                 suppress_answer = bool(response.get("suppress_answer", False))
+                 answer = sanitize_agent_download_links(answer, bool(artifacts))
+ 
+@@ -439,10 +439,10 @@ def render_agent_chat() -> None:
+                         file_name=artifact["file_name"], mime=artifact["mime_type"],
+                         key=f"new_download_{len(st.session_state.messages)}_{index}",
+                     )
+-                if render_phase3_panel:
+-                    render_phase3_workflow(
++                if render_design_change_panel:
++                    render_design_change_workflow(
+                         workflow,
+-                        on_workflow_update=synchronize_phase3_workflow,
++                        on_workflow_update=synchronize_design_change_workflow,
+                     )
+ 
+     st.session_state.messages.append(
+@@ -456,7 +456,7 @@ def render_agent_chat() -> None:
+             "plant_options": (response.get("plant_options", []) if 'response' in locals() else []),
+             "pending_user_request": user_input,
+             "workflow": workflow if 'workflow' in locals() else {},
+-            "render_phase3_panel": render_phase3_panel if 'render_phase3_panel' in locals() else False,
++            "render_phase3_panel": render_design_change_panel if 'render_design_change_panel' in locals() else False,
+             "suppress_answer": suppress_answer if 'suppress_answer' in locals() else False,
+             "id": str(uuid.uuid4()),
+         }
+@@ -503,7 +503,7 @@ def main() -> None:
+         # Request 상세 선택 상태를 제거한다.
+         if previous_menu == "설계변경 이력" and requested_menu != "설계변경 이력":
+             st.session_state.pop(
+-                "phase3_history_selected_request_id",
++                "design_change_history_selected_request_id",
+                 None,
+             )
+     elif "main_menu" not in st.session_state:
+diff --git a/app/views/design_change_history_page.py b/app/views/design_change_history_page.py
+index ead8a59..cfd0e8b 100644
+--- a/app/views/design_change_history_page.py
++++ b/app/views/design_change_history_page.py
+@@ -238,43 +238,43 @@ def _render_action_item_detail_table(rows: list[dict]) -> None:
+     st.markdown(
+         f"""
+         <style>
+-        .phase3-item-detail-wrap {{
++        .design-change-item-detail-wrap {{
+             overflow-x: auto;
+             margin-bottom: 0.75rem;
+         }}
+-        table.phase3-item-detail {{
++        table.design-change-item-detail {{
+             width: 100%;
+             border-collapse: collapse;
+             font-size: 0.90rem;
+         }}
+-        table.phase3-item-detail th,
+-        table.phase3-item-detail td {{
++        table.design-change-item-detail th,
++        table.design-change-item-detail td {{
+             border: 1px solid #E5E7EB;
+             padding: 0.52rem 0.58rem;
+             text-align: left;
+             vertical-align: middle;
+             white-space: nowrap;
+         }}
+-        table.phase3-item-detail th {{
++        table.design-change-item-detail th {{
+             background: #F8FAFC;
+             font-weight: 500;
+         }}
+-        table.phase3-item-detail td.action-seq {{
++        table.design-change-item-detail td.action-seq {{
+             text-align: center;
+             font-weight: 600;
+             background: #FFFFFF;
+         }}
+-        table.phase3-item-detail td.before {{
++        table.design-change-item-detail td.before {{
+             color: #1565C0;
+             font-weight: 700;
+         }}
+-        table.phase3-item-detail td.after {{
++        table.design-change-item-detail td.after {{
+             color: #D32F2F;
+             font-weight: 700;
+         }}
+         </style>
+-        <div class="phase3-item-detail-wrap">
+-          <table class="phase3-item-detail">
++        <div class="design-change-item-detail-wrap">
++          <table class="design-change-item-detail">
+             <thead><tr>{head}</tr></thead>
+             <tbody>{''.join(body_parts)}</tbody>
+           </table>
+@@ -336,14 +336,14 @@ def _render_history_next_step(
+         st.error(f"다음 단계 진행에 실패했습니다: {error}")
+ 
+ 
+-def render_phase3_request_detail(
++def render_design_change_request_detail(
+     client: DisplayBomMcpClient,
+     request_id: str,
+     *,
+     heading: str = "설계변경 Request 상세",
+     show_completion_report: bool = True,
+ ) -> dict | None:
+-    """Render one Phase3 Request using the same detail layout everywhere.
++    """Render one Design Change Request using the same detail layout everywhere.
+ 
+     This is shared by the history page and the Agent-chat workflow so a Request
+     looks identical immediately after creation and when it is reviewed days later.
+@@ -460,7 +460,7 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
+     st.markdown(
+         """
+         <style>
+-        div[class*="st-key-phase3_history_req_"] button {
++        div[class*="st-key-design_change_history_req_"] button {
+             color: #1565C0 !important;
+             font-weight: 700 !important;
+             background: transparent !important;
+@@ -470,7 +470,7 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
+             min-height: 1.6rem !important;
+             text-decoration: underline;
+         }
+-        div[class*="st-key-phase3_history_req_"] button:hover {
++        div[class*="st-key-design_change_history_req_"] button:hover {
+             color: #0D47A1 !important;
+         }
+         </style>
+@@ -491,18 +491,18 @@ def _render_history_list(page_pairs: list[tuple[dict, dict]]) -> None:
+         safe_key = "".join(ch if ch.isalnum() else "_" for ch in request_id)
+         if row_cols[0].button(
+             request_id,
+-            key=f"phase3_history_req_{safe_key}",
++            key=f"design_change_history_req_{safe_key}",
+             type="tertiary",
+             help=f"{request_id} 상세 조회",
+         ):
+-            st.session_state["phase3_history_selected_request_id"] = request_id
++            st.session_state["design_change_history_selected_request_id"] = request_id
+ 
+         for col, name in zip(row_cols[1:], columns[1:]):
+             col.write(_display_value(display.get(name)))
+ 
+ 
+ def render_design_change_history_page() -> None:
+-    """Active Phase3 Request history with field filters and 15-row paging.
++    """Active Design Change Request history with field filters and 15-row paging.
+ 
+     Analysis Sessions are intentionally excluded. Request details are opened by
+     clicking the blue Request ID button in the list; there is no second lookup control.
+@@ -527,26 +527,26 @@ def render_design_change_history_page() -> None:
+     with f1:
+         request_id_query = st.text_input(
+             "Request ID",
+-            key="phase3_history_request_id_filter",
++            key="design_change_history_request_id_filter",
+             placeholder="예: REQ-7CF4...",
+         )
+     with f2:
+         version_query = st.text_input(
+             "제품",
+-            key="phase3_history_version_filter",
++            key="design_change_history_version_filter",
+             placeholder="예: LTA650HR11-001",
+         )
+     with f3:
+         plant_query = st.text_input(
+             "PLANT",
+-            key="phase3_history_plant_filter",
++            key="design_change_history_plant_filter",
+             placeholder="예: P03",
+         )
+     with f4:
+         status = st.selectbox(
+             "업무 상태",
+             ["전체", *statuses],
+-            key="phase3_history_status_filter",
++            key="design_change_history_status_filter",
+             format_func=lambda value: "전체" if value == "전체" else _status_label(value),
+         )
+ 
+@@ -566,14 +566,14 @@ def render_design_change_history_page() -> None:
+         plant_query.strip().upper(),
+         status,
+     ))
+-    previous_signature = st.session_state.get("phase3_history_filter_signature")
++    previous_signature = st.session_state.get("design_change_history_filter_signature")
+     if previous_signature != filter_signature:
+-        st.session_state["phase3_history_filter_signature"] = filter_signature
+-        st.session_state["phase3_history_page"] = 1
++        st.session_state["design_change_history_filter_signature"] = filter_signature
++        st.session_state["design_change_history_page"] = 1
+ 
+-    current_page = int(st.session_state.get("phase3_history_page", 1))
++    current_page = int(st.session_state.get("design_change_history_page", 1))
+     page_pairs, current_page, total_pages = _paginate_history_pairs(filtered_pairs, current_page, page_size=15)
+-    st.session_state["phase3_history_page"] = current_page
++    st.session_state["design_change_history_page"] = current_page
+ 
+     if not filtered_pairs:
+         st.info("검색 조건에 해당하는 설계변경 Request가 없습니다.")
+@@ -588,8 +588,8 @@ def render_design_change_history_page() -> None:
+     if total_pages > 1:
+         p1, p2, p3 = st.columns([1, 2, 1])
+         with p1:
+-            if st.button("← 이전", disabled=current_page <= 1, key="phase3_history_prev", width="stretch"):
+-                st.session_state["phase3_history_page"] = current_page - 1
++            if st.button("← 이전", disabled=current_page <= 1, key="design_change_history_prev", width="stretch"):
++                st.session_state["design_change_history_page"] = current_page - 1
+                 st.rerun()
+         with p2:
+             st.markdown(
+@@ -598,13 +598,13 @@ def render_design_change_history_page() -> None:
+                 unsafe_allow_html=True,
+             )
+         with p3:
+-            if st.button("다음 →", disabled=current_page >= total_pages, key="phase3_history_next", width="stretch"):
+-                st.session_state["phase3_history_page"] = current_page + 1
++            if st.button("다음 →", disabled=current_page >= total_pages, key="design_change_history_next", width="stretch"):
++                st.session_state["design_change_history_page"] = current_page + 1
+                 st.rerun()
+ 
+-    selected = str(st.session_state.get("phase3_history_selected_request_id", "") or "").strip()
++    selected = str(st.session_state.get("design_change_history_selected_request_id", "") or "").strip()
+     filtered_request_ids = {str(source.get("request_id") or "") for source, _ in filtered_pairs}
+     if selected and selected in filtered_request_ids:
+         st.divider()
+-        render_phase3_request_detail(client, selected)
++        render_design_change_request_detail(client, selected)
+ 
+diff --git a/app/views/phase3_agent_view.py b/app/views/design_change_workflow_view.py
+similarity index 97%
+rename from app/views/phase3_agent_view.py
+rename to app/views/design_change_workflow_view.py
+index 617eb47..8a9b7e1 100644
+--- a/app/views/phase3_agent_view.py
++++ b/app/views/design_change_workflow_view.py
+@@ -5,7 +5,7 @@ import streamlit as st
+ 
+ from agents.design_change_workflow_state import apply_phase3_tool_result
+ from mcp_client.client import DisplayBomMcpClient
+-from app.views.design_change_history_page import render_phase3_request_detail
++from app.views.design_change_history_page import render_design_change_request_detail
+ 
+ 
+ ANALYSIS_STEPS = {
+@@ -35,20 +35,20 @@ def _dom_token(value) -> str:
+ 
+ def _candidate_selection_anchor(workflow: dict) -> str:
+     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
+-    return f"phase3-candidate-selection-{_dom_token(context_id)}"
++    return f"design-change-candidate-selection-{_dom_token(context_id)}"
+ 
+ 
+ def _revalidation_input_anchor(workflow: dict, action_id, candidate_code) -> str:
+     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
+     return (
+-        f"phase3-revalidation-input-{_dom_token(context_id)}-"
++        f"design-change-revalidation-input-{_dom_token(context_id)}-"
+         f"{_dom_token(action_id)}-{_dom_token(candidate_code)}"
+     )
+ 
+ 
+ def _revalidation_result_anchor(workflow: dict, index: int) -> str:
+     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
+-    return f"phase3-revalidation-result-{_dom_token(context_id)}-{index}"
++    return f"design-change-revalidation-result-{_dom_token(context_id)}-{index}"
+ 
+ 
+ def _render_anchor(anchor_id: str) -> None:
+@@ -62,24 +62,24 @@ def _schedule_scroll(anchor_id: str) -> None:
+     # The target can legitimately be the same on consecutive clicks.  Keep a
+     # monotonically increasing event id so Streamlit receives a different iframe
+     # payload every time and re-executes the scroll script.
+-    event_id = int(st.session_state.get("phase3_scroll_event_seq", 0)) + 1
+-    st.session_state["phase3_scroll_event_seq"] = event_id
+-    st.session_state["phase3_scroll_target"] = {
++    event_id = int(st.session_state.get("design_change_scroll_event_seq", 0)) + 1
++    st.session_state["design_change_scroll_event_seq"] = event_id
++    st.session_state["design_change_scroll_target"] = {
+         "anchor_id": anchor_id,
+         "event_id": event_id,
+     }
+ 
+ 
+ def _render_pending_scroll() -> None:
+-    pending = st.session_state.pop("phase3_scroll_target", None)
++    pending = st.session_state.pop("design_change_scroll_target", None)
+     if not pending:
+         return
+ 
+     # Backward compatibility for sessions created by STEP35-B.
+     if isinstance(pending, str):
+         target = pending
+-        event_id = int(st.session_state.get("phase3_scroll_event_seq", 0)) + 1
+-        st.session_state["phase3_scroll_event_seq"] = event_id
++        event_id = int(st.session_state.get("design_change_scroll_event_seq", 0)) + 1
++        st.session_state["design_change_scroll_event_seq"] = event_id
+     else:
+         target = pending.get("anchor_id")
+         event_id = pending.get("event_id")
+@@ -370,7 +370,7 @@ def _complete_workflow_action(
+     workflow.update(updated)
+     if on_workflow_update is not None:
+         on_workflow_update(updated)
+-    st.session_state["phase3_workflow_notice"] = {
++    st.session_state["design_change_workflow_notice"] = {
+         "context_id": updated.get("request_id") or updated.get("analysis_id"),
+         "message": success_message,
+     }
+@@ -783,7 +783,7 @@ def _render_revalidation_history(workflow: dict) -> None:
+                     # The selectbox was already instantiated earlier in this run, so do not
+                     # mutate its widget key here. Store a pending navigation command and
+                     # apply it before the selectbox is created on the next rerun.
+-                    st.session_state["phase3_pending_candidate_navigation"] = {
++                    st.session_state["design_change_pending_candidate_navigation"] = {
+                         "context_id": context_id,
+                         "action_id": action_id,
+                         "candidate_item_code": candidate_code,
+@@ -964,7 +964,7 @@ def _proceed_analysis_to_final_confirmation(
+     workflow.update(updated)
+     if on_workflow_update is not None:
+         on_workflow_update(updated)
+-    st.session_state["phase3_workflow_notice"] = {
++    st.session_state["design_change_workflow_notice"] = {
+         "context_id": updated.get("request_id"),
+         "message": (
+             f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
+@@ -1077,14 +1077,14 @@ def _render_candidate_selection(workflow: dict, rows: list[dict], client: Displa
+             continue
+         codes = [row["candidate_item_code"] for row in action_rows]
+         selectbox_key = f"analysis_candidate_{context_id}_{action_id}"
+-        pending_navigation = st.session_state.get("phase3_pending_candidate_navigation") or {}
++        pending_navigation = st.session_state.get("design_change_pending_candidate_navigation") or {}
+         if (
+             pending_navigation.get("context_id") == context_id
+             and pending_navigation.get("action_id") == action_id
+             and pending_navigation.get("candidate_item_code") in codes
+         ):
+             st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]
+-            st.session_state.pop("phase3_pending_candidate_navigation", None)
++            st.session_state.pop("design_change_pending_candidate_navigation", None)
+         select_label = (
+             f"추천 후보 선택 · Action {action_index}"
+             if selection_mode == "PASS"
+@@ -1290,7 +1290,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
+         workflow.clear(); workflow.update(updated)
+         if on_workflow_update is not None:
+             on_workflow_update(updated)
+-        st.session_state["phase3_workflow_notice"] = {
++        st.session_state["design_change_workflow_notice"] = {
+             "context_id": updated.get("request_id"),
+             "message": (
+                 f"설계변경 Request {request_id}가 생성되었고 적용 전 최종 확인 정보가 준비되었습니다. "
+@@ -1534,7 +1534,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
+     request_id = workflow.get("request_id")
+     current_step = workflow.get("current_step")
+     if request_id and current_step != "WAITING_FINAL_APPROVAL":
+-        render_phase3_request_detail(
++        render_design_change_request_detail(
+             client,
+             request_id,
+             heading="현재 진행 중인 설계변경 Request 상세",
+@@ -1548,7 +1548,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
+     actor = "streamlit-user"
+     if workflow.get("current_step") == "REPORT_COMPLETED":
+         st.success("설계변경 적용과 Word 완료 보고서 생성이 완료되었습니다. 업무가 종료되었습니다.")
+-        cache_key = f"phase3_completion_report_{workflow.get('request_id')}"
++        cache_key = f"design_change_completion_report_{workflow.get('request_id')}"
+         report = st.session_state.get(cache_key)
+         if report and report.get("success") and report.get("file_bytes"):
+             st.download_button(
+@@ -1557,7 +1557,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
+                 file_name=report.get("file_name") or f"{workflow['request_id']}_design_change_completion_report.docx",
+                 mime=report.get("mime_type") or "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                 type="primary",
+-                key=f"download_phase3_report_completed_{workflow.get('request_id')}",
++                key=f"download_design_change_report_completed_{workflow.get('request_id')}",
+             )
+         return
+ 
+@@ -1643,7 +1643,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
+             )
+     elif action == "REPORT":
+         st.success("설계변경이 Production E-BOM에 반영되었습니다. 품평회 단계 없이 완료 보고서를 생성하여 업무를 종료합니다.")
+-        cache_key = f"phase3_completion_report_{workflow.get('request_id')}"
++        cache_key = f"design_change_completion_report_{workflow.get('request_id')}"
+         report = st.session_state.get(cache_key)
+         if report is None:
+             try:
+@@ -1664,7 +1664,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
+             st.error(report.get("message") or "완료 보고서를 생성할 수 없습니다.")
+ 
+ 
+-def render_phase3_workflow(
++def render_design_change_workflow(
+     workflow: dict,
+     client: DisplayBomMcpClient | None = None,
+     on_workflow_update=None,
+@@ -1673,10 +1673,10 @@ def render_phase3_workflow(
+         return
+     client = client or DisplayBomMcpClient()
+ 
+-    notice = st.session_state.get("phase3_workflow_notice")
++    notice = st.session_state.get("design_change_workflow_notice")
+     if notice and notice.get("context_id") == (workflow.get("request_id") or workflow.get("analysis_id")):
+         st.success(str(notice.get("message") or "상태가 갱신되었습니다."))
+-        st.session_state.pop("phase3_workflow_notice", None)
++        st.session_state.pop("design_change_workflow_notice", None)
+ 
+     if workflow.get("current_step") in ANALYSIS_STEPS:
+         _render_pre_workflow_analysis(workflow, client, on_workflow_update)
+diff --git a/tests/test_phase3_agent_view.py b/tests/test_phase3_agent_view.py
+index df51875..753a1b6 100644
+--- a/tests/test_phase3_agent_view.py
++++ b/tests/test_phase3_agent_view.py
+@@ -1,4 +1,4 @@
+-from app.views.phase3_agent_view import (
++from app.views.design_change_workflow_view import (
+     _candidate_decision_summary,
+     _candidate_display_frame,
+     _reason_evidence_summary,
+diff --git a/tests/test_step35_ui_contract.py b/tests/test_step35_ui_contract.py
+index a76e0a1..a45d6c8 100644
+--- a/tests/test_step35_ui_contract.py
++++ b/tests/test_step35_ui_contract.py
+@@ -14,17 +14,17 @@ def test_agent_sidebar_has_no_fixed_plant_selector_or_review_history_menu():
+ 
+ 
+ def test_revalidation_history_is_rendered_after_candidate_interaction():
+-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
++    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+     function = source.split("def _render_pre_workflow_analysis", 1)[1].split("def _render_workflow", 1)[0]
+     assert function.index("_render_candidate_selection") < function.index("_render_revalidation_history")
+     assert "_analysis_selection_rows(workflow)" in function
+ 
+ 
+ def test_revalidation_navigation_has_result_autoscroll_and_return_buttons():
+-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
++    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+     assert '"후보 다시 선택"' in source
+     assert '"이 후보 조건 다시 수정"' in source
+-    assert "phase3_scroll_target" in source
++    assert "design_change_scroll_target" in source
+     assert "scrollIntoView" in source
+     assert "_candidate_selection_anchor(workflow)" in source
+     assert "_revalidation_input_anchor(workflow, action_id, candidate_code)" in source
+@@ -33,15 +33,15 @@ def test_revalidation_navigation_has_result_autoscroll_and_return_buttons():
+ 
+ 
+ def test_condition_navigation_restores_history_candidate_before_selectbox_creation():
+-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+-    assert 'st.session_state["phase3_pending_candidate_navigation"]' in source
++    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
++    assert 'st.session_state["design_change_pending_candidate_navigation"]' in source
+     assert 'st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]' in source
+     assert source.index('st.session_state[selectbox_key] = pending_navigation["candidate_item_code"]') < source.index('selected_code = st.selectbox(')
+ 
+ 
+ def test_repeated_scroll_to_same_anchor_uses_unique_navigation_event_and_modern_iframe():
+-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
+-    assert 'phase3_scroll_event_seq' in source
++    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
++    assert 'design_change_scroll_event_seq' in source
+     assert '"event_id": event_id' in source
+     assert 'const navigationEventId' in source
+     assert 'st.iframe(' in source
+@@ -50,7 +50,7 @@ def test_repeated_scroll_to_same_anchor_uses_unique_navigation_event_and_modern_
+ 
+ 
+ def test_business_tables_are_arrow_safe_display_strings():
+-    source = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
++    source = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+     assert 'def _display_value' in source
+     assert 'def _display_df' in source
+     assert 'st.table(_display_df(rows)' in source
+diff --git a/tests/test_step40i_history_ux.py b/tests/test_step40i_history_ux.py
+index 63092a0..571222e 100644
+--- a/tests/test_step40i_history_ux.py
++++ b/tests/test_step40i_history_ux.py
+@@ -6,13 +6,13 @@ SOURCE = (ROOT / "app" / "views" / "design_change_history_page.py").read_text(en
+ 
+ def test_history_search_fields_are_separated():
+     assert '"Request ID"' in SOURCE
+-    assert 'key="phase3_history_request_id_filter"' in SOURCE
++    assert 'key="design_change_history_request_id_filter"' in SOURCE
+     assert '"제품"' in SOURCE
+-    assert 'key="phase3_history_version_filter"' in SOURCE
++    assert 'key="design_change_history_version_filter"' in SOURCE
+     assert '"PLANT"' in SOURCE
+-    assert 'key="phase3_history_plant_filter"' in SOURCE
++    assert 'key="design_change_history_plant_filter"' in SOURCE
+     assert '"업무 상태"' in SOURCE
+-    assert 'key="phase3_history_status_filter"' in SOURCE
++    assert 'key="design_change_history_status_filter"' in SOURCE
+ 
+ 
+ def test_history_is_paginated_by_fifteen_rows():
+@@ -24,7 +24,7 @@ def test_history_is_paginated_by_fifteen_rows():
+ 
+ 
+ def test_request_id_is_blue_bold_in_app_button():
+-    assert 'phase3_history_req_' in SOURCE
++    assert 'design_change_history_req_' in SOURCE
+     assert 'type="tertiary"' in SOURCE
+     assert 'color: #1565C0' in SOURCE
+     assert 'font-weight: 700' in SOURCE
+@@ -34,8 +34,8 @@ def test_request_id_is_blue_bold_in_app_button():
+ def test_request_detail_selectbox_is_removed_and_click_drives_detail_without_url_reload():
+     assert "상세 조회할 Request" not in SOURCE
+     assert 'st.query_params.get("history_request_id"' not in SOURCE
+-    assert 'phase3_history_selected_request_id' in SOURCE
+-    assert "render_phase3_request_detail(client, selected)" in SOURCE
++    assert 'design_change_history_selected_request_id' in SOURCE
++    assert "render_design_change_request_detail(client, selected)" in SOURCE
+ 
+ 
+ def test_history_uses_confirm_and_bom_reflect_business_labels():
+diff --git a/tests/test_step40k_history_master_navigation.py b/tests/test_step40k_history_master_navigation.py
+index 97a5546..271f6e5 100644
+--- a/tests/test_step40k_history_master_navigation.py
++++ b/tests/test_step40k_history_master_navigation.py
+@@ -7,11 +7,11 @@ MASTER = (ROOT / "app" / "views" / "master_query_page.py").read_text(encoding="u
+ 
+ 
+ def test_history_selection_is_session_local_and_cleared_when_leaving_page():
+-    assert "phase3_history_selected_request_id" in HISTORY
++    assert "design_change_history_selected_request_id" in HISTORY
+     assert "history_request_id=" not in HISTORY
+     assert "st.query_params" not in HISTORY
+     assert 'st.session_state.pop(' in APP
+-    assert '"phase3_history_selected_request_id"' in APP
++    assert '"design_change_history_selected_request_id"' in APP
+ 
+ 
+ def test_master_views_are_nested_directly_under_master_main_menu():
+diff --git a/tests/test_v3_final_fix4_candidate_ranking_policy.py b/tests/test_v3_final_fix4_candidate_ranking_policy.py
+index d2ec2d3..55a5bed 100644
+--- a/tests/test_v3_final_fix4_candidate_ranking_policy.py
++++ b/tests/test_v3_final_fix4_candidate_ranking_policy.py
+@@ -55,7 +55,7 @@ def test_recommendation_service_ranks_only_pass_candidates():
+ 
+ 
+ def test_candidate_ui_uses_pending_labels_and_pass_first_selection():
+-    source = Path("app/views/phase3_agent_view.py").read_text(encoding="utf-8")
++    source = Path("app/views/design_change_workflow_view.py").read_text(encoding="utf-8")
+ 
+     assert '"순위": row.get("rank") if row.get("rank") is not None else "-"' in source
+     assert '"추천 점수": row.get("score") if row.get("score") is not None else "평가 보류"' in source
+@@ -67,7 +67,7 @@ def test_candidate_ui_uses_pending_labels_and_pass_first_selection():
+ 
+ 
+ def test_candidate_ui_separates_pass_conditional_and_fail_groups():
+-    source = Path("app/views/phase3_agent_view.py").read_text(encoding="utf-8")
++    source = Path("app/views/design_change_workflow_view.py").read_text(encoding="utf-8")
+ 
+     assert "추천 가능 후보 (PASS)" in source
+     assert "평가 보류 후보 (CONDITIONAL)" in source
+diff --git a/tests/test_v3_final_fix_contract.py b/tests/test_v3_final_fix_contract.py
+index 4b02a7f..3d17481 100644
+--- a/tests/test_v3_final_fix_contract.py
++++ b/tests/test_v3_final_fix_contract.py
+@@ -8,7 +8,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
+ 
+ ROOT = Path(__file__).resolve().parents[1]
+ STREAMLIT_SOURCE = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
+-AGENT_VIEW_SOURCE = (ROOT / "app" / "views" / "phase3_agent_view.py").read_text(encoding="utf-8")
++AGENT_VIEW_SOURCE = (ROOT / "app" / "views" / "design_change_workflow_view.py").read_text(encoding="utf-8")
+ HISTORY_SOURCE = (ROOT / "app" / "views" / "design_change_history_page.py").read_text(encoding="utf-8")
+ 
+ 

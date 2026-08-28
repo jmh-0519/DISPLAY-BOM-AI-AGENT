@@ -7,7 +7,7 @@ from datetime import date
 from database import SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def _find_shared_parent_context(database: SQLiteDatabase) -> dict:
@@ -83,7 +83,7 @@ def test_common_parent_candidate_selection_requires_impact_approval_before_workf
     path = tmp_path / "impact-gate.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     context = _find_shared_parent_context(database)
 
     created = service.create_request(
@@ -149,7 +149,7 @@ def test_common_impact_attaches_model_specific_before_after_specs(tmp_path):
     path = tmp_path / "impact-model-spec.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     context = _find_shared_parent_context(database)
 
     created = service.create_request(
@@ -199,7 +199,7 @@ def test_conditional_common_candidate_requires_exception_before_shared_impact_ap
     path = tmp_path / "conditional-impact-gate.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     context = _find_shared_parent_context(database)
 
     created = service.create_request(

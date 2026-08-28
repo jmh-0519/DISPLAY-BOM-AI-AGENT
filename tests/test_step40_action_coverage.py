@@ -6,14 +6,14 @@ from pathlib import Path
 from database import SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
-def _service(tmp_path: Path, name: str) -> tuple[Phase3WorkflowService, SQLiteDatabase]:
+def _service(tmp_path: Path, name: str) -> tuple[DesignChangeWorkflowService, SQLiteDatabase]:
     target = tmp_path / f"{name}.db"
     rebuild_latest_database(target)
     database = SQLiteDatabase(target)
-    return Phase3WorkflowService(database), database
+    return DesignChangeWorkflowService(database), database
 
 
 def _add_rule_context(database: SQLiteDatabase) -> dict:
@@ -148,7 +148,7 @@ def _ensure_large_inventory(database: SQLiteDatabase, plant_code: str, item_code
 
 
 def _complete_from_analysis(
-    service: Phase3WorkflowService,
+    service: DesignChangeWorkflowService,
     analysis: dict,
     selections: list[dict],
 ) -> dict:

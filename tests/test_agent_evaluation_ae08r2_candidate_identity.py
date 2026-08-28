@@ -1,4 +1,4 @@
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def test_public_score_policy_keeps_identity_fields():
@@ -15,7 +15,7 @@ def test_public_score_policy_keeps_identity_fields():
         "rule_score": 0.0,
     }
 
-    Phase3WorkflowService._apply_public_candidate_score_policy(row)
+    DesignChangeWorkflowService._apply_public_candidate_score_policy(row)
 
     assert row["candidate_id"] == "CAN-1"
     assert row["action_id"] == "ACT-1"
@@ -37,7 +37,7 @@ def test_public_score_policy_does_not_remove_pass_identity_or_score():
         "rank": 1,
     }
 
-    Phase3WorkflowService._apply_public_candidate_score_policy(row)
+    DesignChangeWorkflowService._apply_public_candidate_score_policy(row)
 
     assert row["candidate_id"] == "CAN-2"
     assert row["action_id"] == "ACT-2"

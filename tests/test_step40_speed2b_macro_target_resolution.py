@@ -4,17 +4,17 @@ from datetime import date
 
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from agents.domain_intent_router import DEFAULT_DOMAIN_INTENT_ROUTER
 
 
 def _service(tmp_path):
     path = tmp_path / "speed2b.db"
     rebuild_latest_database(path)
-    return Phase3WorkflowService(SQLiteDatabase(path))
+    return DesignChangeWorkflowService(SQLiteDatabase(path))
 
 
-def _unique_named_material(service: Phase3WorkflowService):
+def _unique_named_material(service: DesignChangeWorkflowService):
     today = date.today().isoformat()
     with service.repository.database.connection() as connection:
         row = connection.execute(

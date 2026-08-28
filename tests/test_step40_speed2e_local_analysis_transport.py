@@ -33,7 +33,7 @@ def test_apply_and_request_tools_never_use_local_analysis_transport(monkeypatch)
 
 
 def test_local_analysis_dispatch_calls_same_phase3_capability(monkeypatch):
-    import mcp_server.capabilities.phase3 as phase3
+    import mcp_server.capabilities.design_change_workflow as design_change_workflow
 
     captured = {}
 

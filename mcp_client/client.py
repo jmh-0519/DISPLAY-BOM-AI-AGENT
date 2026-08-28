@@ -385,7 +385,7 @@ class DisplayBomMcpClient:
         - no Preview creation
         - no Production Apply
         """
-        from mcp_server.capabilities.phase3 import (
+        from mcp_server.capabilities.design_change_workflow import (
             analyze_design_change_candidates_data,
         )
 

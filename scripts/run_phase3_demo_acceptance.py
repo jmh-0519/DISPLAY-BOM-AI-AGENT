@@ -19,7 +19,7 @@ from database import SQLiteDatabase
 from mcp_client.client import DisplayBomMcpClient
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -230,7 +230,7 @@ def _run(target: Path) -> list[AcceptanceResult]:
     os.environ["BOM_MCP_LOCAL_ANALYSIS_FAST_PATH"] = "1"
 
     database = SQLiteDatabase(target)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     mcp_client = DisplayBomMcpClient()
     dispatch = DeterministicAnalysisMacroDispatch()
     gateway = BomGraphGateway()

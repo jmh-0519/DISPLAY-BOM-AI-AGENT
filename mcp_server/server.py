@@ -48,7 +48,7 @@ from mcp_server.capabilities.history import (
     list_bom_reviews_data,
     list_design_changes_data,
 )
-from mcp_server.capabilities.phase3 import (
+from mcp_server.capabilities.design_change_workflow import (
     apply_approved_change_request_data,
     create_design_change_request_data,
     analyze_design_change_candidates_data,

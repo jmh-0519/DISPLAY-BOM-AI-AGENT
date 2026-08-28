@@ -1,5 +1,5 @@
 from agents.bom_agent_node import BomAgentNode
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def test_quantity_change_fail_question_is_analysis_explain_even_without_candidates():
@@ -20,7 +20,7 @@ def test_quantity_change_fail_question_is_analysis_explain_even_without_candidat
 
 
 def test_action_only_analysis_explanation_contains_inventory_reason():
-    service = object.__new__(Phase3WorkflowService)
+    service = object.__new__(DesignChangeWorkflowService)
 
     result = service.explain_analysis_session({
         "analysis_id": "ANA-1",

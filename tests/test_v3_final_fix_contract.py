@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from database import SQLiteDatabase, SchemaManager
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +20,7 @@ def _service_with_version(tmp_path):
             "INSERT INTO item_master(item_code,item_type,item_name) VALUES('FA','VERSION','FA')"
         )
         con.execute("INSERT INTO version_master(version_code) VALUES('FA')")
-    return Phase3WorkflowService(database)
+    return DesignChangeWorkflowService(database)
 
 
 def test_add_target_type_is_recovered_from_explicit_material_wording(tmp_path):

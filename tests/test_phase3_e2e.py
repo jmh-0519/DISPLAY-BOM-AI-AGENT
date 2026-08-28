@@ -7,14 +7,14 @@ import pytest
 from database import SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
-def make_service(tmp_path, name: str) -> tuple[Phase3WorkflowService, SQLiteDatabase]:
+def make_service(tmp_path, name: str) -> tuple[DesignChangeWorkflowService, SQLiteDatabase]:
     target = tmp_path / f"{name}.db"
     rebuild_latest_database(target)
     database = SQLiteDatabase(target)
-    return Phase3WorkflowService(database), database
+    return DesignChangeWorkflowService(database), database
 
 
 def iter_dynamic_replace_contexts(database: SQLiteDatabase):
@@ -107,7 +107,7 @@ def iter_dynamic_replace_contexts(database: SQLiteDatabase):
 
 
 def create_evaluated_replace_with_status(
-    service: Phase3WorkflowService,
+    service: DesignChangeWorkflowService,
     database: SQLiteDatabase,
     desired_status: str,
 ) -> tuple[dict, dict, dict]:
@@ -149,7 +149,7 @@ def create_evaluated_replace_with_status(
 
 
 def complete_candidate_selection(
-    service: Phase3WorkflowService,
+    service: DesignChangeWorkflowService,
     request_id: str,
     selections: list[dict],
 ) -> dict:

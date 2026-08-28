@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from agents.bom_mcp_tool_node import BomMcpToolNode
 from agents.design_change_workflow_state import create_initial_design_change_state
 from mcp_server import server
-from mcp_server.capabilities import phase3
+from mcp_server.capabilities import design_change_workflow
 
 
 PHASE3_TOOLS = {
@@ -82,8 +82,8 @@ def test_create_request_tool_schema_exposes_phase3_enums():
 def test_phase3_capability_delegates_to_service(monkeypatch):
     service = Mock()
     service.create_request.return_value = {"request_id": "REQ", "workflow_status": "REQUESTED"}
-    monkeypatch.setattr(phase3, "_service", lambda: service)
-    result = phase3.create_design_change_request_data(
+    monkeypatch.setattr(design_change_workflow, "_service", lambda: service)
+    result = design_change_workflow.create_design_change_request_data(
         {"version_code": "FA"}, [{"action_type": "ADD"}],
     )
     assert result["request_id"] == "REQ"

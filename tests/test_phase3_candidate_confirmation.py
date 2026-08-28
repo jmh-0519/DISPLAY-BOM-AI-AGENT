@@ -4,7 +4,7 @@ import pytest
 
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from tests.test_phase3_e2e import create_evaluated_replace_with_status, iter_dynamic_replace_contexts
 
 
@@ -12,7 +12,7 @@ def _service(tmp_path, name: str):
     path = tmp_path / f"{name}.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
-    return Phase3WorkflowService(database), database
+    return DesignChangeWorkflowService(database), database
 
 
 def _selection(created: dict, candidate: dict) -> list[dict]:

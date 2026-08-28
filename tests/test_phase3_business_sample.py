@@ -7,7 +7,7 @@ from scripts.seed_phase3_business_sample import seed_phase3_business_sample
 from scripts.verify_phase3_business_sample import CANDIDATE_FILTER, verify
 from repositories.sqlite_repository import SQLiteBomRepository
 from services.repository_bom_service import RepositoryBomService
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def make_database(tmp_path) -> SQLiteDatabase:
@@ -68,7 +68,7 @@ def test_latest_seed_preserves_pre_step27_workflow_history(tmp_path):
 
 def test_eol_material_replace_runs_through_two_approvals(tmp_path):
     database = make_database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     service.create_request(
         {
             "request_id": "REQ-BIZ-EOL",
@@ -137,7 +137,7 @@ def test_eol_material_replace_runs_through_two_approvals(tmp_path):
 
 def test_business_request_normalizes_eol_reason_alias(tmp_path):
     database = make_database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     created = service.create_request(
         {
             "request_id": "REQ-BIZ-EOL-ALIAS",
@@ -165,7 +165,7 @@ def test_business_request_normalizes_eol_reason_alias(tmp_path):
 
 def test_request_resolves_unique_direct_parent_from_product_bom(tmp_path):
     database = make_database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     created = service.create_request(
         {
             "request_id": "REQ-BIZ-PARENT-RESOLVE",
@@ -196,7 +196,7 @@ def test_request_resolves_unique_direct_parent_from_product_bom(tmp_path):
 
 def test_common_assy_reports_two_models_and_applies_multi_action(tmp_path):
     database = make_database(tmp_path)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
     service.create_request(
         {
             "request_id": "REQ-BIZ-COMMON",

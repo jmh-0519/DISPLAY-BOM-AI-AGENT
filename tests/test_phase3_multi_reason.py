@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from database import SchemaManager, SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from services.change_reason_resolver import ChangeReasonResolver
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 from services.supply_evaluation_service import SupplyEvaluationService
 
 
@@ -50,7 +50,7 @@ def test_resolver_preserves_primary_and_secondary_reasons_in_natural_language_or
 
 
 def test_create_request_persists_all_reasons_and_primary_secondary_roles(tmp_path):
-    service = Phase3WorkflowService(make_database(tmp_path))
+    service = DesignChangeWorkflowService(make_database(tmp_path))
     created = service.create_request(
         {
             "request_id": "REQ-MULTI-1",
@@ -79,7 +79,7 @@ def test_create_request_persists_all_reasons_and_primary_secondary_roles(tmp_pat
 
 
 def test_candidate_evaluation_uses_all_persisted_reason_codes(tmp_path):
-    service = Phase3WorkflowService(make_database(tmp_path))
+    service = DesignChangeWorkflowService(make_database(tmp_path))
     service.create_request(
         {
             "request_id": "REQ-MULTI-2",

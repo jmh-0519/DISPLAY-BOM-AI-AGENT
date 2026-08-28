@@ -697,7 +697,7 @@ class DomainIntentRouter:
         """Extract a business target name when no explicit source item code exists.
 
         This helper is only a routing signal. The authoritative item resolution
-        happens in Phase3WorkflowService against the scoped product BOM.
+        happens in DesignChangeWorkflowService against the scoped product BOM.
         """
         raw = " ".join(str(user_query or "").strip().split())
         if not raw or not self.is_phase3_change_request(raw):

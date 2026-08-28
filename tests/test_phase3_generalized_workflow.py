@@ -5,7 +5,7 @@ from datetime import date
 
 from database import SchemaManager, SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def make_database(tmp_path) -> SQLiteDatabase:
@@ -73,7 +73,7 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
 def test_minimal_natural_language_request_derives_metadata_and_bom_context(tmp_path):
     database = make_database(tmp_path)
     case = find_dynamic_material_case(database)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
 
     created = service.create_request(
         {
@@ -106,7 +106,7 @@ def test_unregistered_material_uses_dynamic_candidate_discovery_and_attribute_ev
     database = make_database(tmp_path)
     case = find_dynamic_material_case(database)
     repository = SQLiteDesignChangeRepository(database)
-    service = Phase3WorkflowService(database)
+    service = DesignChangeWorkflowService(database)
 
     assert repository.find_registered_candidates(
         case["source_item_code"], date.today().isoformat()

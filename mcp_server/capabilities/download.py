@@ -7,10 +7,10 @@ from mcp_server.capabilities.query import get_bom_data
 from mcp_server.capabilities.design_change import generate_design_change_report_data
 from services.bom_excel_export_service import BomExcelExportService
 from services.design_change_word_report_service import DesignChangeWordReportService
-from services.phase3_completion_word_report_service import Phase3CompletionWordReportService
+from services.design_change_completion_report_service import DesignChangeCompletionReportService
 from core.database_config import sqlite_database_path
 from database import SQLiteDatabase
-from services.phase3_workflow_service import Phase3WorkflowService
+from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -83,10 +83,10 @@ def export_phase3_completion_report_data(request_id: str) -> dict:
     normalized = str(request_id or "").strip().upper()
     if not normalized:
         raise ValueError("request_id는 필수입니다.")
-    report = Phase3WorkflowService(SQLiteDatabase(sqlite_database_path())).get_completion_report_data(normalized)
+    report = DesignChangeWorkflowService(SQLiteDatabase(sqlite_database_path())).get_completion_report_data(normalized)
     if not report.get("success"):
         return report
-    content = Phase3CompletionWordReportService().build(report)
+    content = DesignChangeCompletionReportService().build(report)
     return _file_result(
         f"{normalized}_design_change_completion_report.docx", DOCX_MIME, content,
         request_id=normalized, report_stage="COMPLETED",
