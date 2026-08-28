@@ -342,7 +342,7 @@ def test_graph_updates_workflow_after_streamlit_direct_action():
         mcp_client=mcp_client,
         skill_context="Design Change workflow",
     )
-    thread_id = "phase3-ui-sync"
+    thread_id = "design-change-ui-sync"
     graph.run("후보를 확인해줘", thread_id=thread_id)
 
     workflow = graph.get_design_change_state(thread_id)
@@ -380,12 +380,12 @@ def test_bom_query_normalization_preserves_design_change_business_intent():
     assert BomAgentGraph._normalize_bom_query(query) == query
 
 
-def test_step40g_delete_compound_bom_question_is_not_normalized_to_simple_bom_lookup():
+def test_delete_compound_bom_question_is_not_normalized_to_simple_bom_lookup():
     raw = "LTA650HR11-001 모델 P03 PLANT BOM을 확인해서 0001-310701 자재를 제거하자."
     assert BomAgentGraph._normalize_bom_query(raw) == raw
 
 
-def test_step40n_tool_execution_error_stops_without_llm_retry():
+def test_tool_execution_error_stops_without_llm_retry():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = make_tool_definitions()
@@ -418,7 +418,7 @@ def test_step40n_tool_execution_error_stops_without_llm_retry():
 
 
 
-def test_step40n2_failed_candidate_analysis_keeps_error_answer_visible():
+def test_failed_candidate_analysis_keeps_error_answer_visible():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [{

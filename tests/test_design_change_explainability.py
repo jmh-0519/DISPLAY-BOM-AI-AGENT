@@ -9,7 +9,7 @@ from services.rule_engine import RuleEngine
 
 
 def make_database(tmp_path) -> SQLiteDatabase:
-    target = tmp_path / "phase3-explainability.db"
+    target = tmp_path / "design-change-explainability.db"
     shutil.copyfile("data/test_display_bom.db", target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()

@@ -231,7 +231,7 @@ def find_dynamic_add_context(database: SQLiteDatabase) -> dict:
 
 
 def test_dynamic_replace_runs_through_candidate_approval_preview_final_approval_and_apply(tmp_path):
-    service, database = make_service(tmp_path, "phase3-e2e-apply")
+    service, database = make_service(tmp_path, "design-change-e2e-apply")
     context, created, selected = create_evaluated_replace_with_status(
         service, database, "PASS"
     )
@@ -290,7 +290,7 @@ def test_dynamic_replace_runs_through_candidate_approval_preview_final_approval_
 
 
 def test_dynamic_add_action_is_evaluated_as_one_direct_candidate(tmp_path):
-    service, database = make_service(tmp_path, "phase3-e2e-add")
+    service, database = make_service(tmp_path, "design-change-e2e-add")
     context = find_dynamic_add_context(database)
 
     created = service.create_request(
@@ -319,7 +319,7 @@ def test_dynamic_add_action_is_evaluated_as_one_direct_candidate(tmp_path):
 
 
 def test_dynamic_conditional_candidate_requires_exception_before_final_approval(tmp_path):
-    service, database = make_service(tmp_path, "phase3-e2e-conditional")
+    service, database = make_service(tmp_path, "design-change-e2e-conditional")
     _context, created, selected = create_evaluated_replace_with_status(
         service, database, "CONDITIONAL"
     )

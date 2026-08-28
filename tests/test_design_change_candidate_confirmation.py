@@ -5,7 +5,7 @@ import pytest
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
 from services.design_change_workflow_service import DesignChangeWorkflowService
-from tests.test_phase3_e2e import create_evaluated_replace_with_status, iter_dynamic_replace_contexts
+from tests.test_design_change_e2e import create_evaluated_replace_with_status, iter_dynamic_replace_contexts
 
 
 def _service(tmp_path, name: str):

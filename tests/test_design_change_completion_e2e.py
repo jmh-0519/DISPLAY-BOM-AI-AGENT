@@ -6,7 +6,7 @@ from agents.design_change_workflow_state import apply_design_change_tool_result
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
 from services.design_change_workflow_service import DesignChangeWorkflowService
-from tests.test_phase3_e2e import iter_dynamic_replace_contexts
+from tests.test_design_change_e2e import iter_dynamic_replace_contexts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,7 +51,7 @@ def _selection(candidate: dict) -> list[dict]:
     }]
 
 
-def test_phase3_history_is_empty_of_new_analysis_until_explicit_request_commit(tmp_path):
+def test_design_change_history_is_empty_of_new_analysis_until_explicit_request_commit(tmp_path):
     service, database = _service(tmp_path)
     before_ids = {row["request_id"] for row in _history(database)}
 

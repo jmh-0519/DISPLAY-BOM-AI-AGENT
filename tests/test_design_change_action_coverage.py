@@ -172,7 +172,7 @@ def _complete_from_analysis(
 
 
 def test_add_without_new_item_discovers_ranked_candidates_and_applies_selected_one(tmp_path):
-    service, database = _service(tmp_path, "step40-add-discovery")
+    service, database = _service(tmp_path, "design-change-add-discovery")
     context = _add_rule_context(database)
 
     analysis = None
@@ -220,7 +220,7 @@ def test_add_without_new_item_discovers_ranked_candidates_and_applies_selected_o
 
 
 def test_delete_runs_without_candidate_selection_through_apply(tmp_path):
-    service, database = _service(tmp_path, "step40-delete")
+    service, database = _service(tmp_path, "design-change-delete")
     context = _action_context(database, "DELETE", "MATERIAL")
     relation = context["relation"]
 
@@ -261,7 +261,7 @@ def test_delete_runs_without_candidate_selection_through_apply(tmp_path):
 
 
 def test_quantity_change_uses_new_bom_quantity_only_and_applies(tmp_path):
-    service, database = _service(tmp_path, "step40-quantity")
+    service, database = _service(tmp_path, "design-change-quantity")
     context = _action_context(database, "QUANTITY_CHANGE", "MATERIAL")
     relation = context["relation"]
     _ensure_large_inventory(database, context["plant_code"], relation["child_item_code"])
@@ -312,7 +312,7 @@ def test_quantity_change_uses_new_bom_quantity_only_and_applies(tmp_path):
 
 
 def test_add_analysis_marks_already_active_same_bom_candidate_fail_before_preview(tmp_path):
-    service, database = _service(tmp_path, "step40-add-duplicate-filter")
+    service, database = _service(tmp_path, "design-change-add-duplicate-filter")
     context = _add_rule_context(database)
 
     initial = None
@@ -381,8 +381,8 @@ def test_add_analysis_marks_already_active_same_bom_candidate_fail_before_previe
     assert any("이미 활성 자재" in reason for reason in duplicate["decision_reasons"])
 
 
-def test_step40n_quantity_change_without_explicit_reason_uses_user_request(tmp_path):
-    service, database = _service(tmp_path, "step40-quantity-default-reason")
+def test_quantity_change_without_explicit_reason_uses_user_request(tmp_path):
+    service, database = _service(tmp_path, "design-change-quantity-default-reason")
     context = _action_context(database, "QUANTITY_CHANGE", "MATERIAL")
     relation = context["relation"]
     _ensure_large_inventory(database, context["plant_code"], relation["child_item_code"])

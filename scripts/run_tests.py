@@ -5,6 +5,8 @@ import sys
 import uuid
 from pathlib import Path
 
+from scripts.test_suite_manifest import get_suite_files
+
 
 def main() -> int:
     project_root = Path(__file__).resolve().parents[1]
@@ -43,6 +45,34 @@ def main() -> int:
     import pytest
 
     pytest_arguments = sys.argv[1:]
+
+    suite_name = None
+    normalized_arguments: list[str] = []
+    index = 0
+    while index < len(pytest_arguments):
+        argument = pytest_arguments[index]
+        if argument == "--suite":
+            if index + 1 >= len(pytest_arguments):
+                raise SystemExit("--suite requires a value: quick, core, evaluation, legacy, full")
+            suite_name = pytest_arguments[index + 1]
+            index += 2
+            continue
+        if argument.startswith("--suite="):
+            suite_name = argument.split("=", 1)[1]
+            index += 1
+            continue
+        normalized_arguments.append(argument)
+        index += 1
+
+    pytest_arguments = normalized_arguments
+
+    if suite_name is not None:
+        try:
+            suite_files = get_suite_files(project_root, suite_name)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        if suite_files:
+            pytest_arguments = [*suite_files, *pytest_arguments]
 
     if not pytest_arguments:
         pytest_arguments = ["-q"]

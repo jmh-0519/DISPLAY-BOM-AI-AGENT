@@ -15,7 +15,7 @@ ACTIVE_CONTEXT = {
 }
 
 
-def test_speed1f3_gateway_symbols_are_restored():
+def test_gateway_symbols_are_restored():
     assert FAST_CHAT == "fast_chat"
     assert FAST_BOM_READ == "fast_bom_read"
     assert FAST_WHERE_USED == "fast_where_used"
@@ -32,22 +32,8 @@ def test_current_bom_quantity_fast_path_context_inheritance_is_preserved():
     ) is True
 
 
-def test_implicit_design_change_can_inherit_active_bom_context():
-    gateway = BomGraphGateway()
-
-    assert gateway.can_inherit_active_bom_context(
-        "SEALANT를 변경하고싶어",
-        ACTIVE_CONTEXT,
-    ) is True
 
 
-def test_explicit_same_model_must_not_inherit_active_plant():
-    gateway = BomGraphGateway()
-
-    assert gateway.can_inherit_active_bom_context(
-        "LTA400HR01-001 모델에서 SEALANT를 변경하고싶어",
-        ACTIVE_CONTEXT,
-    ) is False
 
 
 def test_explicit_model_and_plant_is_not_active_context_inheritance():

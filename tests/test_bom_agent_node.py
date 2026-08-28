@@ -196,7 +196,7 @@ def test_agent_node_rejects_empty_messages():
         node({})
 
 
-def test_phase3_recommendation_exposes_analysis_without_request_creation():
+def test_design_change_recommendation_exposes_analysis_without_request_creation():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -232,7 +232,7 @@ def test_phase3_recommendation_exposes_analysis_without_request_creation():
     assert client.create_agent_completion.call_args.kwargs["tool_choice"] == "auto"
 
 
-def test_phase3_recommendation_exposes_analysis_after_bom_result():
+def test_design_change_recommendation_exposes_analysis_after_bom_result():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -278,7 +278,7 @@ def test_phase3_recommendation_exposes_analysis_after_bom_result():
     assert "evaluate_replacement_candidates" not in names
 
 
-def test_phase3_explicit_product_and_item_uses_deterministic_analysis_macro():
+def test_design_change_explicit_product_and_item_uses_deterministic_analysis_macro():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -338,7 +338,7 @@ def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
     assert kwargs["tool_choice"] == "auto"
 
 
-def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
+def test_design_change_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
     """REQUESTED is a legacy/backward-compatible state after STEP34.
 
     In the active Design Change path, candidate discovery/evaluation is completed in the
@@ -376,7 +376,7 @@ def test_phase3_requested_keeps_legacy_candidate_evaluation_available_without_fo
     assert client.create_agent_completion.call_args.kwargs["tool_choice"] == "auto"
 
 
-def test_phase3_multi_reason_change_request_uses_macro_without_new_item():
+def test_design_change_multi_reason_change_request_uses_macro_without_new_item():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -406,7 +406,7 @@ def test_phase3_multi_reason_change_request_uses_macro_without_new_item():
     assert action["old_item_code"] == "0001-200010"
     assert "new_item_code" not in action
 
-def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis():
+def test_design_change_short_followup_reuses_recent_product_item_context_for_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -435,7 +435,7 @@ def test_phase3_short_followup_reuses_recent_product_item_context_for_analysis()
     assert tool_call["args"]["request"]["plant_code"] == "P01"
     assert tool_call["args"]["actions"][0]["old_item_code"] == "0001-200010"
 
-def test_phase3_missing_plant_forces_target_scoped_plant_discovery_before_analysis():
+def test_design_change_missing_plant_forces_target_scoped_plant_discovery_before_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -463,7 +463,7 @@ def test_phase3_missing_plant_forces_target_scoped_plant_discovery_before_analys
     assert tool_call["args"] == {"reference_code": "MODEL-123"}
 
 
-def test_phase3_selected_plant_in_followup_reuses_original_request_and_forces_analysis():
+def test_design_change_selected_plant_in_followup_reuses_original_request_and_forces_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -492,7 +492,7 @@ def test_phase3_selected_plant_in_followup_reuses_original_request_and_forces_an
     assert tool_call["args"]["request"]["plant_code"] == "P01"
     assert tool_call["args"]["actions"][0]["old_item_code"] == "1234-567890"
 
-def test_step40n_exact_delete_without_reason_uses_macro_default_reason_policy():
+def test_exact_delete_without_reason_uses_macro_default_reason_policy():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -518,7 +518,7 @@ def test_step40n_exact_delete_without_reason_uses_macro_default_reason_policy():
     assert action["action_type"] == "DELETE"
     assert action["old_item_code"] == "0001-310701"
 
-def test_step40g_exact_delete_with_reason_uses_macro_without_bom_lookup():
+def test_exact_delete_with_reason_uses_macro_without_bom_lookup():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -543,7 +543,7 @@ def test_step40g_exact_delete_with_reason_uses_macro_without_bom_lookup():
     assert action["action_type"] == "DELETE"
     assert action["old_item_code"] == "0001-310701"
 
-def test_step40g_delete_without_business_reason_is_phase3_change_intent():
+def test_delete_without_business_reason_is_phase3_change_intent():
     assert BomAgentNode._is_design_change_request(
         "LTA650HR11-001 P03에서 0001-310701 자재를 제거하자"
     )
@@ -555,7 +555,7 @@ def test_step40g_delete_without_business_reason_is_phase3_change_intent():
     )
 
 
-def test_step40g_bom_observation_name_delete_continues_with_macro_analysis():
+def test_bom_observation_name_delete_continues_with_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -594,7 +594,7 @@ def test_step40g_bom_observation_name_delete_continues_with_macro_analysis():
     assert action["action_type"] == "DELETE"
     assert action.get("target_item_name")
 
-def test_step40g_completed_request_does_not_block_new_delete_macro_analysis():
+def test_completed_request_does_not_block_new_delete_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -627,7 +627,7 @@ def test_step40g_completed_request_does_not_block_new_delete_macro_analysis():
     assert "OLD-MODEL" not in str(tool_call["args"])
     assert action["action_type"] == "DELETE"
 
-def test_step40j_where_used_without_plant_forces_scoped_plant_lookup():
+def test_where_used_without_plant_forces_scoped_plant_lookup():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -648,7 +648,7 @@ def test_step40j_where_used_without_plant_forces_scoped_plant_lookup():
     assert tool_call["args"]["reference_code"] == "0001-310501"
 
 
-def test_step40j_where_used_with_plant_forces_reverse_bom_tool():
+def test_where_used_with_plant_forces_reverse_bom_tool():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -669,7 +669,7 @@ def test_step40j_where_used_with_plant_forces_reverse_bom_tool():
     assert tool_call["args"] == {"item_code": "0001-310501", "plant_code": "P01"}
 
 
-def test_step40n_quantity_change_without_business_reason_uses_macro_analysis():
+def test_quantity_change_without_business_reason_uses_macro_analysis():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -693,7 +693,7 @@ def test_step40n_quantity_change_without_business_reason_uses_macro_analysis():
     assert action["old_item_code"] == "0001-310701"
     assert action["new_quantity"] == 2
 
-def test_step40m_exact_quantity_change_with_reason_uses_macro_without_bom_lookup():
+def test_exact_quantity_change_with_reason_uses_macro_without_bom_lookup():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -720,7 +720,7 @@ def test_step40m_exact_quantity_change_with_reason_uses_macro_without_bom_lookup
     assert action["old_item_code"] == "0001-310701"
     assert action["new_quantity"] == 2
 
-def test_step40m_name_based_quantity_change_uses_macro_target_resolution():
+def test_name_based_quantity_change_uses_macro_target_resolution():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
@@ -750,6 +750,6 @@ def test_step40m_name_based_quantity_change_uses_macro_target_resolution():
     assert action["new_quantity"] == 2
     assert action.get("target_item_name")
 
-def test_step40m_read_only_quantity_question_is_not_explicit_quantity_change():
+def test_read_only_quantity_question_is_not_explicit_quantity_change():
     assert not BomAgentNode._is_quantity_change_instruction("이 자재의 현재 수량이 얼마야?")
     assert BomAgentNode._is_quantity_change_instruction("이 자재 수량을 2로 바꿔줘")

@@ -9,7 +9,7 @@ from agents.domain_intent_router import DEFAULT_DOMAIN_INTENT_ROUTER
 
 
 def _service(tmp_path):
-    path = tmp_path / "speed2b.db"
+    path = tmp_path / "macro-target-resolution.db"
     rebuild_latest_database(path)
     return DesignChangeWorkflowService(SQLiteDatabase(path))
 

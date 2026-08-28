@@ -11,7 +11,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def make_database(tmp_path) -> SQLiteDatabase:
-    target = tmp_path / "phase3-business.db"
+    target = tmp_path / "design-change-business.db"
     shutil.copyfile("data/test_display_bom.db", target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()

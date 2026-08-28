@@ -27,7 +27,7 @@ DESIGN_CHANGE_TOOLS = {
 }
 
 
-def test_phase3_mcp_tools_are_registered():
+def test_design_change_mcp_tools_are_registered():
     for name in DESIGN_CHANGE_TOOLS:
         assert callable(getattr(server, name))
 
@@ -79,7 +79,7 @@ def test_create_request_tool_schema_exposes_phase3_enums():
     assert "evaluation_items" not in additional_data_tool.input_schema["properties"]
 
 
-def test_phase3_capability_delegates_to_service(monkeypatch):
+def test_design_change_capability_delegates_to_service(monkeypatch):
     service = Mock()
     service.create_request.return_value = {"request_id": "REQ", "workflow_status": "REQUESTED"}
     monkeypatch.setattr(design_change_workflow, "_service", lambda: service)
@@ -222,7 +222,7 @@ def test_dedicated_candidate_selection_can_start_workflow_without_impact_gate():
     assert result["requires_exception"] is True
 
 
-def test_phase3_agent_rejects_invalid_transition_and_request_mismatch():
+def test_design_change_agent_rejects_invalid_transition_and_request_mismatch():
     with pytest.raises(ValueError, match="cannot run"):
         BomMcpToolNode._validate_design_change_request(
             "apply_approved_change_request", create_initial_design_change_state(),

@@ -8,7 +8,7 @@ from repositories.design_change_repository import SQLiteDesignChangeRepository
 from scripts.database_lifecycle import rebuild_latest_database
 
 
-PHASE3_TABLES = {
+DESIGN_CHANGE_TABLES = {
     "item_attribute_values",
     "substitution_relations",
     "supplier_items",
@@ -40,7 +40,7 @@ PHASE3_TABLES = {
 
 
 def make_latest_database(tmp_path) -> SQLiteDatabase:
-    target = tmp_path / "phase3-schema-repository.db"
+    target = tmp_path / "design-change-schema-repository.db"
     rebuild_latest_database(target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()
@@ -114,7 +114,7 @@ def find_dynamic_replace_reason(database: SQLiteDatabase, target_type: str) -> d
     return dict(row)
 
 
-def test_phase3_schema_is_idempotent_and_complete(tmp_path):
+def test_design_change_schema_is_idempotent_and_complete(tmp_path):
     database = make_latest_database(tmp_path)
 
     # Applying the current schema repeatedly must be safe.
@@ -130,7 +130,7 @@ def test_phase3_schema_is_idempotent_and_complete(tmp_path):
         }
         foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
 
-    assert PHASE3_TABLES <= names
+    assert DESIGN_CHANGE_TABLES <= names
     assert not any(name.startswith("phase3_") for name in names)
     assert foreign_key_errors == []
 

@@ -11,7 +11,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 def _database(tmp_path) -> SQLiteDatabase:
-    path = tmp_path / "step40c.db"
+    path = tmp_path / "add-plant-quantity-policy.db"
     rebuild_latest_database(path)
     return SQLiteDatabase(path)
 

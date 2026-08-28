@@ -122,7 +122,7 @@ def test_usage_type_is_not_a_design_change_reason_and_unknown_reason_stops(tmp_p
     assert "COMMONIZATION" in reason_codes
 
 
-def test_step40n_missing_reason_uses_registered_user_request_fallback(tmp_path):
+def test_missing_reason_uses_registered_user_request_fallback(tmp_path):
     repository = SQLiteDesignChangeRepository(make_database(tmp_path))
     resolver = ChangeReasonResolver(repository)
 

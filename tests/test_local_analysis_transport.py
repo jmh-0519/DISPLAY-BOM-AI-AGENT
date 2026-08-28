@@ -32,7 +32,7 @@ def test_apply_and_request_tools_never_use_local_analysis_transport(monkeypatch)
         assert DisplayBomMcpClient._use_local_analysis_fast_path(tool_name) is False
 
 
-def test_local_analysis_dispatch_calls_same_phase3_capability(monkeypatch):
+def test_local_analysis_dispatch_calls_same_design_change_capability(monkeypatch):
     import mcp_server.capabilities.design_change_workflow as design_change_workflow
 
     captured = {}
@@ -46,7 +46,7 @@ def test_local_analysis_dispatch_calls_same_phase3_capability(monkeypatch):
         }
 
     monkeypatch.setattr(
-        phase3,
+        design_change_workflow,
         "analyze_design_change_candidates_data",
         fake_analyze_design_change_candidates_data,
     )

@@ -257,7 +257,7 @@ def test_assy_item_name_must_match_process_name(database):
             )
 
 
-def test_step32_schema_has_persisted_supply_and_demand_evidence(tmp_path):
+def test_schema_has_persisted_supply_and_demand_evidence(tmp_path):
     database = SQLiteDatabase(tmp_path / "step32-schema.db")
     SchemaManager(database).initialize()
     assert SchemaManager(database).current_version() == 6

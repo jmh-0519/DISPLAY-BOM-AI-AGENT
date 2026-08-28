@@ -60,7 +60,7 @@ def test_add_without_specific_target_is_rejected_before_analysis(tmp_path):
             },
         )
 
-def test_phase3_management_menu_is_not_exposed_in_main_navigation():
+def test_design_change_management_menu_is_not_exposed_in_main_navigation():
     assert '"phase3": "Design Change Rule / History"' not in STREAMLIT_SOURCE
     assert '_menu_link("Design Change Rule / History", "phase3")' not in STREAMLIT_SOURCE
     assert 'elif menu == "Design Change Rule / History"' not in STREAMLIT_SOURCE
