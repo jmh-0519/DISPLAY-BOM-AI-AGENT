@@ -52,11 +52,11 @@ class LlmContextCompactor:
 
     ID_KEYS = (
         "analysis_id", "request_id", "action_id", "candidate_id",
-        "approval_id", "application_id", "change_id", "review_id",
+        "approval_id", "application_id",
     )
     STATUS_KEYS = (
         "status", "workflow_status", "evaluation_status", "analysis_status",
-        "validation_status", "review_result", "result", "success",
+        "validation_status", "result", "success",
         "request_created", "production_bom_modified",
     )
     SUMMARY_KEYS = (

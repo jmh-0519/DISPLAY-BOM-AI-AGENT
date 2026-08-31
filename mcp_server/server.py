@@ -186,10 +186,7 @@ def export_bom_excel(plant_code: str, product_id: str, as_of_date: str | None = 
 
 @mcp.tool()
 def export_design_change_completion_report(request_id: str) -> dict:
-    """Apply가 완료된 Design Change Request의 설계변경 완료 Word 보고서를 생성합니다.
-
-    현재 Design Change 활성 프로세스는 별도 품평회 단계를 사용하지 않습니다.
-    """
+    """Apply가 완료된 Design Change Request의 설계변경 완료 Word 보고서를 생성합니다."""
     return export_design_change_completion_report_data(request_id=request_id)
 
 @mcp.tool()

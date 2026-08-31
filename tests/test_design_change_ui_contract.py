@@ -4,10 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_agent_sidebar_has_no_fixed_plant_selector_or_review_history_menu():
+def test_agent_sidebar_has_no_fixed_plant_selector():
     source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
     assert '"Agent 작업 PLANT"' not in source
-    assert '"품평회 이력"' not in source
     assert "PLANT는 좌측에서 고정하지 않습니다" not in source
     assert "plant_options" in source
     assert "pending_plant_selection" in source

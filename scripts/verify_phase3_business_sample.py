@@ -4,6 +4,8 @@ import argparse
 import sqlite3
 from pathlib import Path
 
+from database.schema import REMOVED_LEGACY_TABLES
+
 
 EXPECTED = {
     "business_versions": 11,
@@ -16,11 +18,6 @@ EXPECTED = {
     "business_rules": 10,
     "rule_conditions": 30,
     "business_bom_rows": 48,
-    "baseline_design_changes": 9,
-    "baseline_design_change_items": 7,
-    "baseline_review_boms": 5,
-    "baseline_bom_reviews": 5,
-    "baseline_workflow_events": 2,
 }
 
 CANDIDATE_FILTER = """(
@@ -91,22 +88,19 @@ def verify(database_path: Path) -> dict[str, int]:
                    )
                    SELECT COUNT(DISTINCT bom_id) FROM sample_rows"""
             ).fetchone()[0],
-            "baseline_design_changes": connection.execute(
-                "SELECT COUNT(*) FROM design_changes"
-            ).fetchone()[0],
-            "baseline_design_change_items": connection.execute(
-                "SELECT COUNT(*) FROM design_change_items"
-            ).fetchone()[0],
-            "baseline_review_boms": connection.execute(
-                "SELECT COUNT(*) FROM review_boms"
-            ).fetchone()[0],
-            "baseline_bom_reviews": connection.execute(
-                "SELECT COUNT(*) FROM bom_reviews"
-            ).fetchone()[0],
-            "baseline_workflow_events": connection.execute(
-                "SELECT COUNT(*) FROM workflow_events"
-            ).fetchone()[0],
         }
+        existing_tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        unexpected_legacy = sorted(set(REMOVED_LEGACY_TABLES) & existing_tables)
+        if unexpected_legacy:
+            raise RuntimeError(
+                f"Removed legacy tables remain in business DB: {unexpected_legacy}"
+            )
+
         # Production E-BOM is mutable after successful Phase3 Apply.
         # The baseline sample starts at 48 BOM history rows, but REPLACE/ADD/
         # QUANTITY_CHANGE/DELETE can legitimately append effective-dated BOM

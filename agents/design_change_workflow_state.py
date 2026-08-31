@@ -50,9 +50,6 @@ class DesignChangeWorkflowState(TypedDict, total=False):
     preview_status: WorkflowStatus
     preview_revision: str | None
     preview_result: dict | None
-    review_status: WorkflowStatus
-    review_result: dict | None
-    reviewed_preview_revision: str | None
     approval_status: WorkflowStatus
     approval_decision: Literal["APPROVE", "REJECT"] | None
     approval_comment: str | None
@@ -62,9 +59,6 @@ class DesignChangeWorkflowState(TypedDict, total=False):
     apply_result: dict | None
     application_id: str | None
     report_status: WorkflowStatus
-    change_id: str | None
-    review_id: str | None
-    ai_review_status: WorkflowStatus
     report_result: dict | None
     current_step: DesignChangeStep
     request_id: str | None
@@ -108,9 +102,6 @@ def create_initial_design_change_state() -> DesignChangeWorkflowState:
         "preview_status": "NOT_STARTED",
         "preview_revision": None,
         "preview_result": None,
-        "review_status": "NOT_STARTED",
-        "review_result": None,
-        "reviewed_preview_revision": None,
         "approval_status": "NOT_STARTED",
         "approval_decision": None,
         "approval_comment": None,
@@ -120,9 +111,6 @@ def create_initial_design_change_state() -> DesignChangeWorkflowState:
         "apply_result": None,
         "application_id": None,
         "report_status": "NOT_STARTED",
-        "change_id": None,
-        "review_id": None,
-        "ai_review_status": "NOT_STARTED",
         "report_result": None,
         "current_step": "NOT_STARTED",
         "request_id": None,

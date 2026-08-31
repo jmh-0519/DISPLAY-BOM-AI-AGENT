@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class ImpactAnalysisService:
-    """Design-change impact analysis for preview and pre-workflow shared BOM review."""
+    """Design-change impact analysis for preview and pre-workflow shared BOM checks."""
 
     def __init__(self, repository) -> None:
         self.repository = repository

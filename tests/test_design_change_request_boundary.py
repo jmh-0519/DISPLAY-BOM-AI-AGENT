@@ -130,14 +130,12 @@ def test_explicit_proceed_is_the_first_point_that_creates_request(tmp_path):
     assert persisted["candidate_approval_status"] == "APPROVED"
 
 
-def test_active_phase3_completes_with_word_report_without_review_stage(tmp_path):
+def test_active_design_change_completes_with_word_report(tmp_path):
     service, database = _service(tmp_path, "analysis-report")
     analysis = _analysis(service, database)
     candidate = _selectable(analysis)
     selections = _selection(analysis, candidate)
     impact = service.preview_analysis_impact(analysis, selections)
-    review_bom_before = _count(database, "review_boms")
-    bom_review_before = _count(database, "bom_reviews")
 
     committed = service.commit_analysis_as_request(
         analysis=analysis,
@@ -181,5 +179,3 @@ def test_active_phase3_completes_with_word_report_without_review_stage(tmp_path)
         "12. 최종 결론",
     ):
         assert heading in visible_text
-    assert _count(database, "review_boms") == review_bom_before
-    assert _count(database, "bom_reviews") == bom_review_before

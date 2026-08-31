@@ -5,6 +5,27 @@ from pathlib import Path
 from database.connection import SQLiteDatabase
 
 
+REMOVED_LEGACY_TABLES = (
+    "bom_review_checks",
+    "bom_reviews",
+    "review_bom_items",
+    "review_bom_revisions",
+    "production_apply_history",
+    "workflow_events",
+    "review_boms",
+    "design_change_snapshot_items",
+    "design_change_snapshots",
+    "design_change_checks",
+    "design_change_items",
+    "design_changes",
+    "review_checklists",
+    "legacy_change_history",
+    "material_attributes",
+    "material_compatibility",
+    "design_rules",
+)
+
+
 class IncompatibleSchemaError(RuntimeError):
     """이전 STEP24 초안 DB가 발견되었을 때 발생합니다."""
 
@@ -42,17 +63,6 @@ class SchemaManager:
 
         plant_tables = (
             "bom_master",
-            "design_changes",
-            "design_change_items",
-            "design_change_checks",
-            "design_change_snapshots",
-            "design_change_snapshot_items",
-            "review_boms",
-            "review_bom_revisions",
-            "review_bom_items",
-            "bom_reviews",
-            "bom_review_checks",
-            "production_apply_history",
             "change_requests",
             "change_actions",
             "candidate_evaluations",
@@ -70,6 +80,12 @@ class SchemaManager:
                     "ADD COLUMN plant_code TEXT NOT NULL DEFAULT 'P01'"
                 )
 
+
+    @staticmethod
+    def _remove_legacy_tables_v7(connection) -> None:
+        """Remove superseded workflow/review schema before applying Clean Core SQL."""
+        for table_name in REMOVED_LEGACY_TABLES:
+            connection.execute(f'DROP TABLE IF EXISTS "{table_name}"')
 
     def _prepare_v6_columns(self, connection) -> None:
         """Add STEP32 explainability columns to an existing Phase3 database."""
@@ -174,10 +190,13 @@ class SchemaManager:
                 version_before = row["version"] if row else None
             upgrading_to_v4 = bool(new_table and (version_before or 0) < 4)
             upgrading_to_v6 = bool(new_table and (version_before or 0) < 6)
+            upgrading_to_v7 = bool(new_table and (version_before or 0) < 7)
             if upgrading_to_v4:
                 self._prepare_v4_columns(connection)
             if upgrading_to_v6:
                 self._prepare_v6_columns(connection)
+            if upgrading_to_v7:
+                self._remove_legacy_tables_v7(connection)
             connection.executescript(sql)
             if upgrading_to_v4:
                 connection.execute("PRAGMA foreign_keys = OFF")

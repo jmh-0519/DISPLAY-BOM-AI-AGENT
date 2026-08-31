@@ -8,8 +8,7 @@ def _db(*, changed: str | None = None):
     for name in (
         "bom_master", "change_requests", "change_actions", "candidate_evaluations",
         "change_approvals", "change_previews", "change_apply_results",
-        "production_apply_history",
-    ):
+        ):
         tables[name] = {"available": True, "count": 10, "sha256": f"same-{name}"}
     before = {"available": True, "tables": {k: dict(v) for k, v in tables.items()}}
     after = {"available": True, "tables": {k: dict(v) for k, v in tables.items()}}

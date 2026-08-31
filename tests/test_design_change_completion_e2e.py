@@ -98,18 +98,8 @@ def test_report_generation_moves_ui_workflow_to_report_completed():
     assert updated["report_result"]["success"] is True
 
 
-def test_active_streamlit_menu_does_not_expose_legacy_review_workflow():
-    source = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
-    assert '"AI 설계변경 Workflow"' not in source
-    assert "render_ai_design_change_workflow_page" not in source
-    # Final Core no longer carries the inactive Review BOM UI compatibility page.
-    assert not (ROOT / "app" / "views" / "ai_design_change_workflow_page.py").exists()
-
-
-def test_design_change_history_page_uses_phase3_requests_not_legacy_review_history():
+def test_design_change_history_page_uses_current_request_history():
     source = (ROOT / "app" / "views" / "design_change_history_page.py").read_text(encoding="utf-8")
     assert "list_design_change_history" in source
     assert "get_change_request_result" in source
     assert "export_design_change_completion_report" in source
-    assert "품평결과" not in source
-    assert "review_id" not in source

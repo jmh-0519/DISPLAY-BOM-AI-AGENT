@@ -39,7 +39,6 @@ RESOLUTION_TOOLS = frozenset({
 PRODUCTION_TABLES = frozenset({
     "bom_master",
     "change_apply_results",
-    "production_apply_history",
 })
 REQUEST_TABLES = frozenset({
     "change_requests",

@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 
 from database import IncompatibleSchemaError, SQLiteDatabase, SchemaManager
+from database.schema import REMOVED_LEGACY_TABLES
 
 
 EXPECTED_TABLES = {
@@ -15,24 +16,7 @@ EXPECTED_TABLES = {
     "material_master",
     "location_master",
     "bom_master",
-    "material_attributes",
-    "material_compatibility",
-    "design_rules",
     "bom_hierarchy_rules",
-    "design_changes",
-    "design_change_items",
-    "design_change_checks",
-    "design_change_snapshots",
-    "design_change_snapshot_items",
-    "review_boms",
-    "review_bom_revisions",
-    "review_bom_items",
-    "bom_reviews",
-    "bom_review_checks",
-    "review_checklists",
-    "production_apply_history",
-    "workflow_events",
-    "legacy_change_history",
     "query_aliases",
 }
 
@@ -62,12 +46,13 @@ def test_schema_creates_all_domain_tables(database):
     assert EXPECTED_TABLES <= names
     assert "products" not in names
     assert "production_bom_items" not in names
+    assert set(REMOVED_LEGACY_TABLES).isdisjoint(names)
 
 
 def test_schema_initialization_is_idempotent(database):
     manager = SchemaManager(database)
     manager.initialize()
-    assert manager.current_version() == 6
+    assert manager.current_version() == 7
 
     with database.connection() as connection:
         assert connection.execute(
@@ -258,9 +243,9 @@ def test_assy_item_name_must_match_process_name(database):
 
 
 def test_schema_has_persisted_supply_and_demand_evidence(tmp_path):
-    database = SQLiteDatabase(tmp_path / "step32-schema.db")
+    database = SQLiteDatabase(tmp_path / "clean-core-schema.db")
     SchemaManager(database).initialize()
-    assert SchemaManager(database).current_version() == 6
+    assert SchemaManager(database).current_version() == 7
     with database.connection() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(candidate_evaluations)")}
     assert {"supplier_evaluation_json", "demand_context_json"} <= columns

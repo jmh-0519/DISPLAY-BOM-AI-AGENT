@@ -319,8 +319,7 @@ class RuntimeObservationCollector:
             "change_approvals",
             "change_previews",
             "change_apply_results",
-            "production_apply_history",
-        )
+                )
         tables: dict[str, Any] = {}
         try:
             connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)

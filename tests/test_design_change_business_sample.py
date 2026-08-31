@@ -4,6 +4,7 @@ import shutil
 
 from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from database import SchemaManager, SQLiteDatabase
+from database.schema import REMOVED_LEGACY_TABLES
 from scripts.seed_phase3_business_sample import seed_phase3_business_sample
 from scripts.verify_phase3_business_sample import CANDIDATE_FILTER, verify
 from repositories.sqlite_repository import SQLiteBomRepository
@@ -47,14 +48,16 @@ def test_baseline_product_is_queryable_in_p01_and_p02(tmp_path):
     )
 
 
-def test_latest_seed_preserves_pre_step27_workflow_history(tmp_path):
+def test_latest_seed_uses_clean_core_schema(tmp_path):
     database = make_database(tmp_path)
     with database.connection() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM design_changes").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM design_change_items").fetchone()[0] == 7
-        assert connection.execute("SELECT COUNT(*) FROM review_boms").fetchone()[0] == 5
-        assert connection.execute("SELECT COUNT(*) FROM bom_reviews").fetchone()[0] == 5
-        assert connection.execute("SELECT COUNT(*) FROM workflow_events").fetchone()[0] == 2
+        names = {
+            row["name"]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert set(REMOVED_LEGACY_TABLES).isdisjoint(names)
         assert connection.execute(
             "SELECT COUNT(*) FROM item_master WHERE item_code LIKE 'P3-%'"
         ).fetchone()[0] == 0

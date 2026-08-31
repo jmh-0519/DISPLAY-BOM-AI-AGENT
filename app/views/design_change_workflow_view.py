@@ -1514,7 +1514,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
                 on_workflow_update,
             )
     elif action == "REPORT":
-        st.success("설계변경이 Production E-BOM에 반영되었습니다. 품평회 단계 없이 완료 보고서를 생성하여 업무를 종료합니다.")
+        st.success("설계변경이 Production E-BOM에 반영되었습니다. 완료 보고서를 생성하여 업무를 종료합니다.")
         cache_key = f"design_change_completion_report_{workflow.get('request_id')}"
         report = st.session_state.get(cache_key)
         if report is None:
