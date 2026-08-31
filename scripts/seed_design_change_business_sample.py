@@ -149,7 +149,6 @@ SCENARIOS = (
         "reason": "COMMONIZATION",
         "target_type": "MATERIAL",
         "primary_action": "REPLACE",
-        "secondary_action": "DELETE",
         "parent": "LJ94-310901",
         "parent_name": "BIN",
         "source": "0001-310901",
@@ -169,7 +168,6 @@ SCENARIOS = (
         "reason": "COMMONIZATION",
         "target_type": "ASSY",
         "primary_action": "REPLACE",
-        "secondary_action": "QUANTITY_CHANGE",
         "parent": "LTA750HR12-001",
         "parent_name": "FA",
         "source": "LJ94-311001",
@@ -184,9 +182,8 @@ SCENARIOS = (
 )
 
 
-# STEP27 latest business-data placement policy.
-# A Phase3 scenario belongs to one primary Plant unless the scenario explicitly
-# tests a cross-Plant condition.  This prevents accidental 4x BOM/plan/inventory
+# Each design-change scenario belongs to one primary Plant unless it explicitly
+# tests a cross-Plant condition. This prevents accidental BOM/plan/inventory
 # replication while keeping all four Plants covered by acceptance data.
 SCENARIO_PLANT_CODES = {
     1: "P01",
@@ -201,7 +198,7 @@ SCENARIO_PLANT_CODES = {
     10: "P01",
 }
 
-# The Phase2 baseline product is intentionally available in P01 and P02.
+# The baseline product is intentionally available in P01 and P02.
 # It is the regression fixture for "same VERSION, Plant-scoped BOM" queries.
 CROSS_PLANT_QUERY_FIXTURES = {
     "LTA400HR01-001": ("P01", "P02"),
@@ -230,7 +227,7 @@ def _upsert_item(connection, code: str, item_type: str, name: str, description: 
 
 def _upsert_version(connection, scenario: dict, version_code: str, suffix: str = "001") -> None:
     spec = dict(scenario["spec"])
-    spec.update({"product_name": scenario["model_name"], "product_type": "LCD MODULE", "test_dataset": "PHASE3_BUSINESS_SAMPLE"})
+    spec.update({"product_name": scenario["model_name"], "product_type": "LCD MODULE", "test_dataset": "DESIGN_CHANGE_BUSINESS_SAMPLE"})
     _upsert_item(connection, version_code, "VERSION", "FA", scenario["model_name"])
     connection.execute(
         """INSERT INTO version_master(version_code,version_no,specification,active_yn)
@@ -281,7 +278,7 @@ def _assembly_description(process_name: str, attributes: dict | None = None) -> 
 
 
 def _upsert_material(connection, code: str, name: str, group_name: str) -> None:
-    description = f"{group_name}/{name}/PHASE3 BUSINESS SAMPLE"
+    description = f"{group_name}/{name}/DESIGN CHANGE BUSINESS SAMPLE"
     _upsert_item(connection, code, "MATERIAL", name, description)
     connection.execute(
         """INSERT INTO material_master(material_code,material_name,material_group,unit,specification,active_yn)
@@ -298,7 +295,7 @@ def _upsert_attribute(connection, item_code: str, name: str, value) -> None:
     connection.execute(
         """INSERT INTO item_attribute_values(
              item_code,attribute_name,attribute_value,value_type,valid_from,source)
-           VALUES(?,?,?,?,?,'PHASE3_BUSINESS_SAMPLE')
+           VALUES(?,?,?,?,?,'DESIGN_CHANGE_BUSINESS_SAMPLE')
            ON CONFLICT(item_code,attribute_name,valid_from) DO UPDATE SET
              attribute_value=excluded.attribute_value,value_type=excluded.value_type,
              source=excluded.source,updated_at=CURRENT_TIMESTAMP""",
@@ -351,79 +348,13 @@ def _rule_evaluation_item(scenario: dict) -> str:
 
 
 
-def _remove_legacy_synthetic_data(connection) -> None:
-    """Remove only the retired Phase3 generic fixture from the migrated baseline.
-
-    STEP27 now starts from the pre-STEP27 business DB so that real Phase2 workflow
-    history is retained.  That DB also contains the temporary P3-* acceptance
-    fixture; those rows are removed here before the business-shaped sample is
-    created.
-    """
-    legacy_plants = ("PLANT-1", "PLANT-2")
-    legacy_item_filter = "item_code LIKE 'P3-%'"
-
-    legacy_workflow = connection.execute(
-        "SELECT COUNT(*) FROM change_requests WHERE version_code LIKE 'P3-%'"
-    ).fetchone()[0]
-    if legacy_workflow:
-        raise RuntimeError(
-            "Legacy P3-* change_requests exist in the baseline. "
-            "Refuse to delete workflow history automatically."
-        )
-
-    connection.execute(
-        "DELETE FROM production_plans "
-        "WHERE version_code LIKE 'P3-%' OR plant_code IN ('PLANT-1','PLANT-2')"
-    )
-    connection.execute(
-        "DELETE FROM inventory_balances "
-        "WHERE item_code LIKE 'P3-%' OR inventory_location_code LIKE 'PLANT-%'"
-    )
-    connection.execute(
-        "DELETE FROM supplier_items "
-        "WHERE item_code LIKE 'P3-%' OR supplier_code LIKE 'P3-SUP-%'"
-    )
-    connection.execute(
-        "DELETE FROM substitution_relations "
-        "WHERE source_item_code LIKE 'P3-%' OR candidate_item_code LIKE 'P3-%'"
-    )
-    connection.execute(
-        "DELETE FROM bom_master "
-        "WHERE parent_item_code LIKE 'P3-%' OR child_item_code LIKE 'P3-%' "
-        "OR plant_code IN ('PLANT-1','PLANT-2')"
-    )
-    connection.execute("DELETE FROM item_attribute_values WHERE item_code LIKE 'P3-%'")
-
-    connection.execute(
-        "DELETE FROM rule_conditions WHERE rule_id LIKE 'P3-R-%'"
-    )
-    connection.execute(
-        "DELETE FROM rule_revisions WHERE rule_id LIKE 'P3-R-%'"
-    )
-    connection.execute(
-        "DELETE FROM rule_definitions WHERE rule_id LIKE 'P3-R-%'"
-    )
-
-    connection.execute("DELETE FROM material_master WHERE material_code LIKE 'P3-%'")
-    connection.execute("DELETE FROM assembly_master WHERE assembly_code LIKE 'P3-%'")
-    connection.execute("DELETE FROM version_master WHERE version_code LIKE 'P3-%'")
-    connection.execute(f"DELETE FROM item_master WHERE {legacy_item_filter}")
-
-    connection.execute(
-        "DELETE FROM inventory_locations WHERE warehouse_code LIKE 'PLANT-%'"
-    )
-    connection.execute("DELETE FROM warehouses WHERE plant_code IN ('PLANT-1','PLANT-2')")
-    connection.execute("DELETE FROM plants WHERE plant_code IN ('PLANT-1','PLANT-2')")
-    connection.execute("DELETE FROM supplier_master WHERE supplier_code LIKE 'P3-SUP-%'")
-
-
 def _remove_existing_business_sample(connection) -> None:
     """Make the deterministic business seed idempotent without touching user history."""
     business_versions = [
         row[0]
         for row in connection.execute(
             "SELECT version_code FROM version_master "
-            "WHERE specification LIKE '%PHASE3_BUSINESS_SAMPLE%'"
+            "WHERE specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'"
         ).fetchall()
     ]
     if not business_versions:
@@ -436,7 +367,7 @@ def _remove_existing_business_sample(connection) -> None:
     ).fetchone()[0]
     if workflow_count:
         raise RuntimeError(
-            "Phase3 business sample has workflow history. "
+            "Design-change business sample has workflow history. "
             "Rebuild from the immutable baseline instead of reseeding this DB in place."
         )
 
@@ -450,7 +381,7 @@ def _remove_existing_business_sample(connection) -> None:
         row[0]
         for row in connection.execute(
             "SELECT item_code FROM item_master "
-            "WHERE description LIKE '%PHASE3 BUSINESS SAMPLE%'"
+            "WHERE description LIKE '%DESIGN CHANGE BUSINESS SAMPLE%'"
         ).fetchall()
     }
     business_items.update(business_versions)
@@ -458,7 +389,7 @@ def _remove_existing_business_sample(connection) -> None:
         row[0]
         for row in connection.execute(
             "SELECT DISTINCT item_code FROM item_attribute_values "
-            "WHERE source='PHASE3_BUSINESS_SAMPLE'"
+            "WHERE source='DESIGN_CHANGE_BUSINESS_SAMPLE'"
         ).fetchall()
     )
     if business_items:
@@ -596,36 +527,6 @@ def _seed_cross_plant_query_fixtures(connection) -> None:
             )
 
 def _seed_organization(connection) -> dict[str, list[str]]:
-    # STEP27 replaces the retired synthetic organization codes.  Remove only
-    # those known seed codes and their dependent sample rows; never delete an
-    # arbitrary customer Plant.
-    legacy_plants = ("PLANT-1", "PLANT-2")
-    placeholders = ",".join("?" for _ in legacy_plants)
-    legacy_locations = f"""
-        SELECT l.inventory_location_code
-        FROM inventory_locations l
-        JOIN warehouses w ON w.warehouse_code=l.warehouse_code
-        WHERE w.plant_code IN ({placeholders})
-    """
-    connection.execute(
-        f"DELETE FROM inventory_balances WHERE inventory_location_code IN ({legacy_locations})",
-        legacy_plants,
-    )
-    connection.execute(
-        f"DELETE FROM inventory_locations WHERE warehouse_code IN "
-        f"(SELECT warehouse_code FROM warehouses WHERE plant_code IN ({placeholders}))",
-        legacy_plants,
-    )
-    connection.execute(
-        f"DELETE FROM warehouses WHERE plant_code IN ({placeholders})", legacy_plants
-    )
-    connection.execute(
-        f"DELETE FROM production_plans WHERE plant_code IN ({placeholders})", legacy_plants
-    )
-    connection.execute(
-        f"DELETE FROM plants WHERE plant_code IN ({placeholders})", legacy_plants
-    )
-
     locations_by_plant: dict[str, list[str]] = {}
     plants = (
         ("P01", "국내 AA PLANT", "KR"),
@@ -667,13 +568,13 @@ def _seed_organization(connection) -> dict[str, list[str]]:
 def _seed_baseline_operational_readiness(
     connection, locations_by_plant: dict[str, list[str]]
 ) -> None:
-    """Add operational evidence to the migrated Phase2 baseline without hardcoding scenarios.
+    """Add operational evidence to the baseline without hardcoding scenarios.
 
-    Phase2 baseline BOMs predate the Phase3 production-plan / supplier / inventory
+    Baseline BOMs predate the production-plan / supplier / inventory
     tables.  Candidate analysis must not turn missing operational fixtures into a
     fake PASS, but the functional sample DB still needs at least one realistic
     end-to-end path.  We therefore enrich whatever baseline VERSION/Plant pairs
-    already exist *before* Phase3 scenario rows are inserted.
+    already exist *before* design-change scenario rows are inserted.
 
     The enrichment is data-driven:
     - every existing baseline VERSION/Plant BOM gets a future CONFIRMED plan when
@@ -810,7 +711,7 @@ def _seed_rule(connection, scenario: dict) -> None:
            VALUES(?,?,?) ON CONFLICT(rule_id) DO UPDATE SET
              rule_name=excluded.rule_name,description=excluded.description,
              updated_at=CURRENT_TIMESTAMP""",
-        (rule_id, rule_name, f"Phase3 business sample rule for {scenario['source_name']}"),
+        (rule_id, rule_name, f"Design-change business sample rule for {scenario['source_name']}"),
     )
     connection.execute(
         """INSERT INTO rule_revisions(
@@ -1063,19 +964,18 @@ def _seed_production_plans(connection, scenario: dict) -> None:
         )
 
 
-def seed_phase3_business_sample(database: SQLiteDatabase) -> None:
-    """Extend the migrated Display BOM with deterministic business-shaped Phase3 data."""
+def seed_design_change_business_sample(database: SQLiteDatabase) -> None:
+    """Extend the Display BOM with deterministic design-change business sample data."""
     SchemaManager(database).initialize()
     with database.transaction() as connection:
-        _remove_legacy_synthetic_data(connection)
         _remove_existing_business_sample(connection)
         baseline = connection.execute(
             "SELECT 1 FROM version_master WHERE version_code='LTA400HR01-001'"
         ).fetchone()
         if not baseline:
             raise RuntimeError(
-                "Phase2 기준 모델 LTA400HR01-001이 없습니다. "
-                "빈 DB가 아니라 기존 display_bom DB를 복사한 테스트 DB를 사용하세요."
+                "기준 모델 LTA400HR01-001이 없습니다. "
+                "Canonical Seed DB를 기반으로 생성된 DB를 사용하세요."
             )
         locations_by_plant = _seed_organization(connection)
         _seed_cross_plant_query_fixtures(connection)
@@ -1089,12 +989,12 @@ def seed_phase3_business_sample(database: SQLiteDatabase) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed Phase3 business-shaped functional test data")
+    parser = argparse.ArgumentParser(description="Seed deterministic design-change business sample data")
     parser.add_argument("--database", default=".pytest_tmp_runtime/test_display_bom.db")
     args = parser.parse_args()
     database = SQLiteDatabase(Path(args.database))
-    seed_phase3_business_sample(database)
-    print(f"Phase3 business sample initialized: {args.database}")
+    seed_design_change_business_sample(database)
+    print(f"Design-change business sample initialized: {args.database}")
 
 
 if __name__ == "__main__":

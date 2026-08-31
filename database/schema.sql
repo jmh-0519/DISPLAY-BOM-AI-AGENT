@@ -7,22 +7,28 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 );
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (2, 'STEP24-A2 v2 FA-root BOM domain schema');
+VALUES (2, 'FA-root BOM domain schema');
+UPDATE schema_versions SET description='FA-root BOM domain schema' WHERE version=2;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (3, 'STEP26-B Phase3 recommendation and multi-action workflow schema');
+VALUES (3, 'Design-change recommendation workflow schema');
+UPDATE schema_versions SET description='Design-change recommendation workflow schema' WHERE version=3;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (4, 'STEP27 Plant-scoped BOM and design-change reason metadata');
+VALUES (4, 'Plant-scoped BOM and design-change reason metadata');
+UPDATE schema_versions SET description='Plant-scoped BOM and design-change reason metadata' WHERE version=4;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (5, 'STEP30 ASSY process-name invariant and candidate display normalization');
+VALUES (5, 'ASSY process-name invariant and candidate display normalization');
+UPDATE schema_versions SET description='ASSY process-name invariant and candidate display normalization' WHERE version=5;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (6, 'STEP32 detailed evaluation evidence and impact analysis');
+VALUES (6, 'Detailed evaluation evidence and impact analysis');
+UPDATE schema_versions SET description='Detailed evaluation evidence and impact analysis' WHERE version=6;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (7, 'Clean Core schema without legacy review and superseded design-change tables');
+VALUES (7, 'Display BOM Clean Core baseline schema');
+UPDATE schema_versions SET description='Display BOM Clean Core baseline schema' WHERE version=7;
 
 CREATE TABLE IF NOT EXISTS plants (
   plant_code TEXT PRIMARY KEY,
@@ -262,7 +268,7 @@ BEGIN
   SELECT RAISE(ABORT, 'material_master requires MATERIAL item');
 END;
 
--- Phase3 item properties and registered substitution relations
+-- Item properties and registered substitution relations
 CREATE TABLE IF NOT EXISTS item_attribute_values (
   item_code TEXT NOT NULL REFERENCES item_master(item_code),
   attribute_name TEXT NOT NULL,

@@ -3,22 +3,8 @@ import sqlite3
 import pytest
 
 from database import IncompatibleSchemaError, SQLiteDatabase, SchemaManager
-from database.schema import REMOVED_LEGACY_TABLES
+from database.schema import CORE_SCHEMA_TABLES, CORE_SCHEMA_VERSION
 
-
-EXPECTED_TABLES = {
-    "schema_versions",
-    "supplier_master",
-    "customer_master",
-    "item_master",
-    "version_master",
-    "assembly_master",
-    "material_master",
-    "location_master",
-    "bom_master",
-    "bom_hierarchy_rules",
-    "query_aliases",
-}
 
 
 @pytest.fixture
@@ -43,16 +29,14 @@ def test_schema_creates_all_domain_tables(database):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-    assert EXPECTED_TABLES <= names
-    assert "products" not in names
-    assert "production_bom_items" not in names
-    assert set(REMOVED_LEGACY_TABLES).isdisjoint(names)
+    names.discard("sqlite_sequence")
+    assert names == set(CORE_SCHEMA_TABLES)
 
 
 def test_schema_initialization_is_idempotent(database):
     manager = SchemaManager(database)
     manager.initialize()
-    assert manager.current_version() == 7
+    assert manager.current_version() == CORE_SCHEMA_VERSION
 
     with database.connection() as connection:
         assert connection.execute(
@@ -63,7 +47,7 @@ def test_schema_initialization_is_idempotent(database):
         ).fetchone()[0] == 13
 
 
-def test_legacy_draft_schema_requires_explicit_recreate(tmp_path):
+def test_incompatible_existing_schema_requires_explicit_recreate(tmp_path):
     db = SQLiteDatabase(tmp_path / "legacy.db")
     with db.connection() as connection:
         connection.execute("CREATE TABLE products(product_id TEXT PRIMARY KEY)")
@@ -249,3 +233,18 @@ def test_schema_has_persisted_supply_and_demand_evidence(tmp_path):
     with database.connection() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(candidate_evaluations)")}
     assert {"supplier_evaluation_json", "demand_context_json"} <= columns
+
+
+def test_pre_clean_core_version_requires_rebuild(tmp_path):
+    db = SQLiteDatabase(tmp_path / "old-core.db")
+    with db.transaction() as connection:
+        connection.execute(
+            "CREATE TABLE schema_versions(version INTEGER PRIMARY KEY, description TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO schema_versions(version, description) VALUES(6, 'old core')"
+        )
+        connection.execute("CREATE TABLE item_master(item_code TEXT PRIMARY KEY)")
+
+    with pytest.raises(IncompatibleSchemaError, match="Canonical Seed DB"):
+        SchemaManager(db).initialize()

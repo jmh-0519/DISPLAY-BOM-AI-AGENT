@@ -4,7 +4,7 @@ import argparse
 import sqlite3
 from pathlib import Path
 
-from database.schema import REMOVED_LEGACY_TABLES
+from database.schema import CORE_SCHEMA_TABLES
 
 
 EXPECTED = {
@@ -33,7 +33,7 @@ def verify(database_path: Path) -> dict[str, int]:
         actual = {
             "business_versions": connection.execute(
                 "SELECT COUNT(*) FROM version_master "
-                "WHERE specification LIKE '%PHASE3_BUSINESS_SAMPLE%'"
+                "WHERE specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'"
             ).fetchone()[0],
             "business_candidates": connection.execute(
                 f"SELECT COUNT(*) FROM item_master WHERE {CANDIDATE_FILTER}"
@@ -70,7 +70,7 @@ def verify(database_path: Path) -> dict[str, int]:
                      SELECT b.bom_id,b.plant_code,b.parent_item_code,b.child_item_code
                      FROM bom_master b
                      JOIN version_master v ON v.version_code=b.parent_item_code
-                     WHERE v.specification LIKE '%PHASE3_BUSINESS_SAMPLE%'
+                     WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
                      UNION ALL
                      SELECT b.bom_id,b.plant_code,b.parent_item_code,b.child_item_code
                      FROM production_tree t
@@ -92,16 +92,18 @@ def verify(database_path: Path) -> dict[str, int]:
         existing_tables = {
             row[0]
             for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             ).fetchall()
         }
-        unexpected_legacy = sorted(set(REMOVED_LEGACY_TABLES) & existing_tables)
-        if unexpected_legacy:
+        if existing_tables != set(CORE_SCHEMA_TABLES):
+            missing = sorted(set(CORE_SCHEMA_TABLES) - existing_tables)
+            unexpected = sorted(existing_tables - set(CORE_SCHEMA_TABLES))
             raise RuntimeError(
-                f"Removed legacy tables remain in business DB: {unexpected_legacy}"
+                f"Clean Core schema mismatch: missing={missing} unexpected={unexpected}"
             )
 
-        # Production E-BOM is mutable after successful Phase3 Apply.
+        # Production E-BOM is mutable after successful design-change Apply.
         # The baseline sample starts at 48 BOM history rows, but REPLACE/ADD/
         # QUANTITY_CHANGE/DELETE can legitimately append effective-dated BOM
         # history. Therefore only immutable sample/master counts are exact.
@@ -120,19 +122,7 @@ def verify(database_path: Path) -> dict[str, int]:
         if not connection.execute(
             "SELECT 1 FROM version_master WHERE version_code='LTA400HR01-001'"
         ).fetchone():
-            raise RuntimeError("Phase2 baseline model LTA400HR01-001 is missing")
-        if connection.execute(
-            "SELECT 1 FROM item_master WHERE item_code LIKE 'P3-%' LIMIT 1"
-        ).fetchone():
-            raise RuntimeError("Legacy generic P3-* item remains in the functional test DB")
-        if connection.execute(
-            "SELECT 1 FROM plants WHERE plant_code IN ('PLANT-1','PLANT-2') LIMIT 1"
-        ).fetchone():
-            raise RuntimeError("Legacy synthetic Plant remains in the functional test DB")
-        if connection.execute(
-            "SELECT 1 FROM rule_definitions WHERE rule_id LIKE 'P3-R-%' LIMIT 1"
-        ).fetchone():
-            raise RuntimeError("Legacy generic P3-* rule remains in the functional test DB")
+            raise RuntimeError("Baseline model LTA400HR01-001 is missing")
 
         invalid_assy_names = connection.execute(
             """SELECT COUNT(*)
@@ -173,7 +163,7 @@ def verify(database_path: Path) -> dict[str, int]:
             """SELECT v.version_code, GROUP_CONCAT(DISTINCT b.plant_code) AS plants
                FROM version_master v
                JOIN bom_master b ON b.parent_item_code=v.version_code
-               WHERE v.specification LIKE '%PHASE3_BUSINESS_SAMPLE%'
+               WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
                  AND v.version_code <> 'LTA750HR12-002'
                GROUP BY v.version_code
                ORDER BY v.version_code"""
@@ -257,14 +247,14 @@ def verify(database_path: Path) -> dict[str, int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify Phase3 business sample DB")
+    parser = argparse.ArgumentParser(description="Verify design-change business sample DB")
     parser.add_argument(
         "--database",
         default=".pytest_tmp_runtime/test_display_bom.db",
     )
     args = parser.parse_args()
     result = verify(Path(args.database))
-    print("Phase3 business sample verification passed")
+    print("Design-change business sample verification passed")
     for name, value in result.items():
         print(f"- {name}: {value}")
 

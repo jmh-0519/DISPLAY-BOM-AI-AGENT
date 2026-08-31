@@ -6,8 +6,8 @@ import uuid
 from pathlib import Path
 
 from database import SchemaManager, SQLiteDatabase
-from scripts.seed_phase3_business_sample import seed_phase3_business_sample
-from scripts.verify_phase3_business_sample import verify
+from scripts.seed_design_change_business_sample import seed_design_change_business_sample
+from scripts.verify_design_change_business_sample import verify
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +41,7 @@ def rebuild_latest_database(
         shutil.copy2(seed, temporary)
         database = SQLiteDatabase(temporary)
         SchemaManager(database).initialize()
-        seed_phase3_business_sample(database)
+        seed_design_change_business_sample(database)
         result = verify(temporary)
         os.replace(temporary, target)
         return result

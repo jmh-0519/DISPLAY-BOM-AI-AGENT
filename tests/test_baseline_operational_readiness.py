@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from database import SQLiteDatabase
-from scripts.seed_phase3_business_sample import seed_phase3_business_sample
+from scripts.seed_design_change_business_sample import seed_design_change_business_sample
 from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
@@ -13,10 +13,10 @@ SEED_DB = PROJECT_ROOT / "data" / "display_bom_seed.db"
 
 
 def _seeded_service(tmp_path) -> DesignChangeWorkflowService:
-    target = tmp_path / "step38.db"
+    target = tmp_path / "baseline-operational.db"
     shutil.copy2(SEED_DB, target)
     database = SQLiteDatabase(target)
-    seed_phase3_business_sample(database)
+    seed_design_change_business_sample(database)
     return DesignChangeWorkflowService(database)
 
 
@@ -28,7 +28,7 @@ def test_baseline_product_plant_pairs_receive_default_production_plan(tmp_path):
                FROM bom_master b
                JOIN version_master v ON v.version_code=b.parent_item_code
                WHERE b.status='ACTIVE'
-                 AND COALESCE(v.specification,'') NOT LIKE '%PHASE3_BUSINESS_SAMPLE%'
+                 AND COALESCE(v.specification,'') NOT LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
                  AND NOT EXISTS (
                    SELECT 1 FROM production_plans p
                    WHERE p.version_code=b.parent_item_code
@@ -48,7 +48,7 @@ def test_baseline_cost_candidate_uses_bom_quantity_even_when_production_plan_exi
                FROM bom_master b
                JOIN version_master v ON v.version_code=b.parent_item_code
                WHERE b.status='ACTIVE'
-                 AND COALESCE(v.specification,'') NOT LIKE '%PHASE3_BUSINESS_SAMPLE%'
+                 AND COALESCE(v.specification,'') NOT LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
                ORDER BY b.plant_code,b.parent_item_code"""
         ).fetchall()
 

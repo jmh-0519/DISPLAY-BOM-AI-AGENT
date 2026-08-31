@@ -45,6 +45,7 @@ tmp/
 *.db
 *.sqlite
 *.sqlite3
+!data/display_bom_seed.db
 
 # Build and packaging
 build/

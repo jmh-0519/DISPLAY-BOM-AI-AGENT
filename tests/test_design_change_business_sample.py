@@ -4,9 +4,9 @@ import shutil
 
 from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from database import SchemaManager, SQLiteDatabase
-from database.schema import REMOVED_LEGACY_TABLES
-from scripts.seed_phase3_business_sample import seed_phase3_business_sample
-from scripts.verify_phase3_business_sample import CANDIDATE_FILTER, verify
+from database.schema import CORE_SCHEMA_TABLES
+from scripts.seed_design_change_business_sample import seed_design_change_business_sample
+from scripts.verify_design_change_business_sample import CANDIDATE_FILTER, verify
 from repositories.sqlite_repository import SQLiteBomRepository
 from services.repository_bom_service import RepositoryBomService
 from services.design_change_workflow_service import DesignChangeWorkflowService
@@ -17,13 +17,13 @@ def make_database(tmp_path) -> SQLiteDatabase:
     shutil.copyfile(DEFAULT_TEST_DATABASE, target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()
-    seed_phase3_business_sample(database)
+    seed_design_change_business_sample(database)
     return database
 
 
 def test_business_seed_preserves_baseline_and_is_idempotent(tmp_path):
     database = make_database(tmp_path)
-    seed_phase3_business_sample(database)
+    seed_design_change_business_sample(database)
     result = verify(database.database_path)
     assert result["business_versions"] == 11
     assert result["business_candidates"] == 50
@@ -57,10 +57,8 @@ def test_latest_seed_uses_clean_core_schema(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-        assert set(REMOVED_LEGACY_TABLES).isdisjoint(names)
-        assert connection.execute(
-            "SELECT COUNT(*) FROM item_master WHERE item_code LIKE 'P3-%'"
-        ).fetchone()[0] == 0
+        names.discard("sqlite_sequence")
+        assert names == set(CORE_SCHEMA_TABLES)
 
 
 def test_eol_material_replace_runs_through_current_workflow(tmp_path):
@@ -185,7 +183,7 @@ def test_business_verify_allows_effective_dated_runtime_bom_history_growth(tmp_p
             SELECT v.version_code,p.plant_code
             FROM version_master v
             JOIN production_plans p ON p.version_code=v.version_code
-            WHERE v.specification LIKE '%PHASE3_BUSINESS_SAMPLE%'
+            WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
             ORDER BY v.version_code,p.plant_code
             LIMIT 1
             """
