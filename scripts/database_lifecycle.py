@@ -13,7 +13,7 @@ from scripts.verify_phase3_business_sample import verify
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SEED_DATABASE = PROJECT_ROOT / "data" / "display_bom_seed.db"
 DEFAULT_RUNTIME_DATABASE = PROJECT_ROOT / "data" / "display_bom.db"
-DEFAULT_TEST_DATABASE = PROJECT_ROOT / "data" / "test_display_bom.db"
+DEFAULT_TEST_DATABASE = PROJECT_ROOT / ".pytest_tmp_runtime" / "test_display_bom.db"
 
 
 def rebuild_latest_database(

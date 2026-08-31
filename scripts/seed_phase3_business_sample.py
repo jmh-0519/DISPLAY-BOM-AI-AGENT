@@ -1090,7 +1090,7 @@ def seed_phase3_business_sample(database: SQLiteDatabase) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed Phase3 business-shaped functional test data")
-    parser.add_argument("--database", default="data/test_display_bom.db")
+    parser.add_argument("--database", default=".pytest_tmp_runtime/test_display_bom.db")
     args = parser.parse_args()
     database = SQLiteDatabase(Path(args.database))
     seed_phase3_business_sample(database)

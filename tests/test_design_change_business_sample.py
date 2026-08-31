@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 
+from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from database import SchemaManager, SQLiteDatabase
 from scripts.seed_phase3_business_sample import seed_phase3_business_sample
 from scripts.verify_phase3_business_sample import CANDIDATE_FILTER, verify
@@ -12,7 +13,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 def make_database(tmp_path) -> SQLiteDatabase:
     target = tmp_path / "design-change-business.db"
-    shutil.copyfile("data/test_display_bom.db", target)
+    shutil.copyfile(DEFAULT_TEST_DATABASE, target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()
     seed_phase3_business_sample(database)

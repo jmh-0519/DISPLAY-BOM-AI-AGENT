@@ -5,6 +5,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 
+from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from mcp_server.capabilities.query import (
     get_item_detail_data,
     get_product_detail_data,
@@ -14,7 +15,7 @@ from mcp_server.capabilities.query import (
 
 def _copy_db(tmp_path: Path) -> Path:
     target = tmp_path / "display_bom.db"
-    shutil.copy2("data/test_display_bom.db", target)
+    shutil.copy2(DEFAULT_TEST_DATABASE, target)
     return target
 
 

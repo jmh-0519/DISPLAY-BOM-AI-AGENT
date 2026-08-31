@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from datetime import date
 
+from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from database import SchemaManager, SQLiteDatabase
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 from services.design_change_workflow_service import DesignChangeWorkflowService
@@ -10,7 +11,7 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 def make_database(tmp_path) -> SQLiteDatabase:
     target = tmp_path / "generalized-design-change.db"
-    shutil.copyfile("data/test_display_bom.db", target)
+    shutil.copyfile(DEFAULT_TEST_DATABASE, target)
     database = SQLiteDatabase(target)
     SchemaManager(database).initialize()
     return database

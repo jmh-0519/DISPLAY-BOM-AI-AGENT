@@ -266,7 +266,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Verify Phase3 business sample DB")
     parser.add_argument(
         "--database",
-        default="data/test_display_bom.db",
+        default=".pytest_tmp_runtime/test_display_bom.db",
     )
     args = parser.parse_args()
     result = verify(Path(args.database))

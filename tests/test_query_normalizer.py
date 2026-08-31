@@ -1,5 +1,6 @@
 import pytest
 
+from scripts.database_lifecycle import DEFAULT_TEST_DATABASE
 from database import SQLiteDatabase
 from services.query_normalizer import QueryNormalizer
 
@@ -8,7 +9,7 @@ from services.query_normalizer import QueryNormalizer
 def normalizer(tmp_path) -> QueryNormalizer:
     import shutil
     target = tmp_path / "display_bom.db"
-    shutil.copy2("data/test_display_bom.db", target)
+    shutil.copy2(DEFAULT_TEST_DATABASE, target)
     return QueryNormalizer(SQLiteDatabase(target))
 
 
