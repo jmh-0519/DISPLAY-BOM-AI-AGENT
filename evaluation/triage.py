@@ -115,7 +115,7 @@ def triage_accuracy_report(report: dict[str, Any]) -> dict[str, Any]:
     by_signature = Counter(" + ".join(row.failures) for row in rows)
 
     # Separate strict architecture conformance from user-facing semantics. This is
-    # diagnostic only and does not change AE-03 scores.
+    # diagnostic only and does not change accuracy scores.
     strict_conformance_turns = len(rows)
     semantic_root_turns = sum(
         1
@@ -141,7 +141,7 @@ def triage_accuracy_report(report: dict[str, Any]) -> dict[str, Any]:
         "by_failure_signature": dict(sorted(by_signature.items())),
         "rows": [row.to_dict() for row in rows],
         "note": (
-            "AE-04 triage does not alter AE-03 ground truth or scores. "
+            "Failure triage does not alter Ground Truth or accuracy scores. "
             "It only separates root causes from downstream/cascade mismatches."
         ),
     }

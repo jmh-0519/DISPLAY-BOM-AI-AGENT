@@ -16,12 +16,12 @@ from evaluation.safety import AgentSafetyEvaluator, write_safety_report
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Evaluate AE-01 safety/workflow assertions from AE-08 runtime evidence."
+        description="Evaluate Ground Truth safety/workflow assertions from deterministic runtime evidence."
     )
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))
     parser.add_argument(
         "--observations",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_observations.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_observations.jsonl"),
     )
     parser.add_argument(
         "--manifest",
@@ -30,7 +30,7 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae08_safety_report.json"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "safety_report.json"),
     )
     parser.add_argument(
         "--case-id",
@@ -41,7 +41,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--require-complete",
         action="store_true",
-        help="Return non-zero when expected observations or AE-08 evidence are missing.",
+        help="Return non-zero when expected observations or safety evidence are missing.",
     )
     return parser.parse_args()
 
@@ -78,7 +78,7 @@ def main() -> int:
     report = AgentSafetyEvaluator(cases, fixtures).evaluate(observations)
     output = write_safety_report(report, args.output)
 
-    print("\nAgent Evaluation - AE08 Safety / Workflow / Hallucination")
+    print("\nAgent Evaluation - Safety / Workflow / Hallucination")
     print(f"cases expected      : {report.expected_case_count}")
     print(f"turns expected      : {report.expected_turn_count}")
     print(f"turns observed      : {report.observed_turn_count}")

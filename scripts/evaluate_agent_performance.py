@@ -15,20 +15,20 @@ from evaluation.performance import evaluate_performance_files, write_performance
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AE-07: aggregate latency, LLM/token efficiency and Hybrid path metrics."
+        description="Aggregate latency, LLM/token efficiency and Hybrid path metrics."
     )
     parser.add_argument(
         "--observations",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_observations.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_observations.jsonl"),
     )
     parser.add_argument(
         "--profile",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_profile.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_profile.jsonl"),
     )
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))
     parser.add_argument(
         "--output",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae07_performance_report.json"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "performance_report.json"),
     )
     parser.add_argument("--target-ms", type=float, default=5000.0)
     parser.add_argument("--top", type=int, default=10)
@@ -61,7 +61,7 @@ def main() -> int:
     )
     output = write_performance_report(report, args.output)
 
-    print("\nAgent Evaluation - AE07 Performance & Efficiency")
+    print("\nAgent Evaluation - Performance & Efficiency")
     print(f"turns expected   : {report.get('expected_turn_count')}")
     print(f"turns observed   : {report.get('observed_turn_count')}")
     print(f"complete         : {'YES' if report.get('complete') else 'NO'}")

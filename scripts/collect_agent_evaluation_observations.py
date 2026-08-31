@@ -38,11 +38,11 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_observations.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_observations.jsonl"),
     )
     parser.add_argument(
         "--profile",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_profile.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_profile.jsonl"),
     )
     parser.add_argument("--keep-eval-db", action="store_true")
     return parser.parse_args()
@@ -92,7 +92,7 @@ def main() -> int:
     os.environ["BOM_PERFORMANCE_PROFILE_PATH"] = str(profile)
 
     observations = []
-    run_id = f"ae02-{uuid.uuid4().hex[:12]}"
+    run_id = f"evaluation-{uuid.uuid4().hex[:12]}"
     try:
         with evaluation_database_sandbox(
             args.database,

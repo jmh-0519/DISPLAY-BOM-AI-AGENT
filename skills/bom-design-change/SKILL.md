@@ -1,6 +1,6 @@
 ---
 name: bom-design-change
-description: Display BOM의 MATERIAL/ASSY 설계변경 분석, 후보 추천, 복수 Action, 두 승인과 안전한 적용 절차를 통제한다.
+description: Display BOM의 MATERIAL/ASSY 단일 Action 설계변경 분석, 후보 추천, 두 승인과 안전한 적용 절차를 통제한다.
 ---
 
 # BOM Design Change Skill
@@ -18,18 +18,18 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 1. `analyze_design_change_candidates`로 **Analysis Session**을 시작한다. 이 단계에서는 `change_requests`/`change_actions`를 생성하지 않는다.
 2. Analysis Session 안에서 대상·Reason·후보·Rule/Attribute·공급사·원가·재고를 분석하고 사용자 후속질문에 설명한다.
 3. 사용자가 후보를 화면에서 임시 선택한다. Dropdown 선택은 Memory/UI 상태일 뿐 DB의 Design Change Request나 후보 승인 이력을 만들지 않는다.
-4. CONDITIONAL이면 `revalidate_design_change_analysis`로 요청수량 등 보완 가능한 정보를 반영해 재검증한다. 재검증도 Request를 생성하지 않는다.
+4. CONDITIONAL이면 필요한 Rule/Item/Supplier/Inventory 기준정보를 보완한 뒤 `revalidate_design_change_analysis`로 현재 기준정보와 BOM QUANTITY를 다시 조회해 재검증한다. 재검증도 Request를 생성하지 않는다.
 5. 선택 후보가 COMMON 영향 대상이면 `preview_design_change_analysis_impact`로 영향 모델과 Before/After Spec을 읽기 전용으로 확인한다. 이 단계도 Request를 생성하지 않는다.
 6. 사용자가 분석 결과·후보·필요한 영향범위를 확인한 뒤 **"설계변경 진행"을 명시적으로 승인한 경우에만** `create_design_change_request_from_analysis`를 호출한다. 이 시점이 실제 Design Change Request 생성 경계이다.
 7. Request 생성 후 `create_design_change_preview`로 실제 변경 Preview를 만든다.
 8. 사용자가 Preview를 확인한 뒤 `record_final_apply_approval`로 Production Apply 최종 승인을 기록한다.
-9. `apply_approved_change_request`가 모든 Action을 하나의 Transaction으로 적용하며 실패 시 전체 Rollback한다.
+9. `apply_approved_change_request`가 승인된 단일 Action을 하나의 Transaction으로 적용하며 실패 시 전체 Rollback한다.
 10. Apply 성공 후 `export_design_change_completion_report`로 **설계변경 완료 Word 보고서**를 생성하고 Design Change 업무를 종료한다.
 
 ### Analysis Memory / Restart
 
 - Analysis Session은 `analysis_id`, 대상, Reason, 후보, Evidence, 재검증 이력, 임시 선택, 영향분석을 Memory로 유지한다.
-- `왜?`, `비교해줘`, `수량을 바꿔서 다시 봐줘` 같은 요청은 동일 Analysis Memory를 사용한다.
+- `왜?`, `비교해줘`, `현재 기준정보로 다시 봐줘` 같은 요청은 동일 Analysis Memory를 사용한다.
 - 사용자가 `다시 처음부터`, `새로 분석`, `다시 조회`라고 하면 현재 **Analysis Memory만 새 Analysis Session으로 교체**한다.
 - 아직 Request가 생성되지 않았으므로 Analysis 재시작 시 Request 삭제, 취소, SUPERSEDED 처리를 하지 않는다.
 - 새 Analysis는 최초 분석 입력(`analysis_base_request`)을 기준으로 시작하며, 이전 재검증에서 입력한 임시 수량 등은 자동 승계하지 않는다.
@@ -49,8 +49,8 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 - 후보 점수·원가·재고·납기·공급사를 Tool 결과 없이 생성하지 않는다.
 - 후보 승인과 최종 Apply 승인을 한 번의 사용자 동의로 합치지 않는다.
 - 다른 요청의 Action·후보·승인 ID를 현재 요청에 사용하지 않는다.
-- REPLACE/ADD Action을 누락한 채 1차 승인을 진행하지 않는다.
-- PENDING 또는 FAIL Action이 하나라도 있으면 Preview·최종 승인·Apply를 진행하지 않는다.
+- REPLACE/ADD에서는 단일 Action에 선택 후보가 확정되지 않은 채 1차 승인을 진행하지 않는다.
+- 단일 Action이 PENDING 또는 FAIL이면 Preview·최종 승인·Apply를 진행하지 않는다.
 - CONDITIONAL 예외승인은 사유를 필수로 기록하고 FAIL에는 사용하지 않는다.
 - Preview 이후 후보·공급사·수량·Action이 달라지면 새 Preview와 최종 승인을 받는다.
 - MATERIAL/ASSY 유형, BOM 계층, 중복 활성 관계와 순환 관계 검증 실패를 완화하지 않는다.
@@ -71,7 +71,7 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 - 업무 판정과 데이터 변경은 Service를 거친 MCP Tool 결과를 따른다.
 - 화면과 Agent는 같은 MCP Capability와 이력 Repository를 사용한다.
 
-## STEP31 Analysis Explainability and Follow-up Q&A
+## Analysis Explainability and Follow-up Q&A
 
 설계변경 후보 분석이 완료된 뒤 사용자의 후속질문은 새로운 설계변경 요청으로 초기화하지 않는다.
 현재 Thread의 Analysis Context와 저장된 Candidate Evaluation Evidence를 사용한다.
@@ -95,7 +95,7 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 8. 후속질문 답변에서 후보 분석 표나 Workflow를 새로 생성하지 않는다.
 9. Explain/Compare Tool은 읽기 전용이며 후보 상태·승인 상태·Production BOM을 변경하지 않는다.
 
-## STEP32 Evidence and Impact Explanation Rules
+## Evidence and Impact Explanation Rules
 
 1. Rule 평가 설명은 `rule_id`, `revision`, 실제값, 연산자, 기준값, 조건별 점수와 판정 사유를 근거로 한다.
 2. Attribute 평가 설명은 기존 품목 값과 후보 품목 값을 Before → Candidate 형식으로 설명한다.
@@ -108,7 +108,7 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 9. 공용 영향 모델이 여러 개인 경우 일부 모델만 생략하여 영향이 없는 것처럼 표현하지 않는다.
 10. Explain/Compare/Impact 결과에 없는 수치나 Spec을 LLM이 보완하여 만들어내지 않는다.
 
-## STEP33 Multi-Reason and Dynamic Candidate Rules
+## Multi-Reason and Dynamic Candidate Rules
 
 1. REPLACE 후보 추천 요청에서는 사용자가 신규 자재 ID를 미리 알고 있다고 가정하지 않는다.
 2. 제품과 변경 대상 기존 품목이 식별되면 `new_item_code` 없이 `analyze_design_change_candidates`로 Analysis Session에서 후보를 동적으로 탐색한다. 이때 실제 Request는 생성하지 않는다.
@@ -122,7 +122,7 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 10. Explain 결과에는 Primary Reason과 Secondary Reasons, 각 Rule의 change_reason을 구분해 제공한다.
 
 
-## STEP33-B Multi-Reason UI and Conditional Gate Rules
+## Multi-Reason UI and Conditional Gate Rules
 
 1. 변경 대상 품목 요약은 내부 스크롤 없이 전체 Context가 한 번에 보여야 한다.
 2. 후보 비교표는 `종합 적합성 → 종합 판단 요약 → 평가 사유 → 기술 평가` 순서로 핵심 판단을 먼저 보여준다.
@@ -133,21 +133,21 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 7. 예외승인을 통과한 CONDITIONAL 후보가 COMMON 영향 대상이면 공용 영향 확인을 추가로 완료한 뒤 1차 후보 승인을 기록한다.
 8. FAIL 후보에는 예외승인을 허용하지 않는다.
 
-## STEP33-C Candidate Selection Confirmation Rules
+## Candidate Selection Confirmation Rules
 
 1. 후보 Dropdown 선택은 Streamlit Session State의 임시 선택이며 DB에 `selected_candidate_id`를 기록하지 않는다.
 2. 후보를 고르면 별도 조회 버튼 없이 선택 후보 재확인 영역을 즉시 표시한다.
 3. 실제 DB 저장은 사용자가 `이 후보로 선택 확정` 또는 `예외승인 후 이 후보로 선택 확정`을 눌렀을 때만 수행한다.
-4. 모든 REPLACE/ADD Action에 정확히 하나의 후보가 선택되어야 하며, 일부 Action에 선택 가능한 후보가 없으면 서버 호출 전에 UI에서 차단한다.
+4. 단일 REPLACE/ADD Action에는 정확히 하나의 후보가 선택되어야 하며 선택 가능한 후보가 없으면 서버 호출 전에 UI에서 차단한다.
 5. 동일 대상/Parent/Location/Action을 복수 Reason 때문에 중복 Action으로 생성하지 않는다. 하나의 Action에 Primary + Secondary Reasons를 연결한다.
-6. CONDITIONAL 후보는 선택 확정 전에 추가 속성 또는 사용자 요청수량을 입력하여 재검증할 수 있다.
+6. CONDITIONAL 후보는 필요한 기준정보를 Master에 등록한 뒤 현재 Rule/Item/Supplier/Inventory/BOM 기준으로 재검증할 수 있다. Analysis 단계의 임시 속성·요청수량 입력으로 사실을 만들지 않는다.
 7. 공급사/원가 Master가 없는 경우 임시 수치로 사실을 만들지 않는다. 기준정보를 보완하거나 예외승인 사유를 기록한다.
 8. 재검증 후 PASS가 되면 일반 확정 버튼을 사용한다. 계속 CONDITIONAL이면 사유 없는 확정을 금지한다.
 9. CONDITIONAL 후보 선택과 예외승인은 하나의 확정 동작으로 처리하여 후보만 저장되고 예외승인이 누락되는 중간상태를 만들지 않는다.
 10. UI 업무 오류는 사용자 친화적 메시지로 표시하고 Python Traceback을 사용자 화면에 노출하지 않는다.
 
 
-## STEP34 Analysis Session / Request Separation Rules
+## Analysis Session / Request Separation Rules
 
 1. 후보 탐색, 평가, Explain, 추가정보 반영, 재검증, 후보 임시선택, 공용 영향 확인은 모두 Analysis Session에 속한다.
 2. 위 Analysis 단계에서는 `change_requests`와 `change_actions`를 생성하지 않는다.
@@ -159,18 +159,18 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 10. 분석 이력과 실제 설계변경 Request 이력을 동일 개념으로 취급하지 않는다.
 
 
-## STEP35 Persistent Revalidation and Conversational PLANT Rules
+## Persistent Revalidation and Conversational PLANT Rules
 
 1. 최초 후보 분석 Snapshot은 재검증 결과로 덮어쓰지 않는다. `analysis_initial_candidates`와 최초 Context를 유지한다.
 2. 재검증 결과는 `revalidation_history`에 순서대로 누적하며 최초 분석 화면 하단에 Before/After로 표시한다.
-3. 한 후보를 재검증한 뒤에도 최초 후보 Pool을 유지하여 사용자가 다른 후보로 바꾸거나 요청수량을 다시 입력해 반복 재검증할 수 있게 한다.
+3. 한 후보를 재검증한 뒤에도 최초 후보 Pool을 유지하여 사용자가 다른 후보로 바꾸거나 기준정보 보완 후 반복 재검증할 수 있게 한다.
 4. 재검증은 Analysis Session의 상태만 갱신하며 Design Change Request를 생성하지 않는다.
 5. Agent 채팅의 PLANT는 Sidebar 기본값으로 고정하지 않는다.
 6. BOM 조회 또는 설계변경에 PLANT가 필요하지만 사용자 요청과 활성 Analysis/Workflow에 plant_code가 없으면 먼저 `list_plants`를 조회한다.
 7. `list_plants` 결과의 코드와 이름을 사용자에게 선택지로 제시하고, 사용자가 PLANT를 선택하기 전에는 BOM 조회·후보 분석·Request 생성 Tool을 실행하지 않는다.
 8. PLANT를 임의로 기본 선택하거나 추측하지 않는다. 사용자가 다음 턴에 선택한 PLANT를 직전 요청 Context와 결합해 업무를 계속한다.
 
-## STEP37 Product-wide Cost Opportunity Scan Rules
+## Product-wide Cost Opportunity Scan Rules
 
 1. 사용자가 특정 단일 품목이 아니라 `대상 모델`, `제품 전체`, `BOM 전체`, `BOM에 구성된 자재들` 범위에서 원가 절감 대체 후보를 찾는 경우 하나의 임의 품목을 Design Change target으로 선택하지 않는다.
 2. 위 요청은 `scan_product_cost_reduction_candidates`로 제품 BOM 전체를 읽기 전용 탐색한다. 이 Tool은 Design Change Request를 생성하지 않고 기존 Analysis Session도 덮어쓰지 않는다.

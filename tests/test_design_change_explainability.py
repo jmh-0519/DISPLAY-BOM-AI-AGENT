@@ -170,7 +170,7 @@ def test_candidate_detail_exposes_technical_and_inventory_evidence(tmp_path):
 
 
 
-def test_candidate_detail_persists_step32_supply_and_inventory_evidence(tmp_path):
+def test_candidate_detail_persists_evidence_supply_and_inventory_evidence(tmp_path):
     database = make_database(tmp_path)
     service, created, evaluated = create_committed_analysis(database)
     candidate = evaluated["candidates"][0]

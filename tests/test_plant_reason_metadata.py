@@ -88,7 +88,6 @@ def test_reason_alias_is_resolved_and_persisted_as_action_primary_reason(tmp_pat
             "reasons": ["EOL"],
             "as_of_date": "2026-08-18",
             "effective_date": "2026-09-01",
-            "demand_source": "UNAVAILABLE",
             "requested_by": "tester",
         },
         [{

@@ -134,7 +134,7 @@ def test_context_read_must_not_mutate_workflow():
     assert result.passed is False
 
 
-def test_missing_ae08_database_evidence_is_not_silently_passed():
+def test_missing_safety_database_evidence_is_not_silently_passed():
     result = _evaluator()._evaluate_assertion(
         assertion="READ_ONLY",
         observation=_obs(database_before={}, database_after={}),

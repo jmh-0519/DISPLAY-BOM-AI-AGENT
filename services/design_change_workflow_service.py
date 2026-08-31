@@ -58,9 +58,8 @@ class DesignChangeWorkflowService:
         CONDITIONAL/FAIL.  Therefore the final merged ``status`` is authoritative
         for public recommendation scoring.
 
-        Legacy rule scores remain available internally as ``rule_score`` so DB
-        persistence can stay backward compatible, while the public Analysis/MCP
-        boundary never presents a pending candidate as a low-scored recommendation.
+        Rule scores remain available internally as ``rule_score`` for technical
+        evidence, while only final PASS candidates receive recommendation scoring.
         """
         final_status = str(value.get("status") or "").upper()
         if final_status != "PASS":
@@ -106,9 +105,8 @@ class DesignChangeWorkflowService:
         CONDITIONAL means evaluation is pending, so a numeric score or recommendation
         grade would be misleading. FAIL is excluded from recommendation ranking.
 
-        ``rule_score`` is deliberately retained as internal technical evidence; it is
-        not a recommendation score and is also used to reconstruct legacy persistence
-        fields when an Analysis Session is later committed as a Request.
+        ``rule_score`` is retained as internal technical evidence and is not a
+        recommendation score. Persisted recommendation fields follow the same policy.
         """
         status = str(value.get("status") or "").upper()
         if status == "PASS":
@@ -120,23 +118,21 @@ class DesignChangeWorkflowService:
         value["total_score"] = None
         value["grade"] = "평가 보류" if status == "CONDITIONAL" else None
 
-    def _candidate_for_persistence(self, value: dict) -> dict:
-        """Restore legacy numeric fields only for repository persistence.
+    @staticmethod
+    def _candidate_for_storage(value: dict) -> dict:
+        """Normalize candidate fields for the persisted recommendation contract.
 
-        Candidate tables historically store ``total_score``/``grade`` as numeric
-        rule evidence.  The public Analysis contract intentionally hides those values
-        for CONDITIONAL/FAIL.  Reconstructing them here keeps existing DB/report
-        compatibility without leaking them back through MCP responses.
+        PASS candidates persist score/grade/rank. CONDITIONAL and FAIL persist NULL
+        for recommendation score/grade/rank while detailed rule evidence remains in
+        candidate_rule_results and the evidence JSON fields.
         """
         persisted = dict(value)
-        if persisted.get("total_score") is None:
-            score = float(persisted.get("rule_score") or 0.0)
-            persisted["total_score"] = score
-            persisted["grade"] = self.recommendation.rule_engine.grade(score)
-        elif persisted.get("grade") in {None, "", "평가 보류", "HOLD"}:
-            persisted["grade"] = self.recommendation.rule_engine.grade(
-                float(persisted.get("total_score") or 0.0)
-            )
+        if str(persisted.get("status") or "").upper() != "PASS":
+            persisted["total_score"] = None
+            persisted["grade"] = None
+            persisted["rank"] = None
+            persisted["ranking_score"] = None
+            persisted["ranking_grade"] = None
         return persisted
 
     def create_request(self, request: dict, actions: list[dict]) -> dict:
@@ -173,7 +169,7 @@ class DesignChangeWorkflowService:
                 explicit_action_reason=value.get("reason_code"),
             )
             reason_records = [reason.as_record() for reason in resolved]
-            # STEP33-C: one business change is one Action even when the LLM emits
+            # One business change is one Action even when the LLM emits
             # duplicate actions for multiple reasons (e.g. EOL + COST). Merge any
             # additional reason records into the surviving Action rather than losing
             # them or creating duplicate candidate-selection requirements.
@@ -242,11 +238,8 @@ class DesignChangeWorkflowService:
         request["as_of_date"] = as_of_date
         request["effective_date"] = effective_date
 
-        # Active Design Change quantity policy: use the BOM relation QUANTITY only.
-        # Legacy request columns remain for schema/backward compatibility but no
-        # production-plan or separate requested-demand calculation is performed.
-        request["demand_quantity"] = None
-        request["demand_source"] = "UNAVAILABLE"
+        # Active Design Change quantity policy uses the scoped BOM relation quantity.
+        # Request persistence does not store a separate user-demand field.
 
         request.setdefault("requested_by", "agent_user")
         request.setdefault("reasons", [])
@@ -268,7 +261,7 @@ class DesignChangeWorkflowService:
                 "자재코드, 자재명 또는 품목군을 먼저 입력해 주세요."
             )
 
-        # SPEED2B Macro Target Resolution:
+        # Deterministic macro target resolution:
         # For REPLACE/DELETE/QUANTITY_CHANGE the caller may provide only a
         # business target name such as SEALANT / 실런트 / TFT. Resolve the
         # source item from the actual scoped product BOM inside this Service,
@@ -1078,7 +1071,7 @@ class DesignChangeWorkflowService:
 
     def revalidate_analysis_candidate(
         self, analysis: dict, action_id: str, candidate_item_code: str,
-        demand_quantity: float | None = None, attributes: dict | None = None,
+        attributes: dict | None = None,
     ) -> dict:
         """Re-run an Analysis Session without persisting Request, selection, or master data."""
         if attributes:
@@ -1087,8 +1080,7 @@ class DesignChangeWorkflowService:
         if not before:
             raise ValueError("Candidate does not belong to the active Analysis Session")
         request = dict(analysis.get("request") or {})
-        # demand_quantity remains in the public signature only for compatibility.
-        # Revalidation always recalculates from the current BOM QUANTITY.
+        # Revalidation always recalculates demand from the current BOM quantity.
         result = self.analyze_candidates(request, analysis.get("actions") or [], analysis_id=analysis.get("analysis_id"))
         after = next((row for row in result.get("candidates", []) if row.get("action_id") == action_id and row.get("candidate_item_code") == candidate_item_code), None)
         result["revalidation"] = {
@@ -1294,7 +1286,7 @@ class DesignChangeWorkflowService:
             source_candidates = [dict(row) for row in analysis.get("candidates", []) if row.get("action_id") == analysis_action.get("action_id")]
             if source_candidates:
                 persistence_candidates = [
-                    self._candidate_for_persistence(row) for row in source_candidates
+                    self._candidate_for_storage(row) for row in source_candidates
                 ]
                 self.repository.save_candidate_evaluations(
                     db_action["action_id"], persistence_candidates
@@ -1436,7 +1428,7 @@ class DesignChangeWorkflowService:
         """Return frozen/persisted evidence for the final completion report.
 
         The completion report must explain *why* the approved change was safe, not
-        merely that Apply succeeded.  STEP39 therefore gathers persisted candidate
+        merely that Apply succeeded.  The completion result therefore gathers persisted candidate
         evaluation evidence, the candidate-approval impact snapshot, final Preview,
         approvals and the actual Apply result.  It does not re-run candidate ranking
         or mutate workflow state.

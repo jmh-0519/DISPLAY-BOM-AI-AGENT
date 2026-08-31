@@ -396,7 +396,7 @@ def test_design_change_missing_plant_forces_target_scoped_plant_discovery_before
         "design_change": {"current_step": "NOT_STARTED"},
     })
 
-    # STEP40-C: PLANT 누락 시 LLM에게 list_plants 선택을 맡기지 않는다.
+    # PLANT 누락 시 LLM에게 list_plants 선택을 맡기지 않는다.
     # Agent가 질문의 대상 코드로 scope를 고정한 list_plants Tool Call을 직접 생성하고,
     # Streamlit이 실제 존재하는 PLANT 결과를 버튼으로 보여준다.
     client.create_agent_completion.assert_not_called()
@@ -487,7 +487,7 @@ def test_exact_delete_with_reason_uses_macro_without_bom_lookup():
     assert action["action_type"] == "DELETE"
     assert action["old_item_code"] == "0001-310701"
 
-def test_delete_without_business_reason_is_phase3_change_intent():
+def test_delete_without_business_reason_is_design_change_intent():
     assert BomAgentNode._is_design_change_request(
         "LTA650HR11-001 P03에서 0001-310701 자재를 제거하자"
     )

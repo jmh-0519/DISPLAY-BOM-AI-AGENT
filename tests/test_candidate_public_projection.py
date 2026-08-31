@@ -80,7 +80,7 @@ def test_pass_public_projection_preserves_recommendation_fields():
     assert row == before
 
 
-def test_persistence_projection_restores_legacy_numeric_fields_from_rule_score():
+def test_candidate_storage_keeps_non_pass_recommendation_fields_null():
     service = _service_without_db()
     public_row = {
         "status": "CONDITIONAL",
@@ -90,10 +90,10 @@ def test_persistence_projection_restores_legacy_numeric_fields_from_rule_score()
         "rule_score": 0.0,
     }
 
-    persisted = service._candidate_for_persistence(public_row)
+    persisted = service._candidate_for_storage(public_row)
 
-    assert persisted["total_score"] == 0.0
-    assert persisted["grade"] == "C"
+    assert persisted["total_score"] is None
+    assert persisted["grade"] is None
     # The public object must remain untouched.
     assert public_row["total_score"] is None
     assert public_row["grade"] == "평가 보류"
@@ -118,7 +118,7 @@ def test_final_conditional_status_never_gets_ranking_even_if_technical_passes():
 
     assert row["ranking_score"] is None
     assert row["ranking_grade"] is None
-    # Legacy internal values are deliberately retained until public projection.
+    # Technical rule values may exist before the public/storage projection.
     assert row["total_score"] == 90.0
     assert row["grade"] == "S"
 

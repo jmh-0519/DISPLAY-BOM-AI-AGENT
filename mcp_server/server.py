@@ -238,11 +238,11 @@ def scan_product_cost_reduction_candidates(
 @mcp.tool()
 def revalidate_design_change_analysis(
     analysis: dict, action_id: str, candidate_item_code: str,
-    demand_quantity: float | None = None, attributes: dict | None = None,
+    attributes: dict | None = None,
 ) -> dict:
     """Analysis Session의 추가정보를 반영해 재검증합니다. 실제 Request나 BOM은 변경하지 않습니다."""
     return revalidate_design_change_analysis_data(
-        analysis, action_id, candidate_item_code, demand_quantity, attributes
+        analysis, action_id, candidate_item_code, attributes
     )
 
 @mcp.tool()

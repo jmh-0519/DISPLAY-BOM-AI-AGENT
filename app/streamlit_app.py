@@ -478,7 +478,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Sidebar navigation
     # ------------------------------------------------------------------
-    # STEP40 menu note:
+    # Navigation note:
     # Streamlit button/radio/container components each add their own vertical
     # spacing. To keep every menu row at exactly the same height, the sidebar
     # navigation itself is rendered as one HTML block. Only the content pages

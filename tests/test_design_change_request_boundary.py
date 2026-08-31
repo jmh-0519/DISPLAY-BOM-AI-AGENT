@@ -65,7 +65,6 @@ def test_analysis_and_revalidation_do_not_create_design_change_request(tmp_path)
         analysis=analysis,
         action_id=candidate["action_id"],
         candidate_item_code=candidate["candidate_item_code"],
-        demand_quantity=2,
     )
     assert revalidated["request_created"] is False
     assert revalidated["request_id"] is None

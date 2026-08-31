@@ -27,5 +27,5 @@ def test_empty_timestamp_is_safe():
     assert format_utc_timestamp("") == "-"
 
 
-def test_unexpected_legacy_timestamp_is_preserved():
-    assert format_utc_timestamp("legacy-value") == "legacy-value"
+def test_unexpected_timestamp_is_preserved():
+    assert format_utc_timestamp("unexpected-value") == "unexpected-value"

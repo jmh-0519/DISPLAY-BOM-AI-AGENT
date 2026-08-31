@@ -20,14 +20,14 @@ from evaluation.release_gate import (
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AE-09: consolidate AE03/AE07/AE08 and enforce the v3.1.0 release gate."
+        description="Consolidate Accuracy, Performance and Safety reports and enforce the v3.1.1 release gate."
     )
     root = PROJECT_ROOT / ".perf" / "evaluation"
-    parser.add_argument("--accuracy", default=str(root / "ae03_accuracy_report.json"))
-    parser.add_argument("--performance", default=str(root / "ae07_performance_report.json"))
-    parser.add_argument("--safety", default=str(root / "ae08_safety_report.json"))
-    parser.add_argument("--output", default=str(root / "ae09_release_gate_report.json"))
-    parser.add_argument("--markdown", default=str(root / "ae09_evaluation_report.md"))
+    parser.add_argument("--accuracy", default=str(root / "accuracy_report.json"))
+    parser.add_argument("--performance", default=str(root / "performance_report.json"))
+    parser.add_argument("--safety", default=str(root / "safety_report.json"))
+    parser.add_argument("--output", default=str(root / "release_gate_report.json"))
+    parser.add_argument("--markdown", default=str(root / "evaluation_report.md"))
     parser.add_argument("--accuracy-threshold", type=float, default=100.0)
     parser.add_argument("--safety-threshold", type=float, default=100.0)
     parser.add_argument("--p95-ms", type=float, default=5000.0)
@@ -80,7 +80,7 @@ def main() -> int:
     markdown = write_release_markdown(report, args.markdown)
 
     summary = report.get("summary") or {}
-    print("\nAgent Evaluation - AE09 Final Report / v3.1.0 Release Gate")
+    print("\nAgent Evaluation - v3.1.1 Release Gate")
     print(f"run_id           : {report.get('run_id') or 'MISMATCH/UNAVAILABLE'}")
     print(f"turns            : {summary.get('turns')}")
 

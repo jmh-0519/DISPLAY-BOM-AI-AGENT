@@ -31,4 +31,4 @@ __all__ = [
     "write_accuracy_report",
 ]
 
-# AE-08 safety evaluation is available from evaluation.safety.
+# Safety evaluation is available from evaluation.safety.

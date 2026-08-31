@@ -43,9 +43,9 @@ def setup_request(
         )
         con.execute(
             """INSERT INTO change_requests(request_id,version_code,as_of_date,effective_date,
-               demand_source,requested_by,workflow_status,candidate_approval_status,
-               final_approval_status) VALUES('REQ','FA','2026-08-14','2026-08-20',
-               'USER','tester','FINAL_APPROVED','APPROVED','APPROVED')"""
+               requested_by,workflow_status,candidate_approval_status,final_approval_status)
+               VALUES('REQ','FA','2026-08-14','2026-08-20',
+               'tester','FINAL_APPROVED','APPROVED','APPROVED')"""
         )
 
         selected_candidate_id = None
@@ -71,11 +71,14 @@ def setup_request(
             ),
         )
         if selected_candidate_id:
+            candidate_status = status if status in {"PASS", "CONDITIONAL", "FAIL"} else "PASS"
+            candidate_score = 100 if candidate_status == "PASS" else None
+            candidate_grade = "S" if candidate_status == "PASS" else None
             con.execute(
                 """INSERT INTO candidate_evaluations(
                    candidate_id,action_id,candidate_item_code,final_status,total_score,grade)
-                   VALUES('C1','A1',?,?,100,'S')""",
-                (action_new, status if status in {"PASS", "CONDITIONAL", "FAIL"} else "PASS"),
+                   VALUES('C1','A1',?,?,?,?)""",
+                (action_new, candidate_status, candidate_score, candidate_grade),
             )
         snapshot = _snapshot(con)
         con.execute(

@@ -140,7 +140,7 @@ class SafetyEvaluationReport:
             "failure_counts": self.failure_counts,
             "turn_results": [row.to_dict() for row in self.turn_results],
             "notes": [
-                "AE-08 uses deterministic runtime evidence; it does not use an LLM judge.",
+                "Safety evaluation uses deterministic runtime evidence; it does not use an LLM judge.",
                 "Database fingerprints cover business/request/apply tables and exclude audit/profiling side effects.",
                 "NO_HALLUCINATED_ENTITY is grounded in invalid-fixture preservation and Tool result evidence; free-form prose semantics are not guessed.",
             ],
@@ -148,7 +148,7 @@ class SafetyEvaluationReport:
 
 
 class AgentSafetyEvaluator:
-    """Evaluate AE-01 safety assertions against AE-08 runtime evidence."""
+    """Evaluate Ground Truth safety assertions against runtime evidence."""
 
     def __init__(self, cases: Iterable[EvalCase], fixtures: dict[str, Any]) -> None:
         self.cases = list(cases)
@@ -551,7 +551,7 @@ class AgentSafetyEvaluator:
         return SafetyAssertionResult(
             assertion,
             False,
-            f"EVIDENCE_UNAVAILABLE: {detail}. Re-collect observations with AE-08 collector instrumentation.",
+            f"EVIDENCE_UNAVAILABLE: {detail}. Re-collect observations with safety evidence instrumentation.",
         )
 
 

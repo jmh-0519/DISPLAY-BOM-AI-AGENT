@@ -48,7 +48,7 @@ def test_schema_initialization_is_idempotent(database):
 
 
 def test_incompatible_existing_schema_requires_explicit_recreate(tmp_path):
-    db = SQLiteDatabase(tmp_path / "legacy.db")
+    db = SQLiteDatabase(tmp_path / "incompatible.db")
     with db.connection() as connection:
         connection.execute("CREATE TABLE products(product_id TEXT PRIMARY KEY)")
 
@@ -226,10 +226,29 @@ def test_assy_item_name_must_match_process_name(database):
             )
 
 
+def test_schema_excludes_unused_future_metadata_tables(database):
+    with database.connection() as connection:
+        names = {row["name"] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    assert "customer_master" not in names
+    assert "decision_traces" not in names
+    assert "change_reason_evidence_rules" not in names
+
+
+def test_candidate_storage_enforces_public_score_policy(database):
+    with database.connection() as connection:
+        columns = {row["name"]: row for row in connection.execute(
+            "PRAGMA table_info(candidate_evaluations)"
+        )}
+    assert columns["total_score"]["notnull"] == 0
+    assert columns["grade"]["notnull"] == 0
+
+
 def test_schema_has_persisted_supply_and_demand_evidence(tmp_path):
     database = SQLiteDatabase(tmp_path / "clean-core-schema.db")
     SchemaManager(database).initialize()
-    assert SchemaManager(database).current_version() == 7
+    assert SchemaManager(database).current_version() == CORE_SCHEMA_VERSION
     with database.connection() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(candidate_evaluations)")}
     assert {"supplier_evaluation_json", "demand_context_json"} <= columns

@@ -10,7 +10,7 @@ BASE_DB_PATH = PROJECT_ROOT / "data" / "display_bom.db"
 
 
 def _temp_service(tmp_path) -> DesignChangeWorkflowService:
-    db_path = tmp_path / "step37.db"
+    db_path = tmp_path / "cost-scan.db"
     shutil.copy2(BASE_DB_PATH, db_path)
     return DesignChangeWorkflowService(SQLiteDatabase(db_path))
 

@@ -467,7 +467,7 @@ def test_failed_candidate_analysis_keeps_error_answer_visible():
 
     response = graph.run_with_artifacts(
         "LTA650HR11-001 모델 P03 PLANT BOM에서 0001-310701 자재 수량을 2로 바꾸자.",
-        thread_id="step40n2-visible-error",
+        thread_id="visible-error",
     )
 
     assert response["answer"] == "current BOM relation missing"
@@ -476,6 +476,6 @@ def test_failed_candidate_analysis_keeps_error_answer_visible():
     assert response["suppress_answer"] is False
     assert response["render_design_change_panel"] is False
     assert mcp_client.call_tool.call_count == 1
-    # SPEED2D Macro Dispatch owns this complete request; a failed Analysis
+    # Macro Dispatch owns this complete request; a failed Analysis
     # stays visible without an unnecessary Azure selection/retry call.
     assert client.create_agent_completion.call_count == 0

@@ -458,7 +458,7 @@ def _run(target: Path) -> list[AcceptanceResult]:
 
 
 def _print(results: list[AcceptanceResult]) -> None:
-    print("\n=== Phase3 Demo Acceptance ===")
+    print("\n=== Design Change Demo Acceptance ===")
     print(f"{'RESULT':<7} {'SCENARIO':<42} DETAIL")
     print("-" * 100)
     for result in results:
@@ -471,7 +471,7 @@ def _print(results: list[AcceptanceResult]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run non-Production Phase3 demo acceptance checks."
+        description="Run non-Production Design Change demo acceptance checks."
     )
     parser.add_argument(
         "--database",

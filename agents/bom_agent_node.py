@@ -66,27 +66,6 @@ class BomAgentNode:
         "compare_design_change_candidates",
     }
 
-    # Domain language rules are owned by DomainIntentRouter.
-    # Aliases are kept for backward compatibility with existing tests/helpers.
-    FOLLOW_UP_EXPLAIN_MARKERS = DomainIntentRouter.FOLLOW_UP_EXPLAIN_MARKERS
-    FOLLOW_UP_COMPARE_MARKERS = DomainIntentRouter.FOLLOW_UP_COMPARE_MARKERS
-    ANALYSIS_RESTART_MARKERS = DomainIntentRouter.ANALYSIS_RESTART_MARKERS
-
-    DESIGN_CHANGE_RECOMMENDATION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_RECOMMENDATION_MARKERS
-    PRODUCT_COST_SCAN_SCOPE_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_SCOPE_MARKERS
-    PRODUCT_COST_SCAN_COST_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_COST_MARKERS
-    PRODUCT_COST_SCAN_ACTION_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_ACTION_MARKERS
-    ASSY_PROCESS_NAMES = DomainIntentRouter.ASSY_PROCESS_NAMES
-    DESIGN_CHANGE_INTENT_MARKERS = DomainIntentRouter.DESIGN_CHANGE_INTENT_MARKERS
-    DESIGN_CHANGE_EXPLICIT_ACTION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_EXPLICIT_ACTION_MARKERS
-    DESIGN_CHANGE_REASON_LANGUAGE_MARKERS = DomainIntentRouter.DESIGN_CHANGE_REASON_LANGUAGE_MARKERS
-    ITEM_CODE_PATTERN = DomainIntentRouter.ITEM_CODE_PATTERN
-    PLANT_CODE_PATTERN = DomainIntentRouter.PLANT_CODE_PATTERN
-    PLANT_REQUIRED_QUERY_MARKERS = DomainIntentRouter.PLANT_REQUIRED_QUERY_MARKERS
-    WHERE_USED_MARKERS = DomainIntentRouter.WHERE_USED_MARKERS
-    PLAIN_BOM_QUERY_MARKERS = DomainIntentRouter.PLAIN_BOM_QUERY_MARKERS
-    SIMPLE_CHAT_EXACT = DomainIntentRouter.SIMPLE_CHAT_EXACT
-
     DESIGN_CHANGE_ACTIVE_STEPS = {
         "ANALYSIS_READY",
         "ANALYSIS_REVALIDATED",
@@ -436,7 +415,7 @@ class BomAgentNode:
         routing_step = "NOT_STARTED" if start_fresh_scope else current_step
         routing_workflow_state = {} if start_fresh_scope else workflow_state
 
-        # SPEED1B contract:
+        # Deterministic fast-path contract:
         # - history must not silently redefine a normal current-turn intent;
         # - history may supply missing entity/slot context.
         #
@@ -1214,13 +1193,13 @@ class BomAgentNode:
         text = str(user_query or "")
         upper = text.upper()
         excluded_codes: list[str] = []
-        for match in cls.ITEM_CODE_PATTERN.finditer(upper):
+        for match in DomainIntentRouter.ITEM_CODE_PATTERN.finditer(upper):
             code = match.group(0).upper()
             tail = upper[match.end():match.end() + 16]
             if "말고" in tail or "제외" in tail:
                 excluded_codes.append(code)
         excluded_names = []
-        for name in cls.ASSY_PROCESS_NAMES:
+        for name in DomainIntentRouter.ASSY_PROCESS_NAMES:
             if re.search(rf"(?<![A-Z]){name}(?:\s*자재|\s*ASSY|\s*어셈블리)?\s*(?:말고|제외)", upper):
                 excluded_names.append(name)
         return list(dict.fromkeys(excluded_codes)), list(dict.fromkeys(excluded_names))

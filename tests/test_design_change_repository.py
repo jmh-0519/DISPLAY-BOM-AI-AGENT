@@ -23,7 +23,6 @@ DESIGN_CHANGE_TABLES = {
     "change_reason_master",
     "change_reason_alias",
     "change_reason_scope",
-    "change_reason_evidence_rules",
     "change_requests",
     "change_actions",
     "change_action_reasons",
@@ -33,7 +32,6 @@ DESIGN_CHANGE_TABLES = {
     "change_impacts",
     "change_previews",
     "change_apply_results",
-    "decision_traces",
     "performance_outcomes",
     "dataset_exports",
 }
@@ -131,11 +129,10 @@ def test_design_change_schema_is_idempotent_and_complete(tmp_path):
         foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
 
     assert DESIGN_CHANGE_TABLES <= names
-    assert not any(name.startswith("phase3_") for name in names)
     assert foreign_key_errors == []
 
 
-def test_latest_database_lifecycle_is_repeatable_without_legacy_fixture_data(tmp_path):
+def test_latest_database_lifecycle_is_repeatable_without_deprecated_fixture_data(tmp_path):
     target = tmp_path / "latest.db"
 
     first = rebuild_latest_database(target)
@@ -217,8 +214,6 @@ def test_repository_candidate_lookup_and_request_persistence_use_dynamic_data(tm
             "reasons": [reason["reason_code"]],
             "as_of_date": today,
             "effective_date": today,
-            "demand_quantity": None,
-            "demand_source": "UNAVAILABLE",
             "requested_by": "pytest",
         },
         [

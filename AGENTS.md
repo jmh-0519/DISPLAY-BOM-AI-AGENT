@@ -2,56 +2,64 @@
 
 ## Project
 
-Display BOM AI Agent Phase3 v3.0.0 개발 프로젝트다.
-
-현재 개발 브랜치:
-
-- feature/phase3-agent
+Display BOM AI Agent Clean Core v3.1.1 개발 프로젝트다.
 
 현재 Runtime Architecture:
 
-Streamlit
-→ Single LangGraph Agent
-→ MCP Client
-→ Display BOM MCP Server
-→ Domain Services
-→ SQLite Repositories
-→ data/display_bom.db
+User
+→ Streamlit
+→ Domain Intent Router
+→ LangGraph Gateway
+→ Fast Path / Deterministic Macro / Single LLM Agent
+→ MCP
+→ Domain Service / Rule Engine
+→ Repository
+→ SQLite
+→ Evidence / HITL
+→ Atomic Apply / Rollback
 
 ## Architecture Rules
 
-- Single Agent 구조를 유지한다.
-- 멀티 Agent로 변경하지 않는다.
+- Single Agent 구조를 유지하며 Multi-Agent로 변경하지 않는다.
 - Agent 업무 기능은 Display BOM MCP Tool을 경유한다.
 - MCP Server에 Business Logic을 중복 구현하지 않는다.
-- 업무 로직은 Domain Service에서 처리한다.
+- Service / Rule Engine이 업무 판단 Authority이며 LLM은 업무 Rule Authority가 아니다.
 - Service는 Repository를 통해서만 SQLite에 접근한다.
 - CSV Runtime, CSV Repository, CSV fallback을 추가하지 않는다.
-- 기존 display_bom.db의 데이터 아키텍처 연속성을 유지한다.
-- phase3_* 형태의 임시 테이블을 만들지 않는다.
+- Runtime DB, Canonical Seed DB, Disposable Test DB의 역할을 분리한다.
+- 개발단계명이나 임시 호환 구조를 Runtime Naming/Schema에 추가하지 않는다.
+
+## Design Change Policy
+
+- 지원 Action은 REPLACE / ADD / DELETE / QUANTITY_CHANGE다.
+- Single Request / Single Action 정책을 유지한다.
+- 하나의 Analysis Session도 정확히 하나의 업무 Action만 가진다.
+- 동일 Semantic Action이 복수 Reason 때문에 중복된 경우에만 하나의 Action으로 병합할 수 있다.
+- Analysis Session과 Design Change Request를 분리한다.
+- 분석 중 Request를 생성하지 않고 Production BOM을 변경하지 않는다.
+- 사용자의 명시적 설계변경 진행 승인 후에만 Request를 생성한다.
+- 공용 ASSY/자재 영향은 Request 생성 전에 확인한다.
+- 최종 Apply 승인을 별도로 유지한다.
+- FAIL은 Apply 및 예외승인을 허용하지 않는다.
+- CONDITIONAL만 사유가 있는 예외승인을 허용한다.
+- CONDITIONAL 후보에는 public score / grade / rank를 제공하지 않는다.
+- Apply는 하나의 Transaction으로 처리하고 실패 시 전체 Rollback한다.
+- 공용 ASSY의 BOM은 모델별로 복제하지 않고 영향 모델 전체를 분석한다.
+
+## LLM and Rule Responsibilities
+
+- LLM은 모호한 자연어 해석, Tool 선택, Context 기반 추론과 Evidence 설명을 담당한다.
+- 명확한 조회와 명확한 Design Change 요청은 Fast Path / Deterministic Macro를 우선한다.
+- Service와 Rule Engine은 BOM 사실, 검증, Candidate 평가, 상태와 Apply 가능 여부를 결정한다.
+- LLM이 원가, 재고, 납기, 품질, 적합성이나 Tool 결과에 없는 데이터를 생성하지 않는다.
+- 불필요한 LLM Call을 추가하지 않는다.
 
 ## Production Safety
 
 - 사용자 승인 전 Production BOM을 변경하지 않는다.
-- 후보 분석과 설계변경 Workflow를 분리한다. 사용자가 후보를 선택하기 전에는 Workflow를 시작하지 않는다.
-- 공용 ASSY 내부 BOM 변경은 영향 모델/Spec 추가 승인을 받은 뒤에만 Workflow를 시작한다.
-- 최종 Apply 승인은 별도로 유지한다.
-- 복수 Action Apply는 하나의 Transaction으로 처리한다.
-- 하나의 Action이라도 FAIL이면 전체 Apply를 차단한다.
-- Apply 실패 시 전체 변경을 Rollback한다.
-- FAIL은 예외승인할 수 없다.
-- CONDITIONAL만 사유를 기록하고 예외승인할 수 있다.
-- 공용 ASSY의 BOM은 모델별로 복제하지 않는다.
-- 공용 ASSY 변경 시 영향 모델 전체를 분석한다.
-
-## LLM and Rule Responsibilities
-
-Phase3에서는:
-
-- LLM은 자연어 의도, 대상, 변경 사유, Action과 평가 항목을 식별한다.
-- Service와 Rule Engine은 검증, 점수, 등급과 상태를 계산한다.
-- LLM이 원가, 재고, 납기, 품질과 적합성을 임의로 생성하지 않는다.
-- Tool 결과에 없는 데이터를 만들어내지 않는다.
+- 테스트용 특정 자재/모델을 Runtime 분기 기준으로 사용하지 않는다.
+- Atomic Transaction + Rollback을 유지한다.
+- Runtime DB를 테스트가 변경하지 않는다.
 
 ## Langfuse
 
@@ -64,49 +72,36 @@ Phase3에서는:
 
 ## Development Workflow
 
-작업 순서:
-
 1. 관련 코드를 먼저 분석한다.
-2. 구현 전 변경 계획과 영향 파일을 제시한다.
-3. 승인된 범위만 수정한다.
-4. 관련 단위 테스트를 추가한다.
-5. 관련 테스트를 실행한다.
-6. 전체 회귀 테스트를 실행한다.
-7. git diff와 변경 파일을 요약한다.
+2. 변경 목적과 영향 범위를 확인한다.
+3. 기존 정상 기능을 유지하면서 필요한 범위만 수정한다.
+4. 변경영역 Targeted Test와 QUICK/CORE 등 적절한 Suite를 실행한다.
+5. v3.1.1 Freeze 직전에는 Full Regression + Agent Evaluation + Safety + Performance + Release Gate를 실행한다.
+6. git diff와 변경 파일을 요약한다.
 
-## File Safety
+## File / Database Safety
 
 - 사용자 변경사항을 임의로 삭제하지 않는다.
-- 기존 테스트를 삭제하거나 통과 기준을 완화하지 않는다.
+- 테스트 통과 기준을 완화하지 않는다.
 - .env, API Key, .venv, cache와 임시 파일을 Commit하지 않는다.
-- data/display_bom.db를 테스트 데이터로 덮어쓰지 않는다.
-- 테스트는 임시 SQLite DB를 사용한다.
-
-## Completion Criteria
-
-다음 조건을 모두 충족해야 완료로 판단한다.
-
-- 요청한 기능 구현
-- 관련 테스트 통과
-- 전체 회귀 테스트 통과
-- 승인 Gate와 Transaction 안전성 유지
-- 변경 파일 및 테스트 결과 보고
+- `data/display_bom_seed.db`만 Canonical Seed DB로 Git 추적한다.
+- `data/display_bom.db`는 Runtime/Demo DB이며 테스트가 수정하지 않는다.
+- Test DB는 `.pytest_tmp_runtime/test_display_bom.db`를 사용하고 pytest 종료 시 삭제한다.
 
 ## Test Execution
 
 - 모든 pytest는 프로젝트 루트에서 실행한다.
-- pytest를 직접 실행하지 않고 다음 공통 Runner를 사용한다.
-
-  `python -m scripts.run_tests`
-
-- 특정 테스트도 같은 Runner에 테스트 경로와 옵션을 전달한다.
-
-  `python -m scripts.run_tests tests/test_file.py -v`
-
-- 공통 Runner는 TEMP, TMP, TMPDIR와 pytest basetemp를
-  프로젝트 내부 `.pytest_tmp`로 설정한다.
-- 테스트를 위해 사용자 Temp 디렉터리나 프로젝트 외부 경로의
-  접근 권한을 요청하지 않는다.
+- 공통 Runner는 `python -m scripts.run_tests`를 사용한다.
+- Tier는 `quick`, `core`, `evaluation`, `full`을 사용한다.
+- 특정 테스트도 `python -m scripts.run_tests tests/test_file.py -q` 형태로 실행할 수 있다.
+- 공통 Runner는 TEMP/TMP/TMPDIR와 pytest basetemp를 프로젝트 내부 `.pytest_tmp_runtime`으로 고정한다.
 - 테스트 중 Langfuse 네트워크 전송은 비활성화한다.
-- 권한 오류가 발생해도 Sandbox 권한 확대를 요청하지 말고
-  공통 Runner 사용 여부를 먼저 확인한다.
+
+## Completion Criteria
+
+- Single Agent / Single Request / Single Action 정책 유지
+- Analysis-first + HITL + Final Approval 유지
+- FAIL Apply 차단 및 Atomic Rollback 유지
+- Runtime / Seed / Test DB 역할 분리 유지
+- 관련 테스트 및 Release Gate 통과
+- 개발단계명/임시 호환 코드가 Final Core에 다시 유입되지 않음

@@ -95,7 +95,7 @@ class RuntimeObservationCollector:
     """Collect raw runtime evidence for one Agent evaluation turn.
 
     This class does not judge PASS/FAIL.  It records what actually happened so
-    AE-03+ can compare it against the AE-01 Ground Truth dataset.
+    Evaluators can compare it against the Ground Truth dataset.
     """
 
     def __init__(

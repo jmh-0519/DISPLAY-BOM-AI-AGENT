@@ -18,7 +18,7 @@ class _Client:
 def _message(payload):
     return ToolMessage(
         content=json.dumps(payload, ensure_ascii=False),
-        tool_call_id=f"{MACRO_ANALYZE_TOOL_CALL_PREFIX}ae09p2",
+        tool_call_id=f"{MACRO_ANALYZE_TOOL_CALL_PREFIX}macro-finalizer",
         name="analyze_design_change_candidates",
     )
 

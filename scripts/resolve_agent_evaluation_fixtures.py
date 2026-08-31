@@ -16,7 +16,7 @@ from evaluation.fixtures import EvaluationFixtureResolver
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Resolve AE-01 dynamic fixtures from the current SQLite BOM database."
+        description="Resolve Ground Truth dynamic fixtures from the current SQLite BOM database."
     )
     parser.add_argument("--database", default=str(PROJECT_ROOT / "data" / "display_bom.db"))
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))

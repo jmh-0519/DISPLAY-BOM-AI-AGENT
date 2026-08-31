@@ -381,7 +381,7 @@ class BomAgentGraph:
             "revalidate_design_change_analysis",
         }
         terminal_error = bool(str(after.values.get("error") or "").strip())
-        # STEP40-N2: a failed candidate-analysis Tool still leaves a ToolMessage
+        # a failed candidate-analysis Tool still leaves a ToolMessage
         # with the original Tool name.  Tool-name presence alone must therefore
         # never be used to hide the terminal error answer or render an empty
         # Design Change panel.  Successful structured outputs may suppress duplicate LLM

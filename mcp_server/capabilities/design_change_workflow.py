@@ -79,11 +79,11 @@ def scan_product_cost_reduction_candidates_data(
 
 def revalidate_design_change_analysis_data(
     analysis: dict, action_id: str, candidate_item_code: str,
-    demand_quantity: float | None = None, attributes: dict | None = None,
+    attributes: dict | None = None,
 ) -> dict:
     return _service().revalidate_analysis_candidate(
         analysis=analysis, action_id=action_id, candidate_item_code=candidate_item_code,
-        demand_quantity=demand_quantity, attributes=attributes,
+        attributes=attributes,
     )
 
 def preview_design_change_analysis_impact_data(analysis: dict, selections: list[dict]) -> dict:

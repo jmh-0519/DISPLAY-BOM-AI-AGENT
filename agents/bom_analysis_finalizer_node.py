@@ -68,7 +68,7 @@ class BomAnalysisFinalizerNode:
 
         user_query = self._last_user_query(messages)
 
-        # AE-09P2: Macro Analysis already has deterministic, verified Tool evidence.
+        # Macro Analysis already has deterministic, verified Tool evidence.
         # Render the common successful result locally so the high-confidence Macro
         # path does not spend 4-5 seconds on a prose-only LLM call.  If the payload
         # is malformed or outside the supported shape, fall back to the original

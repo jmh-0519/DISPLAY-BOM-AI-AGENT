@@ -27,7 +27,6 @@ class TrainingExportService:
                     "version": self._pseudonym(record["version_code"]),
                     "reasons": [reason if reason in self.SAFE_REASONS else "OTHER"
                                 for reason in json.loads(record["reasons_json"])],
-                    "demand_source": record["demand_source"],
                     "actions": [{
                         "action_type": action["action_type"],
                         "target_type": action["target_type"],

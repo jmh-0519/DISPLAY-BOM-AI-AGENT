@@ -1,4 +1,4 @@
-from scripts.run_phase3_demo_acceptance import _run
+from scripts.run_design_change_demo_acceptance import _run
 
 
 def test_design_change_demo_acceptance_harness_passes_on_rebuilt_isolated_db(tmp_path):

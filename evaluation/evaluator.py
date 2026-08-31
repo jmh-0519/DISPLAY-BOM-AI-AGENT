@@ -12,7 +12,7 @@ from evaluation.schema import EvalCase, EvalTurn, fixture_names
 EVALUATION_REPORT_SCHEMA_VERSION = "1.0"
 
 # Read-only helper Tools are legitimate before a CLARIFY / PLANT_SELECT
-# interaction.  AE-03 originally treated *any* Tool as a mismatch when the
+# interaction.  The accuracy evaluator originally treated *any* Tool as a mismatch when the
 # Ground Truth had no primary business Tool, which undercounted correct
 # resolution behavior such as querying valid PLANTs before showing buttons.
 RESOLUTION_TOOL_ALLOWLIST = frozenset({
@@ -109,9 +109,9 @@ class _ArgumentRequirement:
 
 
 class AgentAccuracyEvaluator:
-    """Compare AE-01 Ground Truth with AE-02 runtime observations.
+    """Compare Ground Truth with runtime observations.
 
-    AE-03 intentionally evaluates observable contracts only.  It does not judge
+    The accuracy evaluator intentionally evaluates observable contracts only.  It does not judge
     answer wording or hidden reasoning.  Tool argument checks are tool-aware and
     validate business entities/action/quantity against dynamic fixtures.
     """

@@ -35,7 +35,7 @@ class ResolvedReason:
 class ChangeReasonResolver:
     """Maps free user language to active, scope-valid design-change reasons.
 
-    STEP33 keeps one primary reason for business classification, while preserving
+    One primary reason is used for business classification while preserving
     every additional detected reason as a secondary reason. All persisted reasons
     can then participate in candidate/rule/supply evaluation.
     """
@@ -209,7 +209,7 @@ class ChangeReasonResolver:
         action_type: str,
         explicit_action_reason: str | None = None,
     ) -> ResolvedReason:
-        """Backward-compatible single-result API returning the resolved primary reason."""
+        """Single-result API returning the resolved primary reason."""
         return self.resolve_all(
             proposed_reasons=proposed_reasons,
             original_request=original_request,

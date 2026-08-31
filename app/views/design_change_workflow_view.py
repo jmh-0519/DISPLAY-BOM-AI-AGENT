@@ -64,7 +64,7 @@ def _render_pending_scroll() -> None:
     if not pending:
         return
 
-    # Backward compatibility for sessions created by STEP35-B.
+    # Normalize optional session state fields.
     if isinstance(pending, str):
         target = pending
         event_id = int(st.session_state.get("design_change_scroll_event_seq", 0)) + 1
@@ -297,7 +297,7 @@ def impact_spec_rows(workflow: dict, changed_only: bool = False) -> list[dict]:
                 })
         return rows
 
-    # Backward-compatible fallback for pre-STEP32 impact payloads.
+    # Fallback when an impact payload omits the explicit public summary.
     for action in review.get("actions", []):
         for spec in action.get("spec_changes", []):
             if changed_only and spec.get("change_status") == "SAME":
@@ -759,7 +759,7 @@ def _render_selected_candidate_revalidation(
 ) -> None:
     """Revalidate CONDITIONAL/FAIL candidates from persisted master/BOM data only.
 
-    STEP40-C intentionally removes ad-hoc attribute and requested-demand inputs.
+    The active workflow intentionally excludes ad-hoc attribute and requested-demand inputs.
     Candidate suitability is re-read from Rule/Item/Supplier/Inventory master data,
     and quantity evaluation always uses the BOM QUANTITY already carried by the
     Analysis action.
@@ -805,7 +805,6 @@ def _render_selected_candidate_revalidation(
                     action_id=action_id,
                     candidate_item_code=candidate_code,
                     attributes={},
-                    demand_quantity=None,
                 )
             except Exception as error:
                 st.error(f"재검증에 실패했습니다: {error}")

@@ -317,14 +317,13 @@ class SQLiteDesignChangeRepository:
             connection.execute(
                 """INSERT INTO change_requests(
                    request_id,plant_code,version_code,original_request,normalized_request,reasons_json,
-                   as_of_date,effective_date,demand_quantity,demand_source,requested_by)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                   as_of_date,effective_date,requested_by)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
                 (
                     request["request_id"], request["plant_code"], request["version_code"],
                     request.get("original_request"),
                     request.get("normalized_request"), json.dumps(request.get("reasons", [])),
-                    request["as_of_date"], request["effective_date"],
-                    request.get("demand_quantity"), request["demand_source"], request["requested_by"],
+                    request["as_of_date"], request["effective_date"], request["requested_by"],
                 ),
             )
             for sequence, action in enumerate(actions, 1):
@@ -904,7 +903,7 @@ class SQLiteDesignChangeRepository:
         with self.database.connection() as connection:
             return [dict(row) for row in connection.execute(
                 """SELECT request_id,plant_code,version_code,original_request,reasons_json,
-                   demand_source,demand_quantity,requested_by,workflow_status,candidate_approval_status,
+                   requested_by,workflow_status,candidate_approval_status,
                    final_approval_status,apply_status,created_at,updated_at
                    FROM change_requests ORDER BY created_at DESC"""
             )]

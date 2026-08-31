@@ -42,7 +42,7 @@ class RepositoryBomService:
         return self.repository.resolve_version_code(value) or value
 
     def _resolve_bom_root(self, value: str) -> tuple[str | None, str | None]:
-        """VERSION/legacy product/ASSEMBLY를 조회 가능한 Root로 식별합니다."""
+        """VERSION/alternate product/ASSEMBLY를 조회 가능한 Root로 식별합니다."""
         version_code = self.repository.resolve_version_code(value)
         root_code = version_code or value
         item = self.repository.get_item(root_code)

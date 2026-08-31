@@ -46,7 +46,7 @@ class DisplayBomMcpClient:
         "list_plants",
     }
 
-    # SPEED2E: only the Analysis Macro receives a local transport fast path.
+    # only the Analysis Macro receives a local transport fast path.
     # It may persist Analysis Session evidence, but it cannot create a Design
     # Change Request and cannot modify Production E-BOM. All approval/apply
     # tools remain behind the stdio MCP transport.

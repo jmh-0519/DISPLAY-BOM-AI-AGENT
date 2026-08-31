@@ -30,6 +30,10 @@ INSERT OR IGNORE INTO schema_versions(version, description)
 VALUES (7, 'Display BOM Clean Core baseline schema');
 UPDATE schema_versions SET description='Display BOM Clean Core baseline schema' WHERE version=7;
 
+INSERT OR IGNORE INTO schema_versions(version, description)
+VALUES (8, 'Clean Core schema semantics and metadata cleanup');
+UPDATE schema_versions SET description='Clean Core schema semantics and metadata cleanup' WHERE version=8;
+
 CREATE TABLE IF NOT EXISTS plants (
   plant_code TEXT PRIMARY KEY,
   plant_name TEXT NOT NULL UNIQUE,
@@ -59,13 +63,6 @@ CREATE TABLE IF NOT EXISTS supplier_master (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS customer_master (
-  customer_code TEXT PRIMARY KEY,
-  customer_name TEXT NOT NULL UNIQUE,
-  active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE IF NOT EXISTS item_master (
   item_code TEXT PRIMARY KEY,
@@ -82,12 +79,10 @@ CREATE TABLE IF NOT EXISTS version_master (
   version_no TEXT,
   route_code TEXT,
   specification TEXT,
-  customer_code TEXT,
   active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(version_code) REFERENCES item_master(item_code),
-  FOREIGN KEY(customer_code) REFERENCES customer_master(customer_code)
+  FOREIGN KEY(version_code) REFERENCES item_master(item_code)
 );
 
 CREATE TABLE IF NOT EXISTS assembly_master (
@@ -390,17 +385,6 @@ CREATE TABLE IF NOT EXISTS change_reason_scope (
   PRIMARY KEY(reason_code,target_type,action_type)
 );
 
-CREATE TABLE IF NOT EXISTS change_reason_evidence_rules (
-  evidence_rule_id TEXT PRIMARY KEY,
-  reason_code TEXT NOT NULL REFERENCES change_reason_master(reason_code),
-  target_type TEXT NOT NULL CHECK(target_type IN ('MATERIAL','ASSY','ALL')),
-  attribute_name TEXT NOT NULL,
-  operator TEXT NOT NULL CHECK(operator IN ('EQ','NE','GT','GE','LT','LE','IN','PRESENT')),
-  expected_value TEXT,
-  evidence_role TEXT NOT NULL DEFAULT 'SUPPORT' CHECK(evidence_role IN ('SUPPORT','CONFLICT')),
-  required_yn TEXT NOT NULL DEFAULT 'N' CHECK(required_yn IN ('Y','N')),
-  active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N'))
-);
 
 INSERT OR IGNORE INTO change_reason_master
   (reason_code,reason_name_ko,description,category)
@@ -473,13 +457,6 @@ SELECT reason_code,target_type,action_type FROM (
   SELECT 'USER_REQUEST','ASSY','QUANTITY_CHANGE'
 );
 
-INSERT OR IGNORE INTO change_reason_evidence_rules
-  (evidence_rule_id,reason_code,target_type,attribute_name,operator,expected_value,evidence_role,required_yn)
-VALUES
-  ('RE-EOL-001','EOL','ALL','lifecycle_status','EQ','EOL','SUPPORT','N'),
-  ('RE-SUP-001','SUPPLIER_STOP','ALL','supply_status','EQ','STOPPED','SUPPORT','N'),
-  ('RE-INV-001','INVENTORY','ALL','shortage_quantity','GT','0','SUPPORT','N'),
-  ('RE-QUA-001','QUALITY','ALL','quality_status','IN','FAIL,HOLD','SUPPORT','N');
 
 CREATE TABLE IF NOT EXISTS rule_definitions (
   rule_id TEXT PRIMARY KEY,
@@ -531,8 +508,6 @@ CREATE TABLE IF NOT EXISTS change_requests (
   reasons_json TEXT NOT NULL DEFAULT '[]',
   as_of_date TEXT NOT NULL,
   effective_date TEXT NOT NULL,
-  demand_quantity REAL CHECK(demand_quantity IS NULL OR demand_quantity > 0),
-  demand_source TEXT NOT NULL CHECK(demand_source IN ('USER','PRODUCTION_PLAN','UNAVAILABLE')),
   workflow_status TEXT NOT NULL DEFAULT 'REQUESTED',
   candidate_approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK(candidate_approval_status IN ('PENDING','APPROVED','REJECTED')),
   final_approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK(final_approval_status IN ('PENDING','APPROVED','REJECTED')),
@@ -592,8 +567,8 @@ CREATE TABLE IF NOT EXISTS candidate_evaluations (
   candidate_item_code TEXT NOT NULL REFERENCES item_master(item_code),
   recommended_supplier_item_id INTEGER REFERENCES supplier_items(supplier_item_id),
   final_status TEXT NOT NULL CHECK(final_status IN ('PASS','CONDITIONAL','FAIL')),
-  total_score REAL NOT NULL CHECK(total_score >= 0 AND total_score <= 100),
-  grade TEXT NOT NULL CHECK(grade IN ('S','A','B','C')),
+  total_score REAL CHECK(total_score IS NULL OR (total_score >= 0 AND total_score <= 100)),
+  grade TEXT CHECK(grade IS NULL OR grade IN ('S','A','B','C')),
   rank_no INTEGER,
   missing_data_json TEXT NOT NULL DEFAULT '[]',
   conditional_reasons_json TEXT NOT NULL DEFAULT '[]',
@@ -603,7 +578,11 @@ CREATE TABLE IF NOT EXISTS candidate_evaluations (
   demand_context_json TEXT NOT NULL DEFAULT '{}',
   impact_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(action_id, candidate_item_code)
+  UNIQUE(action_id, candidate_item_code),
+  CHECK(
+    (final_status='PASS' AND total_score IS NOT NULL AND grade IS NOT NULL)
+    OR (final_status IN ('CONDITIONAL','FAIL') AND total_score IS NULL AND grade IS NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS candidate_rule_results (
@@ -667,15 +646,6 @@ CREATE TABLE IF NOT EXISTS change_apply_results (
   UNIQUE(request_id)
 );
 
-CREATE TABLE IF NOT EXISTS decision_traces (
-  trace_id TEXT PRIMARY KEY,
-  request_id TEXT NOT NULL REFERENCES change_requests(request_id),
-  event_type TEXT NOT NULL,
-  anonymized_input_json TEXT NOT NULL DEFAULT '{}',
-  decision_json TEXT NOT NULL DEFAULT '{}',
-  feedback_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE IF NOT EXISTS performance_outcomes (
   outcome_id TEXT PRIMARY KEY,

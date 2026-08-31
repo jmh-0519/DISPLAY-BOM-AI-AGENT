@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _service(tmp_path):
-    path = tmp_path / "step36.db"
+    path = tmp_path / "completion.db"
     rebuild_latest_database(path)
     database = SQLiteDatabase(path)
     return DesignChangeWorkflowService(database), database

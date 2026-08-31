@@ -5,7 +5,7 @@ from pathlib import Path
 from database.connection import SQLiteDatabase
 
 
-CORE_SCHEMA_VERSION = 7
+CORE_SCHEMA_VERSION = 8
 CORE_SCHEMA_TABLES = frozenset({
     "assembly_master",
     "bom_hierarchy_rules",
@@ -19,13 +19,10 @@ CORE_SCHEMA_TABLES = frozenset({
     "change_impacts",
     "change_previews",
     "change_reason_alias",
-    "change_reason_evidence_rules",
     "change_reason_master",
     "change_reason_scope",
     "change_requests",
-    "customer_master",
     "dataset_exports",
-    "decision_traces",
     "inventory_balances",
     "inventory_locations",
     "item_attribute_values",

@@ -19,7 +19,7 @@ ChangeReasonCode = Literal[
 class DesignChangeRequestInput(TypedDict):
     """설계변경 요청의 MCP 입력 계약입니다.
 
-    version_code와 plant_code만 업무 대상 식별에 필수입니다. 날짜, 수요 출처,
+    version_code와 plant_code만 업무 대상 식별에 필수입니다. 날짜와
     표준 reason_code는 Service가 원문/DB를 기준으로 안전하게 보완할 수 있습니다.
     복수 사유는 reasons에 모두 보존될 수 있으며 Service가 Primary/Secondary를 확정합니다.
     """
@@ -29,16 +29,10 @@ class DesignChangeRequestInput(TypedDict):
     reasons: NotRequired[list[ChangeReasonCode]]
     as_of_date: NotRequired[str]
     effective_date: NotRequired[str]
-    demand_source: NotRequired[Literal[
-        "USER",
-        "PRODUCTION_PLAN",
-        "UNAVAILABLE",
-    ]]
     requested_by: NotRequired[str]
     request_id: NotRequired[str]
     original_request: NotRequired[str]
     normalized_request: NotRequired[str]
-    demand_quantity: NotRequired[float | None]
 
 
 class DesignChangeActionInput(TypedDict):

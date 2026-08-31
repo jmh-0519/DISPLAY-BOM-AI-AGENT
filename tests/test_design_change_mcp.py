@@ -23,7 +23,7 @@ DESIGN_CHANGE_TOOLS = {
 }
 
 
-LEGACY_REQUEST_FIRST_TOOLS = {
+REMOVED_REQUEST_FIRST_TOOLS = {
     "create_design_change_request",
     "evaluate_replacement_candidates",
     "select_candidate_and_supplier",
@@ -39,10 +39,10 @@ def test_design_change_mcp_tools_are_registered():
         assert callable(getattr(server, name))
 
 
-def test_request_first_legacy_tools_are_not_registered():
+def test_removed_request_first_tools_are_not_registered():
     tools = asyncio.run(server.mcp.list_tools())
     names = {tool.name for tool in tools}
-    assert not (LEGACY_REQUEST_FIRST_TOOLS & names)
+    assert not (REMOVED_REQUEST_FIRST_TOOLS & names)
 
 
 def test_analysis_tool_schema_exposes_design_change_enums():
@@ -53,9 +53,8 @@ def test_analysis_tool_schema_exposes_design_change_enums():
     request_schema = definitions["DesignChangeRequestInput"]
     action_schema = definitions["DesignChangeActionInput"]
 
-    assert request_schema["properties"]["demand_source"]["enum"] == [
-        "USER", "PRODUCTION_PLAN", "UNAVAILABLE",
-    ]
+    assert "demand_source" not in request_schema["properties"]
+    assert "demand_quantity" not in request_schema["properties"]
     assert action_schema["properties"]["action_type"]["enum"] == [
         "REPLACE", "ADD", "DELETE", "QUANTITY_CHANGE",
     ]

@@ -353,7 +353,7 @@ class DomainIntentRouter:
 
             MODEL-789의 1234-567890을 1234-567891로 교체 가능한지 분석해줘
 
-        This used to be routed to the removed legacy ``analyze_design_change``
+        This used to be routed to the removed ``analyze_design_change``
         Tool.  The current Core routes the same intent into the read-only
         ``analyze_design_change_candidates`` Analysis Session instead.
         """

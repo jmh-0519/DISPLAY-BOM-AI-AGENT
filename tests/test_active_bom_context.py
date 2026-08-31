@@ -3,6 +3,8 @@ from unittest.mock import Mock
 from langchain_core.messages import AIMessage, HumanMessage
 
 from agents.bom_agent_node import BomAgentNode
+from agents.bom_graph_gateway import AGENT_PATH, BomGraphGateway
+from agents.domain_intent_router import DEFAULT_DOMAIN_INTENT_ROUTER
 from agents.bom_mcp_tool_node import BomMcpToolNode
 from agents.design_change_workflow_state import create_initial_design_change_state
 
@@ -10,6 +12,20 @@ from agents.design_change_workflow_state import create_initial_design_change_sta
 def _agent():
     return BomAgentNode(Mock(), Mock(), "Design Change workflow")
 
+
+
+def test_item_only_quantity_change_without_active_bom_uses_agent_path():
+    query = "LJ94-100006 자재의 수량을 바꾸고싶어 P01"
+    route = BomGraphGateway().route({
+        "messages": [HumanMessage(content=query)],
+        "design_change": create_initial_design_change_state(),
+    })
+    assert route == AGENT_PATH
+
+
+def test_explicit_model_scope_code_is_detected_by_router():
+    query = "LTA400HR01-001 P01 모델에서 LJ94-100006 자재의 수량을 바꾸고싶어"
+    assert DEFAULT_DOMAIN_INTENT_ROUTER.explicit_model_scope_code(query) == "LTA400HR01-001"
 
 def test_item_only_quantity_change_inherits_current_active_bom_and_asks_only_quantity():
     node = _agent()

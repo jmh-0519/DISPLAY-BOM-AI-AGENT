@@ -8,8 +8,8 @@
 
 ## 1. 현재 버전
 
-- Core Release: `v3.0.0`
-- Agent Evaluation Release: `v3.1.0`
+- Current Clean Core Freeze: `v3.1.1`
+- Agent Evaluation Baseline: `v3.1.0` (50 Cases / 58 Turns)
 - Agent 구조: **Single Agent**
 - LLM: Azure OpenAI `gpt-4.1-mini`
 - Agent Framework: LangGraph
@@ -440,6 +440,14 @@ BOM_SQLITE_PATH=data/display_bom.db
 ```
 
 API Key 등 Secret 값은 Git Repository에 Commit하지 않습니다.
+
+### SQLite DB 역할 분리
+
+- `data/display_bom_seed.db`: Git에서 추적하는 Canonical Seed DB
+- `data/display_bom.db`: Seed에서 재생성하는 Runtime / Demo DB
+- `.pytest_tmp_runtime/test_display_bom.db`: pytest 실행 중에만 사용하는 Disposable Test DB
+
+Runtime/Test DB는 Canonical Seed와 현재 Schema를 기준으로 재생성하며 테스트가 Runtime DB를 변경하지 않습니다.
 
 ---
 

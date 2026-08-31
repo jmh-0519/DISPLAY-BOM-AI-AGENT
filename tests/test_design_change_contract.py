@@ -60,13 +60,11 @@ def test_add_without_specific_target_is_rejected_before_analysis(tmp_path):
             },
         )
 
-def test_design_change_management_menu_is_not_exposed_in_main_navigation():
-    assert '"phase3": "Design Change Rule / History"' not in STREAMLIT_SOURCE
-    assert '_menu_link("Design Change Rule / History", "phase3")' not in STREAMLIT_SOURCE
-    assert 'elif menu == "Design Change Rule / History"' not in STREAMLIT_SOURCE
+def test_removed_design_change_management_menu_is_not_exposed_in_main_navigation():
+    assert 'Design Change Rule / History' not in STREAMLIT_SOURCE
 
 
-def test_report_footer_phase3_caption_is_removed():
+def test_report_footer_development_caption_is_removed():
     assert "현재 Design Change 활성 프로세스" not in AGENT_VIEW_SOURCE
 
 

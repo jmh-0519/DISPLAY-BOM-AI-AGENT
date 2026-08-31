@@ -5,8 +5,6 @@ import re
 from services.rule_engine import RuleEngine
 
 
-class RuleNotFoundError(ValueError):
-    """Backward-compatible exception type; STEP28 uses attribute fallback instead."""
 
 
 class RecommendationService:

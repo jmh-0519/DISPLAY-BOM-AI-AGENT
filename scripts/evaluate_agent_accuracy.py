@@ -21,12 +21,12 @@ from evaluation.evaluator import (
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compare Agent runtime observations with AE-01 Ground Truth."
+        description="Compare Agent runtime observations with the Ground Truth dataset."
     )
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET_PATH))
     parser.add_argument(
         "--observations",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae02_observations.jsonl"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "agent_observations.jsonl"),
     )
     parser.add_argument(
         "--manifest",
@@ -35,7 +35,7 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "ae03_accuracy_report.json"),
+        default=str(PROJECT_ROOT / ".perf" / "evaluation" / "accuracy_report.json"),
     )
     parser.add_argument(
         "--case-id",
@@ -86,7 +86,7 @@ def main() -> int:
         "tool_selection": "Tool Selection Accuracy",
         "tool_arguments": "Tool Argument Accuracy",
     }
-    print("\nAgent Evaluation - AE03 Accuracy")
+    print("\nAgent Evaluation - Accuracy")
     print(f"cases expected   : {report.expected_case_count}")
     print(f"turns expected   : {report.expected_turn_count}")
     print(f"turns observed   : {report.observed_turn_count}")

@@ -365,7 +365,7 @@ class AzureOpenAIClient:
             },
         )
 
-        # STEP31: Explain Tool 실행 후 최종 자연어 답변만 생성해야 하는
+        # Explain Tool 실행 후 최종 자연어 답변만 생성해야 하는
         # 턴에서는 허용 Tool이 0개일 수 있습니다. 이 경우 Azure OpenAI에
         # tools/tool_choice 자체를 보내지 않아 모델의 반복 Tool 호출을 막습니다.
         if tools:
@@ -385,7 +385,7 @@ class AzureOpenAIClient:
         )
 
     # =========================================================
-    # SPEED2F1 Dedicated Analysis Finalizer
+    # Dedicated Analysis Finalizer
     # =========================================================
 
     def create_analysis_final_answer(
@@ -429,7 +429,7 @@ class AzureOpenAIClient:
             f"{analysis_evidence.strip()}"
         )
 
-        # Keep SPEED2F0 prompt-budget reporting comparable. This is the same
+        # Keep prompt-budget reporting comparable. This is the same
         # metric schema as the full Agent call, but Skill/Runtime/Tools are zero.
         message_payload_chars = len(user_content)
         approx_total_chars = len(system_content) + message_payload_chars

@@ -17,9 +17,9 @@ def _case(case_id: str):
 
 
 def _observation(case_id: str, turn_index: int, *, intent: str, route: str, tool: str | None):
-    calls = [] if tool is None else [{"name": tool, "arguments": {}, "tool_call_id": "ae05"}]
+    calls = [] if tool is None else [{"name": tool, "arguments": {}, "tool_call_id": "evaluation-tool"}]
     return {
-        "run_id": "ae05-test",
+        "run_id": "evaluation-test",
         "case_id": case_id,
         "turn_index": turn_index,
         "user_input": "test",

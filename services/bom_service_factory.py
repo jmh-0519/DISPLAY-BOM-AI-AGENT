@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from database import SQLiteDatabase, SchemaManager
+from database.schema import CORE_SCHEMA_VERSION
 from repositories import SQLiteBomRepository
 from services.repository_bom_service import RepositoryBomService
 from core.database_config import sqlite_database_path
@@ -40,12 +41,12 @@ def create_read_bom_service(
             if schema
             else 0
         )
-    if not schema or version is None or version < 2:
+    if not schema or version != CORE_SCHEMA_VERSION:
         raise BomStorageConfigurationError(
-            "STEP24-A2 v2 Schema가 적용된 SQLite DB가 아닙니다."
+            "현재 Clean Core Schema와 호환되는 SQLite DB가 아닙니다."
         )
     if item_count == 0:
         raise BomStorageConfigurationError(
-            "SQLite DB에 이관 데이터가 없습니다. STEP24-B1을 먼저 실행하세요."
+            "SQLite DB에 BOM 기준 데이터가 없습니다. Canonical Seed에서 Runtime DB를 재생성하세요."
         )
     return RepositoryBomService(SQLiteBomRepository(database))

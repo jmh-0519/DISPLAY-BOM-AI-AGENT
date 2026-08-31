@@ -38,7 +38,7 @@ def format_utc_timestamp(
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
-        # Preserve unexpected legacy values rather than hiding them.
+        # Preserve unexpected timestamp values rather than hiding them.
         return raw
 
     if parsed.tzinfo is None:

@@ -44,7 +44,7 @@ class SQLiteBomRepository:
         ASSEMBLY: Plant must contain the ASSY as a BOM parent or child.
         MATERIAL: Plant must contain the material as a BOM child.
 
-        If reference_code is absent, this remains backward compatible and returns
+        If reference_code is absent, this returns
         all active Plants.  An unknown/resolved target returns an empty list rather
         than suggesting unrelated Plants.
         """
@@ -350,7 +350,7 @@ class SQLiteBomRepository:
         with self.database.connection() as con:
             row = con.execute(
                 """SELECT i.item_code,i.item_type,i.item_name,i.description,i.active_yn,
-                          v.version_no,v.route_code,v.specification,v.customer_code,v.active_yn AS version_active_yn
+                          v.version_no,v.route_code,v.specification,v.active_yn AS version_active_yn
                    FROM item_master i
                    JOIN version_master v ON v.version_code=i.item_code
                    WHERE UPPER(i.item_code)=UPPER(?)""",

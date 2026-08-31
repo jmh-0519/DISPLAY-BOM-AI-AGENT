@@ -81,7 +81,7 @@ def evaluate_release_gate(
     p95_latency_threshold_ms: float = DEFAULT_P95_LATENCY_MS,
     tests: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build the AE-09 deterministic release gate from AE-03/07/08 reports.
+    """Build the deterministic release gate from accuracy, performance and safety reports.
 
     The gate never invents missing measurements. Accuracy, performance and safety
     must originate from one observation run, otherwise the result is FAIL until
@@ -95,7 +95,7 @@ def evaluate_release_gate(
         "SAME_OBSERVATION_RUN",
         same_run,
         run_ids,
-        "one identical non-empty run_id across AE03/AE07/AE08",
+        "one identical non-empty run_id across accuracy/performance/safety",
         None if same_run else "Re-run stale evaluator(s) from the current 58-turn observation set.",
     ))
 
@@ -175,7 +175,7 @@ def evaluate_release_gate(
     return {
         "schema_version": RELEASE_REPORT_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "release_target": "v3.1.0",
+        "release_target": "v3.1.1",
         "passed": passed,
         "status": "PASS" if passed else "FAIL",
         "run_id": run_ids[0] if same_run else None,
@@ -211,12 +211,12 @@ def evaluate_release_gate(
         "checks": [check.to_dict() for check in checks],
         "failed_checks": [check.name for check in checks if not check.passed],
         "source_run_ids": {
-            "ae03_accuracy": run_ids[0],
-            "ae07_performance": run_ids[1],
-            "ae08_safety": run_ids[2],
+            "accuracy": run_ids[0],
+            "performance": run_ids[1],
+            "safety": run_ids[2],
         },
         "notes": [
-            "Accuracy percentages are dataset-conformance metrics for the AE-01 Ground Truth set, not universal real-world accuracy claims.",
+            "Accuracy percentages are dataset-conformance metrics for the Ground Truth set, not universal real-world accuracy claims.",
             "Safety is deterministic runtime-evidence evaluation; no LLM judge is used.",
             "The performance release gate uses P95 <= 5000ms; max latency is retained as diagnostic evidence, not the release threshold.",
             "FULL_REGRESSION is included only when the finalizer is run with --run-tests.",
@@ -273,7 +273,7 @@ def render_release_markdown(report: dict[str, Any]) -> str:
     performance = summary.get("performance") or {}
     safety = summary.get("safety") or {}
     lines = [
-        "# Display BOM AI Agent v3.1.0 - Agent Evaluation Report",
+        "# Display BOM AI Agent v3.1.1 - Agent Evaluation Report",
         "",
         f"- Release Gate: **{report.get('status', 'FAIL')}**",
         f"- Observation Run ID: `{report.get('run_id') or 'MISMATCH/UNAVAILABLE'}`",
@@ -320,7 +320,7 @@ def render_release_markdown(report: dict[str, Any]) -> str:
         "",
         "## Interpretation",
         "",
-        "The 100% accuracy values mean full conformance on the current AE-01 Ground Truth dataset and must not be presented as universal real-world accuracy. Safety results are based on deterministic runtime evidence. The response-time release criterion is P95 latency <= 5 seconds; max latency remains a diagnostic metric.",
+        "The 100% accuracy values mean full conformance on the current Ground Truth dataset and must not be presented as universal real-world accuracy. Safety results are based on deterministic runtime evidence. The response-time release criterion is P95 latency <= 5 seconds; max latency remains a diagnostic metric.",
         "",
     ]
     tests = summary.get("tests")

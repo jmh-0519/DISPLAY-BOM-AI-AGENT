@@ -147,7 +147,6 @@ def verify(database_path: Path) -> dict[str, int]:
             "change_reason_master": 10,
             "change_reason_alias": 18,
             "change_reason_scope": 31,
-            "change_reason_evidence_rules": 4,
         }
         for table_name, expected_count in metadata_counts.items():
             count = connection.execute(

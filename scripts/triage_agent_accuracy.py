@@ -7,8 +7,8 @@ from pathlib import Path
 from evaluation.triage import triage_accuracy_report
 
 
-DEFAULT_INPUT = Path(".perf/evaluation/ae03_accuracy_report.json")
-DEFAULT_OUTPUT = Path(".perf/evaluation/ae04_failure_triage.json")
+DEFAULT_INPUT = Path(".perf/evaluation/accuracy_report.json")
+DEFAULT_OUTPUT = Path(".perf/evaluation/accuracy_failure_triage.json")
 
 
 def _print_value(value):
@@ -20,7 +20,7 @@ def _print_value(value):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Triage AE-03 accuracy failures")
+    parser = argparse.ArgumentParser(description="Triage accuracy failures")
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--show-all", action="store_true")
@@ -28,7 +28,7 @@ def main() -> None:
 
     source = Path(args.input).expanduser().resolve()
     if not source.exists():
-        raise FileNotFoundError(f"AE-03 report not found: {source}")
+        raise FileNotFoundError(f"Accuracy report not found: {source}")
     report = json.loads(source.read_text(encoding="utf-8"))
     triage = triage_accuracy_report(report)
 
@@ -36,7 +36,7 @@ def main() -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(triage, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("\nAgent Evaluation - AE04 Failure Triage")
+    print("\nAgent Evaluation - Failure Triage")
     print(f"turns evaluated            : {triage['evaluated_turn_count']}")
     print(f"failed turns               : {triage['failed_turn_count']}")
     print(f"semantic root failures     : {triage['semantic_root_failed_turns']}")
