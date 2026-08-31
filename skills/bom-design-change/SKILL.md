@@ -21,7 +21,7 @@ Design Change의 활성 업무 경로는 **분석 단계와 실제 설계변경 
 4. CONDITIONAL이면 `revalidate_design_change_analysis`로 요청수량 등 보완 가능한 정보를 반영해 재검증한다. 재검증도 Request를 생성하지 않는다.
 5. 선택 후보가 COMMON 영향 대상이면 `preview_design_change_analysis_impact`로 영향 모델과 Before/After Spec을 읽기 전용으로 확인한다. 이 단계도 Request를 생성하지 않는다.
 6. 사용자가 분석 결과·후보·필요한 영향범위를 확인한 뒤 **"설계변경 진행"을 명시적으로 승인한 경우에만** `create_design_change_request_from_analysis`를 호출한다. 이 시점이 실제 Design Change Request 생성 경계이다.
-7. Request 생성 후 `create_multi_action_preview`로 실제 변경 Preview를 만든다.
+7. Request 생성 후 `create_design_change_preview`로 실제 변경 Preview를 만든다.
 8. 사용자가 Preview를 확인한 뒤 `record_final_apply_approval`로 Production Apply 최종 승인을 기록한다.
 9. `apply_approved_change_request`가 모든 Action을 하나의 Transaction으로 적용하며 실패 시 전체 Rollback한다.
 10. Apply 성공 후 `export_design_change_completion_report`로 **설계변경 완료 Word 보고서**를 생성하고 Design Change 업무를 종료한다.

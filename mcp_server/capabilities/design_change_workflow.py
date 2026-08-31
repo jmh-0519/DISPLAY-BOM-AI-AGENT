@@ -51,7 +51,7 @@ def record_exception_approval_data(request_id: str, reason: str, approved_by: st
     return _service().approve_exception(request_id, reason, approved_by)
 
 
-def create_multi_action_preview_data(request_id: str, created_by: str) -> dict:
+def create_design_change_preview_data(request_id: str, created_by: str) -> dict:
     return _service().create_preview(request_id, created_by)
 
 

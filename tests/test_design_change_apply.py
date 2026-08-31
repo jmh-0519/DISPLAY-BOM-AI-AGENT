@@ -3,13 +3,21 @@ import json
 import pytest
 
 from database import SQLiteDatabase, SchemaManager
-from repositories.multi_action_repository import SQLiteMultiActionRepository
-from services.multi_action_change_service import MultiActionApplyService
+from repositories.design_change_apply_repository import SQLiteDesignChangeApplyRepository
+from services.design_change_apply_service import AtomicDesignChangeApplyService
 from services.design_change_workflow_service import DesignChangeWorkflowService
 from repositories.design_change_repository import SQLiteDesignChangeRepository
 
 
-def setup_request(tmp_path, statuses=("PASS", "PASS")):
+def setup_request(
+    tmp_path,
+    *,
+    status="PASS",
+    action_type="REPLACE",
+    old_item="OLD",
+    new_item="NEW",
+    new_quantity=1,
+):
     database = SQLiteDatabase(tmp_path / "actions.db")
     SchemaManager(database).initialize()
     with database.transaction() as con:
@@ -17,11 +25,17 @@ def setup_request(tmp_path, statuses=("PASS", "PASS")):
             ("FA", "VERSION"), ("OLD", "MATERIAL"), ("NEW", "MATERIAL"),
             ("ADD", "MATERIAL"), ("QTY", "MATERIAL"),
         ):
-            con.execute("INSERT INTO item_master(item_code,item_type,item_name) VALUES(?,?,?)", (code, item_type, code))
+            con.execute(
+                "INSERT INTO item_master(item_code,item_type,item_name) VALUES(?,?,?)",
+                (code, item_type, code),
+            )
             if item_type == "VERSION":
                 con.execute("INSERT INTO version_master(version_code) VALUES(?)", (code,))
             else:
-                con.execute("INSERT INTO material_master(material_code,material_name) VALUES(?,?)", (code, code))
+                con.execute(
+                    "INSERT INTO material_master(material_code,material_name) VALUES(?,?)",
+                    (code, code),
+                )
         con.executemany(
             """INSERT INTO bom_master(parent_item_code,child_item_code,location_code,
                sequence_no,quantity,valid_from,status) VALUES('FA',?,'N/A',?,?,?, 'ACTIVE')""",
@@ -33,25 +47,36 @@ def setup_request(tmp_path, statuses=("PASS", "PASS")):
                final_approval_status) VALUES('REQ','FA','2026-08-14','2026-08-20',
                'USER','tester','FINAL_APPROVED','APPROVED','APPROVED')"""
         )
-        actions = [
-            ("A1", 1, "REPLACE", "OLD", "NEW", 1, 1, statuses[0]),
-            ("A2", 2, "QUANTITY_CHANGE", "QTY", None, 1, 3, statuses[1]),
-        ]
-        for action_id, seq, kind, old, new, old_qty, new_qty, status in actions:
-            con.execute(
-                """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
-                   target_type,parent_item_code,old_item_code,new_item_code,location_code,
-                   old_quantity,new_quantity,evaluation_status)
-                   VALUES(?,'REQ',?,?,'MATERIAL','FA',?,?,'N/A',?,?,?)""",
-                (action_id, seq, kind, old, new, old_qty, new_qty, status),
-            )
-        con.execute("UPDATE change_actions SET selected_candidate_id='C1' WHERE action_id='A1'")
+
+        selected_candidate_id = None
+        if action_type in {"REPLACE", "ADD"}:
+            selected_candidate_id = "C1"
+        action_old = None if action_type == "ADD" else old_item
+        action_new = new_item if action_type in {"REPLACE", "ADD"} else None
+        old_quantity = None if action_type == "ADD" else 1
+        action_new_quantity = new_quantity if action_type in {"ADD", "QUANTITY_CHANGE"} else 1
         con.execute(
-            """INSERT INTO candidate_evaluations(
-               candidate_id,action_id,candidate_item_code,final_status,total_score,grade)
-               VALUES('C1','A1','NEW',? ,100,'S')""",
-            (statuses[0] if statuses[0] in {"PASS", "CONDITIONAL", "FAIL"} else "PASS",),
+            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
+               target_type,parent_item_code,old_item_code,new_item_code,location_code,
+               old_quantity,new_quantity,evaluation_status,selected_candidate_id)
+               VALUES('A1','REQ',1,?,'MATERIAL','FA',?,?,'N/A',?,?,?,?)""",
+            (
+                action_type,
+                action_old,
+                action_new,
+                old_quantity,
+                action_new_quantity,
+                status,
+                selected_candidate_id,
+            ),
         )
+        if selected_candidate_id:
+            con.execute(
+                """INSERT INTO candidate_evaluations(
+                   candidate_id,action_id,candidate_item_code,final_status,total_score,grade)
+                   VALUES('C1','A1',?,?,100,'S')""",
+                (action_new, status if status in {"PASS", "CONDITIONAL", "FAIL"} else "PASS"),
+            )
         snapshot = _snapshot(con)
         con.execute(
             """INSERT INTO change_previews(preview_id,request_id,preview_revision,
@@ -110,34 +135,45 @@ def refresh_preview(database):
 
 def active_children(database):
     with database.connection() as con:
-        return {row["child_item_code"]: row["quantity"] for row in con.execute(
-            "SELECT child_item_code,quantity FROM bom_master WHERE parent_item_code='FA' AND status='ACTIVE' AND valid_to IS NULL"
-        )}
+        return {
+            row["child_item_code"]: row["quantity"]
+            for row in con.execute(
+                "SELECT child_item_code,quantity FROM bom_master "
+                "WHERE parent_item_code='FA' AND status='ACTIVE' AND valid_to IS NULL"
+            )
+        }
 
 
-def test_multiple_actions_apply_in_one_transaction(tmp_path):
+def test_apply_rejects_multiple_actions_per_request(tmp_path):
     database = setup_request(tmp_path)
-    result = MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
-        request_id="REQ", final_approval_id="APP-F", applied_by="tester",
-    )
-    assert result["result"] == "APPLIED"
-    assert active_children(database) == {"NEW": 1, "QTY": 3}
-    with database.connection() as con:
-        assert con.execute("SELECT COUNT(*) FROM change_apply_results").fetchone()[0] == 1
+    with database.transaction() as con:
+        con.execute(
+            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
+               target_type,parent_item_code,old_item_code,location_code,old_quantity,
+               new_quantity,evaluation_status)
+               VALUES('A2','REQ',2,'QUANTITY_CHANGE','MATERIAL','FA','QTY','N/A',1,3,'PASS')"""
+        )
+    refresh_preview(database)
+
+    with pytest.raises(ValueError, match="exactly one action"):
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
+            request_id="REQ", final_approval_id="APP-F", applied_by="tester",
+        )
+    assert active_children(database) == {"OLD": 1, "QTY": 1}
 
 
-def test_fail_action_blocks_all_changes(tmp_path):
-    database = setup_request(tmp_path, statuses=("PASS", "FAIL"))
+def test_fail_action_blocks_apply(tmp_path):
+    database = setup_request(tmp_path, status="FAIL")
     with pytest.raises(ValueError, match="FAIL action"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
 
 
 def test_conditional_requires_exception_reason(tmp_path):
-    database = setup_request(tmp_path, statuses=("PASS", "CONDITIONAL"))
-    service = MultiActionApplyService(SQLiteMultiActionRepository(database))
+    database = setup_request(tmp_path, status="CONDITIONAL")
+    service = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database))
     with pytest.raises(ValueError, match="exception reason"):
         service.apply(request_id="REQ", final_approval_id="APP-F", applied_by="tester")
     with database.transaction() as con:
@@ -151,59 +187,55 @@ def test_conditional_requires_exception_reason(tmp_path):
     )["result"] == "APPLIED"
 
 
-def test_mid_apply_failure_rolls_back_every_action(tmp_path):
+def test_mid_apply_failure_rolls_back_transaction(tmp_path, monkeypatch):
     database = setup_request(tmp_path)
-    with database.transaction() as con:
-        con.execute("UPDATE change_actions SET new_quantity=0 WHERE action_id='A2'")
-    refresh_preview(database)
-    with pytest.raises(ValueError, match="quantity"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+    repository = SQLiteDesignChangeApplyRepository(database)
+
+    def fail_after_partial_write(connection, action, effective_date):
+        connection.execute(
+            "UPDATE bom_master SET quantity=99 WHERE parent_item_code='FA' AND child_item_code='OLD'"
+        )
+        raise RuntimeError("forced mid-apply failure")
+
+    monkeypatch.setattr(repository, "apply_action", fail_after_partial_write)
+    with pytest.raises(RuntimeError, match="forced mid-apply"):
+        AtomicDesignChangeApplyService(repository).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
 
 
-def test_add_and_delete_actions(tmp_path):
-    database = setup_request(tmp_path)
-    with database.transaction() as con:
-        con.execute("DELETE FROM candidate_evaluations WHERE action_id IN ('A1','A2')")
-        con.execute("DELETE FROM change_actions WHERE request_id='REQ'")
-        con.execute(
-            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
-               target_type,parent_item_code,old_item_code,location_code,evaluation_status)
-               VALUES('D1','REQ',1,'DELETE','MATERIAL','FA','OLD','N/A','PASS')"""
-        )
-        con.execute(
-            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
-               target_type,parent_item_code,new_item_code,location_code,new_quantity,evaluation_status)
-               VALUES('N1','REQ',2,'ADD','MATERIAL','FA','ADD','N/A',2,'PASS')"""
-        )
-        con.execute("UPDATE change_actions SET selected_candidate_id='C-ADD' WHERE action_id='N1'")
-        con.execute(
-            """INSERT INTO candidate_evaluations(
-               candidate_id,action_id,candidate_item_code,final_status,total_score,grade)
-               VALUES('C-ADD','N1','ADD','PASS',100,'S')"""
-        )
-    refresh_preview(database)
-    MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+def test_add_action_applies(tmp_path):
+    database = setup_request(tmp_path, action_type="ADD", old_item=None, new_item="ADD", new_quantity=2)
+    result = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
         request_id="REQ", final_approval_id="APP-F", applied_by="tester",
     )
-    assert active_children(database) == {"QTY": 1, "ADD": 2}
+    assert result["result"] == "APPLIED"
+    assert active_children(database) == {"OLD": 1, "QTY": 1, "ADD": 2}
+
+
+def test_delete_action_applies(tmp_path):
+    database = setup_request(tmp_path, action_type="DELETE", old_item="OLD", new_item=None)
+    result = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
+        request_id="REQ", final_approval_id="APP-F", applied_by="tester",
+    )
+    assert result["result"] == "APPLIED"
+    assert active_children(database) == {"QTY": 1}
 
 
 def test_both_approval_gates_are_required(tmp_path):
     database = setup_request(tmp_path)
     with database.transaction() as con:
         con.execute("DELETE FROM change_approvals WHERE approval_stage='CANDIDATE'")
-    service = MultiActionApplyService(SQLiteMultiActionRepository(database))
+    service = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database))
     with pytest.raises(ValueError, match="Candidate approval"):
         service.apply(request_id="REQ", final_approval_id="APP-F", applied_by="tester")
 
 
 def test_pending_action_cannot_be_applied(tmp_path):
-    database = setup_request(tmp_path, statuses=("PENDING", "PASS"))
+    database = setup_request(tmp_path, status="PENDING")
     with pytest.raises(ValueError, match="Every action"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
@@ -219,7 +251,7 @@ def test_final_approval_must_match_latest_preview(tmp_path):
             (json.dumps(_snapshot(con)),),
         )
     with pytest.raises(ValueError, match="latest preview"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
@@ -233,31 +265,16 @@ def test_apply_rejects_target_type_mismatch(tmp_path):
         con.execute("UPDATE change_actions SET new_item_code='ASSY-X' WHERE action_id='A1'")
     refresh_preview(database)
     with pytest.raises(ValueError, match="target_type"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
 
 
 def test_add_rejects_existing_active_relation(tmp_path):
-    database = setup_request(tmp_path)
-    with database.transaction() as con:
-        con.execute("DELETE FROM candidate_evaluations WHERE action_id IN ('A1','A2')")
-        con.execute("DELETE FROM change_actions WHERE request_id='REQ'")
-        con.execute(
-            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
-               target_type,parent_item_code,new_item_code,location_code,new_quantity,
-               evaluation_status,selected_candidate_id)
-               VALUES('N1','REQ',1,'ADD','MATERIAL','FA','QTY','N/A',2,'PASS','C-QTY')"""
-        )
-        con.execute(
-            """INSERT INTO candidate_evaluations(
-               candidate_id,action_id,candidate_item_code,final_status,total_score,grade)
-               VALUES('C-QTY','N1','QTY','PASS',100,'S')"""
-        )
-    refresh_preview(database)
+    database = setup_request(tmp_path, action_type="ADD", old_item=None, new_item="QTY", new_quantity=2)
     with pytest.raises(ValueError, match="already active"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
     assert active_children(database) == {"OLD": 1, "QTY": 1}
@@ -305,34 +322,21 @@ def test_production_bom_change_after_preview_blocks_apply(tmp_path):
                WHERE parent_item_code='FA' AND child_item_code='OLD' AND valid_to IS NULL"""
         )
     with pytest.raises(ValueError, match="changed after preview"):
-        MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+        AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
             request_id="REQ", final_approval_id="APP-F", applied_by="tester",
         )
 
 
 def test_delete_same_effective_day_relation_does_not_break_validity_constraint(tmp_path):
-    """A relation created on the effective date can still be deleted the same day.
-
-    This reproduces the UI sequence where a REPLACE creates a new active BOM row
-    today and a later DELETE request removes that row today. The old implementation
-    tried to set valid_to to effective_date-1 and violated valid_to >= valid_from.
-    """
-    database = setup_request(tmp_path)
+    database = setup_request(tmp_path, action_type="DELETE", old_item="OLD", new_item=None)
     with database.transaction() as con:
-        con.execute("DELETE FROM candidate_evaluations WHERE action_id IN ('A1','A2')")
-        con.execute("DELETE FROM change_actions WHERE request_id='REQ'")
         con.execute(
             """UPDATE bom_master SET valid_from='2026-08-20',valid_to=NULL,status='ACTIVE'
                WHERE parent_item_code='FA' AND child_item_code='OLD'"""
         )
-        con.execute(
-            """INSERT INTO change_actions(action_id,request_id,action_seq,action_type,
-               target_type,parent_item_code,old_item_code,location_code,evaluation_status)
-               VALUES('D-SAME','REQ',1,'DELETE','MATERIAL','FA','OLD','N/A','PASS')"""
-        )
     refresh_preview(database)
 
-    result = MultiActionApplyService(SQLiteMultiActionRepository(database)).apply(
+    result = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database)).apply(
         request_id="REQ", final_approval_id="APP-F", applied_by="tester",
     )
 

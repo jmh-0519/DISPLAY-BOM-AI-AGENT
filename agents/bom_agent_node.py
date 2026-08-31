@@ -48,7 +48,7 @@ class BomAgentNode:
         "confirm_candidate_selection",
         "approve_candidate_impact",
         "record_exception_approval",
-        "create_multi_action_preview",
+        "create_design_change_preview",
         "record_final_apply_approval",
         "apply_approved_change_request",
         "get_change_request_result",
@@ -64,7 +64,7 @@ class BomAgentNode:
         "confirm_candidate_selection",
         "approve_candidate_impact",
         "record_exception_approval",
-        "create_multi_action_preview",
+        "create_design_change_preview",
         "record_final_apply_approval",
         "apply_approved_change_request",
     }
@@ -188,7 +188,7 @@ class BomAgentNode:
         },
         "CANDIDATE_APPROVED": {
             "record_exception_approval",
-            "create_multi_action_preview",
+            "create_design_change_preview",
             "get_change_request_result",
             "get_design_change_analysis",
             "get_candidate_evaluation_detail",

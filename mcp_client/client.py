@@ -858,9 +858,9 @@ class DisplayBomMcpClient:
                 "criterion": criterion,
             }), "compare_design_change_candidates")
 
-    def create_multi_action_preview(self, request_id: str, created_by: str) -> dict:
-        return self._ensure_dict(self.call_tool("create_multi_action_preview", {
-            "request_id": request_id, "created_by": created_by}), "create_multi_action_preview")
+    def create_design_change_preview(self, request_id: str, created_by: str) -> dict:
+        return self._ensure_dict(self.call_tool("create_design_change_preview", {
+            "request_id": request_id, "created_by": created_by}), "create_design_change_preview")
 
     def record_final_apply_approval(self, request_id: str, approved_by: str) -> dict:
         return self._ensure_dict(self.call_tool("record_final_apply_approval", {

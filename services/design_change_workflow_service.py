@@ -5,11 +5,11 @@ import uuid
 from datetime import date
 
 from repositories.design_change_repository import SQLiteDesignChangeRepository
-from repositories.multi_action_repository import SQLiteMultiActionRepository
+from repositories.design_change_apply_repository import SQLiteDesignChangeApplyRepository
 from services.impact_analysis_service import ImpactAnalysisService
 from services.analysis_explain_service import DesignChangeAnalysisExplainService
 from services.change_reason_resolver import ChangeReasonResolver
-from services.multi_action_change_service import MultiActionApplyService
+from services.design_change_apply_service import AtomicDesignChangeApplyService
 from services.query_normalizer import QueryNormalizer
 from services.recommendation_service import RecommendationService
 from services.supply_evaluation_service import SupplyEvaluationService
@@ -26,11 +26,24 @@ class DesignChangeWorkflowService:
         self.supply = SupplyEvaluationService(self.repository)
         self.impact = ImpactAnalysisService(self.repository)
         self.explain = DesignChangeAnalysisExplainService(self.repository)
-        self.apply_service = MultiActionApplyService(SQLiteMultiActionRepository(database))
+        self.apply_service = AtomicDesignChangeApplyService(SQLiteDesignChangeApplyRepository(database))
 
     @staticmethod
     def _id(prefix: str) -> str:
         return f"{prefix}-{uuid.uuid4().hex[:12].upper()}"
+
+    @staticmethod
+    def _require_single_action(actions: list[dict], *, scope: str) -> None:
+        """Enforce the active Single Request / Single Action policy.
+
+        Duplicate LLM emissions for the same semantic action may be merged before
+        this guard is called, but one Analysis Session or persisted Request must
+        never contain two distinct business actions.
+        """
+        if len(actions) != 1:
+            raise ValueError(
+                f"{scope} must contain exactly one Design Change action"
+            )
 
     def _apply_candidate_ranking_score(
         self,
@@ -181,6 +194,7 @@ class DesignChangeWorkflowService:
             normalized_actions.append(value)
             resolved_reasons_by_action.append(reason_records)
 
+        self._require_single_action(normalized_actions, scope="Design Change Request")
         request["reasons"] = list(dict.fromkeys(
             reason["reason_code"]
             for action_reasons in resolved_reasons_by_action
@@ -796,6 +810,7 @@ class DesignChangeWorkflowService:
             prepared_actions.append(action)
             reason_records_by_action.append(records)
 
+        self._require_single_action(prepared_actions, scope="Analysis Session")
         normalized_request["reasons"] = list(dict.fromkeys(
             row["reason_code"]
             for records in reason_records_by_action
@@ -1213,6 +1228,7 @@ class DesignChangeWorkflowService:
     def preview_analysis_impact(self, analysis: dict, selections: list[dict]) -> dict:
         request = dict(analysis.get("request") or {})
         actions = [dict(value) for value in analysis.get("actions") or []]
+        self._require_single_action(actions, scope="Analysis Session")
         selection_by_action = {row.get("action_id"): row for row in selections}
         for action in actions:
             if action.get("action_type") not in {"REPLACE", "ADD"}:
@@ -1236,6 +1252,7 @@ class DesignChangeWorkflowService:
         analysis_actions = [dict(value) for value in analysis.get("actions") or []]
         if not request or not analysis_actions:
             raise ValueError("Completed Analysis Session is required")
+        self._require_single_action(analysis_actions, scope="Analysis Session")
         selection_by_action = {row.get("action_id"): row for row in selections}
         selected_rows: list[tuple[dict, dict, dict]] = []
         for action in analysis_actions:
@@ -1757,7 +1774,7 @@ class DesignChangeWorkflowService:
         return self.impact.create_preview(request_id, created_by)
 
     def approve_final(self, request_id: str, approved_by: str) -> dict:
-        context = SQLiteMultiActionRepository(self.repository.database).get_apply_context(request_id)
+        context = SQLiteDesignChangeApplyRepository(self.repository.database).get_apply_context(request_id)
         if not context or not context.get("preview"):
             raise ValueError("Preview is required before final approval")
         if context["preview"]["validation_status"] == "FAIL":
@@ -1831,7 +1848,7 @@ class DesignChangeWorkflowService:
         if request.get("apply_status") != "APPLIED":
             return {"success": False, "request_id": request_id, "message": "완료 보고서는 Production Apply 이후 생성할 수 있습니다."}
 
-        multi_repo = SQLiteMultiActionRepository(self.repository.database)
+        multi_repo = SQLiteDesignChangeApplyRepository(self.repository.database)
         context = multi_repo.get_apply_context(request_id) or {}
         candidate_rows = self.repository.list_request_candidate_evaluations(request_id)
         for row in candidate_rows:
@@ -1948,7 +1965,7 @@ class DesignChangeWorkflowService:
 
         # History detail can resume a persisted Request without bypassing MCP.
         # Expose only workflow identifiers needed for the next allowed step.
-        context = SQLiteMultiActionRepository(self.repository.database).get_apply_context(request_id) or {}
+        context = SQLiteDesignChangeApplyRepository(self.repository.database).get_apply_context(request_id) or {}
         approvals = context.get("approvals") or []
         final_approval = next(
             (

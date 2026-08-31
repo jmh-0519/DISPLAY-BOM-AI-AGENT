@@ -72,7 +72,7 @@ def test_report_footer_phase3_caption_is_removed():
 
 def test_request_proceed_prepares_preview_without_separate_preview_button():
     assert 'client.create_design_change_request_from_analysis(' in AGENT_VIEW_SOURCE
-    assert 'preview_result = client.create_multi_action_preview(request_id, "streamlit-user")' in AGENT_VIEW_SOURCE
+    assert 'preview_result = client.create_design_change_preview(request_id, "streamlit-user")' in AGENT_VIEW_SOURCE
     assert 'st.button("통합 영향 Preview 생성")' not in AGENT_VIEW_SOURCE
     assert 'st.markdown("#### 적용 전 최종 확인")' in AGENT_VIEW_SOURCE
     assert 'st.button("설계변경 확정", type="primary")' in AGENT_VIEW_SOURCE
@@ -80,7 +80,7 @@ def test_request_proceed_prepares_preview_without_separate_preview_button():
 
 def test_history_resume_does_not_expose_preview_generation_button():
     assert '"통합 영향 Preview 생성"' not in HISTORY_SOURCE
-    assert 'client.create_multi_action_preview(request_id, actor)' in HISTORY_SOURCE
+    assert 'client.create_design_change_preview(request_id, actor)' in HISTORY_SOURCE
 
 
 def test_analysis_confirmation_and_proceed_are_one_user_action():

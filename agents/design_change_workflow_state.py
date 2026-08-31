@@ -359,7 +359,7 @@ def apply_design_change_tool_result(
                 else "CANDIDATE_APPROVED"
             ),
         })
-    elif tool_name == "create_multi_action_preview":
+    elif tool_name == "create_design_change_preview":
         status = tool_result.get("validation_status")
         updated.update({
             "preview_revision": tool_result.get("preview_id"),

@@ -299,7 +299,7 @@ def _render_history_next_step(
     try:
         if workflow_status == "CANDIDATE_APPROVED":
             st.info("변경자재 확정이 완료되었습니다. 적용 전 최종 확인 정보를 자동으로 준비합니다.")
-            client.create_multi_action_preview(request_id, actor)
+            client.create_design_change_preview(request_id, actor)
             st.rerun()
 
         elif workflow_status == "WAITING_FINAL_APPROVAL":

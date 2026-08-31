@@ -26,7 +26,7 @@ WORKFLOW_WRITE_TOOLS = frozenset({
     "confirm_candidate_selection",
     "approve_candidate_impact",
     "record_exception_approval",
-    "create_multi_action_preview",
+    "create_design_change_preview",
     "record_final_apply_approval",
 })
 ANALYSIS_TOOLS = frozenset({

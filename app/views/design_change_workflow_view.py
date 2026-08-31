@@ -938,7 +938,7 @@ def _proceed_analysis_to_final_confirmation(
     )
     request_id = request_result.get("request_id")
     try:
-        preview_result = client.create_multi_action_preview(
+        preview_result = client.create_design_change_preview(
             request_id,
             "streamlit-user",
         )
@@ -956,7 +956,7 @@ def _proceed_analysis_to_final_confirmation(
         return
 
     updated = apply_design_change_tool_result(
-        "create_multi_action_preview",
+        "create_design_change_preview",
         request_state,
         preview_result,
     )
@@ -1273,7 +1273,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
         )
         request_id = request_result.get("request_id")
         try:
-            preview_result = client.create_multi_action_preview(request_id, "streamlit-user")
+            preview_result = client.create_design_change_preview(request_id, "streamlit-user")
         except Exception as error:
             workflow.clear(); workflow.update(request_state)
             if on_workflow_update is not None:
@@ -1285,7 +1285,7 @@ def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, o
             return
 
         updated = apply_design_change_tool_result(
-            "create_multi_action_preview", request_state, preview_result
+            "create_design_change_preview", request_state, preview_result
         )
         workflow.clear(); workflow.update(updated)
         if on_workflow_update is not None:
@@ -1582,7 +1582,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
         # automatically instead of exposing a separate Preview button.
         st.info("생성된 Request를 기준으로 적용 전 최종 확인 정보를 준비하고 있습니다.")
         try:
-            result = client.create_multi_action_preview(workflow["request_id"], actor)
+            result = client.create_design_change_preview(workflow["request_id"], actor)
         except Exception as exc:
             message = str(exc)
             if "ADD target is already active at the effective date" in message:
@@ -1595,7 +1595,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             return
         _complete_workflow_action(
             workflow,
-            "create_multi_action_preview",
+            "create_design_change_preview",
             result,
             "적용 전 최종 확인 정보가 준비되었습니다. 내용을 확인한 뒤 설계변경을 확정해 주세요.",
             on_workflow_update,

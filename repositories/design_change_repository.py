@@ -310,6 +310,8 @@ class SQLiteDesignChangeRepository:
         self, request: dict, actions: list[dict],
         resolved_reasons: list | None = None,
     ) -> None:
+        if len(actions) != 1:
+            raise ValueError("Design Change Request must contain exactly one action")
         request = {"plant_code": "P01", **request}
         with self.database.transaction() as connection:
             connection.execute(

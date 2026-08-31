@@ -20,7 +20,7 @@ DESIGN_CHANGE_TOOLS = {
     "submit_candidate_additional_data", "select_candidate_and_supplier",
     "confirm_candidate_selection",
     "approve_candidate_impact", "record_exception_approval",
-    "create_multi_action_preview", "record_final_apply_approval",
+    "create_design_change_preview", "record_final_apply_approval",
     "apply_approved_change_request", "get_change_request_result",
     "get_design_change_analysis", "get_candidate_evaluation_detail",
     "compare_design_change_candidates",
@@ -177,7 +177,7 @@ def test_agent_phase3_state_progression():
     assert state["current_step"] == "CANDIDATE_APPROVED"
 
     state = BomMcpToolNode._build_design_change_workflow_state(
-        "create_multi_action_preview", state,
+        "create_design_change_preview", state,
         {"preview_id": "PRE", "validation_status": "PASS", "impacts": []},
     )
     assert state["current_step"] == "WAITING_FINAL_APPROVAL"
@@ -195,7 +195,7 @@ def test_agent_phase3_state_progression():
 
 def test_fail_preview_moves_agent_to_blocked():
     result = BomMcpToolNode._build_design_change_workflow_state(
-        "create_multi_action_preview", create_initial_design_change_state(),
+        "create_design_change_preview", create_initial_design_change_state(),
         {"preview_id": "PRE", "validation_status": "FAIL", "impacts": []},
     )
     assert result["current_step"] == "BLOCKED"

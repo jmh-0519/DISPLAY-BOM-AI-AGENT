@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 
-class MultiActionApplyService:
+class AtomicDesignChangeApplyService:
     def __init__(self, repository) -> None:
         self.repository = repository
 
@@ -20,6 +20,8 @@ class MultiActionApplyService:
         actions = context["actions"]
         if not actions:
             raise ValueError("Change request has no actions")
+        if len(actions) != 1:
+            raise ValueError("Design Change Request must contain exactly one action")
         if context["apply_status"] != "NOT_APPLIED":
             raise ValueError("Change request was already applied or blocked")
         if any(action["evaluation_status"] == "FAIL" for action in actions):

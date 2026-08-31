@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from database import SQLiteDatabase
 
 
-class SQLiteMultiActionRepository:
+class SQLiteDesignChangeApplyRepository:
     def __init__(self, database: SQLiteDatabase) -> None:
         self.database = database
 

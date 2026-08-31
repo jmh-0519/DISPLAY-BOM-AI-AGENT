@@ -44,7 +44,7 @@ from mcp_server.capabilities.design_change_workflow import (
     explain_design_change_analysis_session_data,
     explain_design_change_analysis_candidate_data,
     compare_design_change_analysis_candidates_data,
-    create_multi_action_preview_data,
+    create_design_change_preview_data,
     evaluate_replacement_candidates_data,
     get_change_request_result_data,
     get_design_change_analysis_data,
@@ -218,8 +218,10 @@ def analyze_design_change_candidates(
     request: DesignChangeRequestInput,
     actions: list[DesignChangeActionInput],
 ) -> dict:
-    """설계변경 후보를 분석합니다.
+    """단일 Action 설계변경 후보를 분석합니다.
 
+    actions에는 정확히 하나의 업무 Action만 전달해야 합니다. 동일 Action이 사유별로
+    중복 생성된 경우 Service가 하나로 병합하지만 서로 다른 복수 Action은 거부합니다.
     이 Tool은 Analysis Session만 생성하며 change_requests/change_actions를 만들지 않습니다.
     후보 탐색, 복수 Reason 평가, 공급사/재고 평가까지만 수행합니다.
     REPLACE뿐 아니라 ADD/DELETE/QUANTITY_CHANGE를 지원합니다. ADD는 new_item_code를
@@ -310,8 +312,10 @@ def create_design_change_request(
     request: DesignChangeRequestInput,
     actions: list[DesignChangeActionInput],
 ) -> dict:
-    """복수 Action 설계변경 요청을 등록합니다.
+    """단일 Action 설계변경 요청을 등록합니다.
 
+    actions에는 정확히 하나의 Action만 허용합니다. 이 함수는 내부 호환 경로이며
+    활성 UI Workflow에서는 Analysis 확인 후 create_design_change_request_from_analysis를 사용합니다.
     Action의 action_type은 REPLACE, ADD, DELETE, QUANTITY_CHANGE 중 하나입니다.
     REPLACE/DELETE/QUANTITY_CHANGE는 old_item_code와 version_code/plant_code를
     기준으로 Service가 target_type, 직접 parent_item_code, location_code를 실제
@@ -388,9 +392,9 @@ def record_exception_approval(request_id: str, reason: str, approved_by: str) ->
 
 
 @mcp.tool()
-def create_multi_action_preview(request_id: str, created_by: str) -> dict:
+def create_design_change_preview(request_id: str, created_by: str) -> dict:
     """승인 후보와 전체 공용 ASSY 영향을 포함한 최종 Preview를 생성합니다."""
-    return create_multi_action_preview_data(request_id, created_by)
+    return create_design_change_preview_data(request_id, created_by)
 
 
 @mcp.tool()
