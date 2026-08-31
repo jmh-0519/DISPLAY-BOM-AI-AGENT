@@ -57,6 +57,7 @@ class RecommendationService:
             as_of_date=as_of_date,
             evaluation_items=evaluation_items,
             discovery_mode=discovery_mode,
+            action_type="REPLACE",
         )
 
     def evaluate_specific_candidate(
@@ -85,6 +86,7 @@ class RecommendationService:
             as_of_date=as_of_date,
             evaluation_items=evaluation_items,
             discovery_mode="DIRECT_ADD",
+            action_type="ADD",
         )
 
     def evaluate_add_candidates(
@@ -119,6 +121,7 @@ class RecommendationService:
             evaluation_items=evaluation_items,
             discovery_mode="ADD_RULE_DISCOVERY",
             rule_scope_hint=target_item_name,
+            action_type="ADD",
         )
         # Keep the useful rows compact for the Agent/UI while still exposing FAIL
         # evidence when fewer eligible candidates are available.
@@ -303,8 +306,18 @@ class RecommendationService:
         evaluation_items: list[str],
         discovery_mode: str,
         rule_scope_hint: str | None = None,
+        action_type: str = "REPLACE",
     ) -> list[dict]:
-        all_rules = self.repository.get_active_rules(reasons, target_type, as_of_date)
+        knowledge_getter = getattr(self.repository, "get_active_knowledge_rules", None)
+        if knowledge_getter is not None:
+            all_rules = knowledge_getter(
+                reasons,
+                target_type,
+                as_of_date,
+                action_type=action_type,
+            )
+        else:
+            all_rules = self.repository.get_active_rules(reasons, target_type, as_of_date)
         if source_item_code is None:
             candidates = self._filter_add_candidates_by_target_hint(
                 candidates, rule_scope_hint, as_of_date

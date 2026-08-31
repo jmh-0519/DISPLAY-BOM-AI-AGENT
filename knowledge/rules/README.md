@@ -11,4 +11,4 @@
 - Runtime 적용 전 `python -m scripts.validate_rule_catalog` 검증을 통과해야 합니다.
 - 특정 테스트 MODEL/자재코드를 Rule 선택 조건으로 사용하지 않습니다. Rule applicability는 reason/action/target/evaluation item 및 업무 속성으로 정의합니다.
 
-현재 10개 문서는 v3.1.1의 기존 설계변경 Rule baseline을 문서 계약으로 옮긴 **초기 Catalog**입니다. 이 단계에서는 기존 DB Rule Runtime을 교체하지 않으며, 다음 RAG 단계에서 Catalog와 Runtime을 안전하게 연결합니다.
+현재 10개 문서는 v3.1.1의 기존 설계변경 Rule baseline을 문서 계약으로 옮긴 초기 Catalog입니다. Runtime 후보 평가는 이 구조화 Catalog를 통해 RuleEngine 입력을 만들며, Markdown 본문은 이후 RAG의 설명 근거로 사용합니다.

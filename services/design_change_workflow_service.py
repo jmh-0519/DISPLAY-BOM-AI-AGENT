@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import date
 
-from repositories.design_change_repository import SQLiteDesignChangeRepository
+from repositories.knowledge_design_change_repository import KnowledgeDesignChangeRepository
 from repositories.design_change_apply_repository import SQLiteDesignChangeApplyRepository
 from services.impact_analysis_service import ImpactAnalysisService
 from services.analysis_explain_service import DesignChangeAnalysisExplainService
@@ -19,7 +19,7 @@ class DesignChangeWorkflowService:
     """Application service for the active design-change workflow MCP capabilities."""
 
     def __init__(self, database) -> None:
-        self.repository = SQLiteDesignChangeRepository(database)
+        self.repository = KnowledgeDesignChangeRepository(database)
         self.reason_resolver = ChangeReasonResolver(self.repository)
         self.recommendation = RecommendationService(self.repository)
         self.query_normalizer = QueryNormalizer(database)
