@@ -1,0 +1,2702 @@
+diff --git a/agents/bom_agent_graph.py b/agents/bom_agent_graph.py
+index 77f8e33..38e18a9 100644
+--- a/agents/bom_agent_graph.py
++++ b/agents/bom_agent_graph.py
+@@ -616,9 +616,7 @@ class BomAgentGraph:
+         """MCP 다운로드 ToolMessage를 Streamlit용 파일 객체로 변환합니다."""
+         artifacts = []
+         for message in messages:
+-            if not isinstance(message, ToolMessage) or message.name not in {
+-                "export_bom_excel", "export_design_change_report",
+-            }:
++            if not isinstance(message, ToolMessage) or message.name != "export_bom_excel":
+                 continue
+             try:
+                 data = json.loads(str(message.content))
+diff --git a/agents/bom_agent_node.py b/agents/bom_agent_node.py
+index 462d9e9..24c4ae4 100644
+--- a/agents/bom_agent_node.py
++++ b/agents/bom_agent_node.py
+@@ -84,18 +84,6 @@ class BomAgentNode:
+     FOLLOW_UP_COMPARE_MARKERS = DomainIntentRouter.FOLLOW_UP_COMPARE_MARKERS
+     ANALYSIS_RESTART_MARKERS = DomainIntentRouter.ANALYSIS_RESTART_MARKERS
+ 
+-    LEGACY_DESIGN_CHANGE_TOOLS = {
+-        "analyze_design_change",
+-        "create_design_change_preview",
+-        "record_design_change_decision",
+-        "apply_approved_design_change",
+-        "create_ai_change_request",
+-        "create_review_bom",
+-        "run_ai_bom_review",
+-        "generate_design_change_report",
+-        "apply_reviewed_bom",
+-    }
+-
+     DESIGN_CHANGE_RECOMMENDATION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_RECOMMENDATION_MARKERS
+     PRODUCT_COST_SCAN_SCOPE_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_SCOPE_MARKERS
+     PRODUCT_COST_SCAN_COST_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_COST_MARKERS
+@@ -557,17 +545,8 @@ class BomAgentNode:
+         product_cost_scan_intent = routing_decision.product_cost_scan
+         current_recommendation_intent = routing_decision.recommendation
+         current_change_intent = routing_decision.change
+-        explicit_pair_analysis = (
+-            self.domain_intent_router.is_explicit_replacement_pair_analysis(
+-                user_query
+-            )
+-        )
+-        design_change_mode = (
+-            False if explicit_pair_analysis else routing_decision.design_change_mode
+-        )
+-        plant_required = (
+-            False if explicit_pair_analysis else routing_decision.requires_plant
+-        )
++        design_change_mode = routing_decision.design_change_mode
++        plant_required = routing_decision.requires_plant
+         active_plant_code = str(routing_workflow_state.get("plant_code") or "").strip().upper()
+         plant_code_in_context = self.domain_intent_router.extract_plant_code(design_change_context)
+         plant_context_ready = bool(active_plant_code or plant_code_in_context)
+@@ -667,8 +646,7 @@ class BomAgentNode:
+         analysis_memory = routing_workflow_state.get("analysis_memory") or {}
+ 
+         design_change_instruction = (
+-            "현재 요청은 설계변경 후보 추천 Workflow입니다. "
+-            "analyze_design_change는 호출하지 마세요. "
++            "현재 요청은 Design Change Analysis/Workflow입니다. "
+             "제품과 변경 대상 기존 품목이 현재 또는 직전 대화에 명확하면 "
+             "analyze_design_change_candidates를 호출해 Request 생성 없이 Analysis Session을 시작하세요. "
+             "REPLACE 후보 추천에서는 신규 자재 ID를 사용자에게 요구하지 마세요. "
+@@ -689,15 +667,14 @@ class BomAgentNode:
+             "get_bom은 사용자가 BOM 자체를 보고 싶어 하거나 대상 식별이 불명확할 때만 "
+             "사용하고, get_bom 결과만 보여주고 설계변경 Workflow를 종료하지 마세요. "
+             "후보 탐색과 평가는 analyze_design_change_candidates 한 번으로 수행합니다. "
++            "사용자가 기존품과 신규품 코드를 모두 지정한 교체 적합성 분석도 동일 Tool을 사용하고 "
++            "old_item_code와 new_item_code를 모두 명시하세요. "
+             "분석/재검증/후보 임시선택/공용 영향 확인 단계에서는 change request를 생성하지 마세요. "
+             "사용자가 분석 결과를 확인하고 설계변경 진행을 명시적으로 승인한 뒤에만 실제 Request를 생성합니다. "
+             "후보 선택·공용 영향 확인·Preview·최종 Apply 승인은 반드시 "
+             "사용자 UI 조작으로만 진행하며 Agent가 자동 호출하지 마세요."
+             if design_change_mode
+-            else (
+-                "기존 자재와 사용자가 지정한 신규 자재가 모두 명확한 "
+-                "교체 적합성 분석에만 analyze_design_change를 사용하세요."
+-            )
++            else "현재 요청은 일반 BOM 조회/질의입니다."
+         )
+         runtime_skill_context = (
+             f"{self.skill_context}\n\n"
+@@ -1234,8 +1211,6 @@ class BomAgentNode:
+                 elif name not in cls.DESIGN_CHANGE_EXPLAIN_TOOLS:
+                     continue
+             if design_change_mode:
+-                if name in cls.LEGACY_DESIGN_CHANGE_TOOLS:
+-                    continue
+                 if name in cls.DESIGN_CHANGE_TOOLS:
+                     if name in cls.UI_ONLY_DESIGN_CHANGE_TOOLS:
+                         continue
+diff --git a/agents/bom_mcp_tool_node.py b/agents/bom_mcp_tool_node.py
+index 4e102a0..ee99413 100644
+--- a/agents/bom_mcp_tool_node.py
++++ b/agents/bom_mcp_tool_node.py
+@@ -87,43 +87,12 @@ class BomMcpToolNode:
+                     "dictionary여야 합니다."
+                 )
+ 
+-            if tool_name == "create_design_change_preview":
+-                self._validate_preview_request(
+-                    workflow_state=design_change_update,
+-                    arguments=arguments,
+-                )
+-            elif tool_name == "record_design_change_decision":
+-                self._validate_approval_request(
+-                    workflow_state=design_change_update,
+-                    arguments=arguments,
+-                )
+-            elif tool_name == "apply_approved_design_change":
+-                self._validate_apply_request(
+-                    workflow_state=design_change_update,
+-                    arguments=arguments,
+-                )
+-            elif tool_name == "evaluate_bom_review":
+-                self._validate_review_request(
+-                    workflow_state=design_change_update,
+-                    arguments=arguments,
+-                )
+-            elif tool_name in {
+-                "create_review_bom", "run_ai_bom_review",
+-                "generate_design_change_report", "apply_reviewed_bom",
+-            }:
+-                self._validate_ai_workflow_request(
+-                    tool_name, design_change_update, arguments
+-                )
+-            elif tool_name in {
++            if tool_name in {
+                 "scan_product_cost_reduction_candidates",
+                 "analyze_design_change_candidates", "revalidate_design_change_analysis",
+                 "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
+                 "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
+                 "compare_design_change_analysis_candidates",
+-                "analyze_design_change_candidates", "revalidate_design_change_analysis",
+-                "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
+-                "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
+-                "compare_design_change_analysis_candidates",
+                 "create_design_change_request", "evaluate_replacement_candidates",
+                 "submit_candidate_additional_data", "select_candidate_and_supplier",
+                 "approve_candidate_impact", "record_exception_approval",
+@@ -231,51 +200,12 @@ class BomMcpToolNode:
+                         "source": "get_bom",
+                     }
+ 
+-            if tool_name == "analyze_design_change":
+-                design_change_update = (
+-                    self._build_analysis_state(
+-                        arguments=arguments,
+-                        tool_result=tool_result,
+-                    )
+-                )
+-            elif tool_name == "create_design_change_preview":
+-                design_change_update = self._build_preview_state(
+-                    workflow_state=design_change_update,
+-                    tool_result=tool_result,
+-                )
+-            elif tool_name == "record_design_change_decision":
+-                design_change_update = self._build_approval_state(
+-                    workflow_state=design_change_update,
+-                    tool_result=tool_result,
+-                )
+-            elif tool_name == "apply_approved_design_change":
+-                design_change_update = self._build_apply_state(
+-                    workflow_state=design_change_update,
+-                    tool_result=tool_result,
+-                )
+-            elif tool_name == "evaluate_bom_review":
+-                design_change_update = self._build_review_state(
+-                    workflow_state=design_change_update,
+-                    tool_result=tool_result,
+-                )
+-            elif tool_name in {
+-                "create_ai_change_request", "create_review_bom",
+-                "run_ai_bom_review", "generate_design_change_report",
+-                "apply_reviewed_bom",
+-            }:
+-                design_change_update = self._build_ai_workflow_state(
+-                    tool_name, design_change_update, arguments, tool_result
+-                )
+-            elif tool_name in {
++            if tool_name in {
+                 "scan_product_cost_reduction_candidates",
+                 "analyze_design_change_candidates", "revalidate_design_change_analysis",
+                 "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
+                 "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
+                 "compare_design_change_analysis_candidates",
+-                "analyze_design_change_candidates", "revalidate_design_change_analysis",
+-                "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
+-                "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
+-                "compare_design_change_analysis_candidates",
+                 "create_design_change_request", "evaluate_replacement_candidates",
+                 "submit_candidate_additional_data", "select_candidate_and_supplier",
+                 "approve_candidate_impact", "record_exception_approval",
+@@ -455,368 +385,6 @@ class BomMcpToolNode:
+             "production_bom_modified": False,
+         }
+ 
+-    @staticmethod
+-    def _build_analysis_state(
+-        arguments: dict[str, Any],
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        """설계변경 분석 Tool 결과를 Workflow 상태로 변환합니다."""
+-
+-        if not isinstance(tool_result, dict):
+-            raise RuntimeError(
+-                "analyze_design_change 결과가 "
+-                "예상한 객체 형식이 아닙니다."
+-            )
+-
+-        analysis_status = str(
+-            tool_result.get("result", "")
+-        ).strip().upper()
+-
+-        if analysis_status not in {
+-            "PASS",
+-            "CONDITIONAL",
+-            "FAIL",
+-        }:
+-            raise RuntimeError(
+-                "analyze_design_change 결과에 "
+-                "올바른 result가 없습니다."
+-            )
+-
+-        workflow_state = (
+-            create_initial_design_change_state()
+-        )
+-        workflow_state.update(
+-            {
+-                "product_id": arguments.get(
+-                    "product_id"
+-                ),
+-                "old_material_id": arguments.get(
+-                    "old_material_id"
+-                ),
+-                "new_material_id": arguments.get(
+-                    "new_material_id"
+-                ),
+-                "as_of_date": arguments.get(
+-                    "as_of_date"
+-                ),
+-                "analysis_status": analysis_status,
+-                "analysis_result": tool_result,
+-                "current_step": (
+-                    "ANALYSIS_BLOCKED"
+-                    if analysis_status == "FAIL"
+-                    else "ANALYSIS_COMPLETED"
+-                ),
+-            }
+-        )
+-
+-        return workflow_state
+-
+-    @staticmethod
+-    def _validate_preview_request(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-    ) -> None:
+-        """같은 분석 건이 완료된 경우에만 Preview 호출을 허용합니다."""
+-
+-        if not workflow_state or workflow_state.get(
+-            "analysis_status"
+-        ) not in {"PASS", "CONDITIONAL"}:
+-            raise RuntimeError(
+-                "PASS 또는 CONDITIONAL 분석 완료 후 Preview를 생성할 수 있습니다."
+-            )
+-
+-        for field_name in (
+-            "product_id",
+-            "old_material_id",
+-            "new_material_id",
+-        ):
+-            saved = str(
+-                workflow_state.get(field_name) or ""
+-            ).strip().upper()
+-            requested = str(
+-                arguments.get(field_name) or ""
+-            ).strip().upper()
+-            if saved != requested:
+-                raise RuntimeError(
+-                    "분석된 설계변경과 Preview 요청의 대상이 일치하지 않습니다."
+-                )
+-
+-    @staticmethod
+-    def _build_preview_state(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        if not workflow_state:
+-            raise RuntimeError("설계변경 분석 상태가 없습니다.")
+-        if not isinstance(tool_result, dict) or not tool_result.get("success"):
+-            raise RuntimeError("Preview Tool 결과가 올바르지 않습니다.")
+-
+-        revision = tool_result.get("preview_revision")
+-        if not isinstance(revision, str) or not revision.strip():
+-            raise RuntimeError("Preview Revision이 반환되지 않았습니다.")
+-
+-        updated = dict(workflow_state)
+-        updated.update(
+-            {
+-                "preview_status": "COMPLETED",
+-                "preview_revision": revision,
+-                "preview_result": tool_result,
+-                "review_status": "WAITING",
+-                "current_step": "WAITING_REVIEW",
+-            }
+-        )
+-        return updated
+-
+-    @staticmethod
+-    def _validate_approval_request(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-    ) -> None:
+-        """품평 승인된 동일 Preview의 최종 적용 승인만 허용합니다."""
+-
+-        if not workflow_state:
+-            raise RuntimeError("승인할 설계변경 Workflow 상태가 없습니다.")
+-        if workflow_state.get("review_status") != "APPROVED" or (
+-            workflow_state.get("approval_status") != "WAITING"
+-        ) or workflow_state.get("current_step") != "WAITING_FINAL_APPROVAL":
+-            raise RuntimeError("품평 승인 후 최종 적용 승인 대기 중인 Preview만 처리할 수 있습니다.")
+-
+-        saved_revision = str(
+-            workflow_state.get("preview_revision") or ""
+-        ).strip()
+-        requested_revision = str(
+-            arguments.get("preview_revision") or ""
+-        ).strip()
+-        if not saved_revision or saved_revision != requested_revision:
+-            raise RuntimeError("승인 대상 Preview Revision이 일치하지 않습니다.")
+-
+-        decision = str(arguments.get("decision") or "").strip().upper()
+-        if decision not in {"APPROVE", "REJECT"}:
+-            raise RuntimeError("승인 결정은 APPROVE 또는 REJECT여야 합니다.")
+-
+-    @staticmethod
+-    def _build_approval_state(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        if not workflow_state:
+-            raise RuntimeError("설계변경 Workflow 상태가 없습니다.")
+-        if not isinstance(tool_result, dict) or not tool_result.get("success"):
+-            raise RuntimeError("승인·반려 Tool 결과가 올바르지 않습니다.")
+-        if tool_result.get("production_bom_modified") is not False:
+-            raise RuntimeError("승인 단계에서는 Production BOM을 변경할 수 없습니다.")
+-
+-        decision = str(tool_result.get("decision") or "").strip().upper()
+-        if decision not in {"APPROVE", "REJECT"}:
+-            raise RuntimeError("승인·반려 Tool 결과에 올바른 decision이 없습니다.")
+-        if tool_result.get("preview_revision") != workflow_state.get(
+-            "preview_revision"
+-        ):
+-            raise RuntimeError("승인 결과의 Preview Revision이 일치하지 않습니다.")
+-
+-        updated = dict(workflow_state)
+-        updated.update(
+-            {
+-                "approval_status": (
+-                    "APPROVED" if decision == "APPROVE" else "REJECTED"
+-                ),
+-                "approval_decision": decision,
+-                "approval_comment": tool_result.get("comment"),
+-                "approval_result": tool_result,
+-                "approved_preview_revision": tool_result["preview_revision"],
+-                "current_step": (
+-                    "READY_TO_APPLY"
+-                    if decision == "APPROVE"
+-                    else "CHANGE_REJECTED"
+-                ),
+-            }
+-        )
+-        return updated
+-
+-    @staticmethod
+-    def _validate_apply_request(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-    ) -> None:
+-        if not workflow_state or workflow_state.get("current_step") != "READY_TO_APPLY":
+-            raise RuntimeError("명시적으로 승인되어 READY_TO_APPLY인 변경만 적용할 수 있습니다.")
+-        if workflow_state.get("approval_status") != "APPROVED":
+-            raise RuntimeError("승인 완료된 설계변경만 적용할 수 있습니다.")
+-        if workflow_state.get("review_status") != "APPROVED":
+-            raise RuntimeError("품평회에서 승인된 설계변경만 적용할 수 있습니다.")
+-        if workflow_state.get("reviewed_preview_revision") != workflow_state.get(
+-            "approved_preview_revision"
+-        ):
+-            raise RuntimeError("품평 승인 Revision과 최종 승인 Revision이 일치하지 않습니다.")
+-        if workflow_state.get("apply_status") in {"COMPLETED", "FAILED"}:
+-            raise RuntimeError("이미 적용 처리된 설계변경은 다시 적용할 수 없습니다.")
+-        saved_revision = str(workflow_state.get("approved_preview_revision") or "").strip()
+-        if saved_revision != str(arguments.get("preview_revision") or "").strip():
+-            raise RuntimeError("승인된 Preview Revision과 적용 요청이 일치하지 않습니다.")
+-        for field in ("product_id", "old_material_id", "new_material_id"):
+-            if str(workflow_state.get(field) or "").strip().upper() != str(arguments.get(field) or "").strip().upper():
+-                raise RuntimeError("승인된 설계변경과 적용 요청의 대상이 일치하지 않습니다.")
+-        saved_date = str(workflow_state.get("as_of_date") or "").strip()
+-        requested_date = str(arguments.get("preview_as_of_date") or "").strip()
+-        if saved_date != requested_date:
+-            raise RuntimeError("승인된 Preview 기준일과 적용 요청이 일치하지 않습니다.")
+-
+-    @staticmethod
+-    def _build_apply_state(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        if not workflow_state or not isinstance(tool_result, dict):
+-            raise RuntimeError("Controlled Apply 결과가 올바르지 않습니다.")
+-        if not tool_result.get("success") or tool_result.get("result") != "APPLIED":
+-            raise RuntimeError("Production BOM 적용에 실패했습니다.")
+-        if tool_result.get("production_bom_modified") is not True:
+-            raise RuntimeError("적용 결과에 Production BOM 변경 확인이 없습니다.")
+-        if tool_result.get("preview_revision") != workflow_state.get("approved_preview_revision"):
+-            raise RuntimeError("적용된 Preview Revision이 승인 Revision과 일치하지 않습니다.")
+-        updated = dict(workflow_state)
+-        updated.update({
+-            "apply_status": "COMPLETED",
+-            "apply_result": tool_result,
+-            "application_id": tool_result.get("application_id"),
+-            "current_step": "APPLY_COMPLETED",
+-        })
+-        return updated
+-
+-    @staticmethod
+-    def _validate_review_request(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-    ) -> None:
+-        if not workflow_state or workflow_state.get("current_step") != "WAITING_REVIEW":
+-            raise RuntimeError("Preview 생성 후 Production BOM 적용 전에만 품평회를 진행할 수 있습니다.")
+-        if workflow_state.get("preview_status") != "COMPLETED":
+-            raise RuntimeError("품평 대상 Preview가 완료 상태가 아닙니다.")
+-        if workflow_state.get("apply_status") == "COMPLETED":
+-            raise RuntimeError("이미 Production BOM에 적용된 변경은 사전 품평할 수 없습니다.")
+-        if workflow_state.get("review_status") in {"COMPLETED", "FAILED"}:
+-            raise RuntimeError("이미 품평 검증이 완료된 설계변경입니다.")
+-        if str(workflow_state.get("preview_revision") or "").strip() != str(
+-            arguments.get("preview_revision") or ""
+-        ).strip():
+-            raise RuntimeError("품평 대상 Preview Revision이 일치하지 않습니다.")
+-        for field in ("product_id", "old_material_id", "new_material_id"):
+-            if str(workflow_state.get(field) or "").strip().upper() != str(
+-                arguments.get(field) or ""
+-            ).strip().upper():
+-                raise RuntimeError("Preview 설계변경과 품평 요청의 대상이 일치하지 않습니다.")
+-
+-    @staticmethod
+-    def _build_review_state(
+-        workflow_state: DesignChangeWorkflowState | None,
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        if not workflow_state or not isinstance(tool_result, dict):
+-            raise RuntimeError("BOM 품평 검증 결과가 올바르지 않습니다.")
+-        if not tool_result.get("success"):
+-            raise RuntimeError("BOM 품평 검증에 실패했습니다.")
+-        if tool_result.get("production_bom_modified") is not False:
+-            raise RuntimeError("품평 검증 Tool은 Production BOM을 변경할 수 없습니다.")
+-        if tool_result.get("preview_revision") != workflow_state.get("preview_revision"):
+-            raise RuntimeError("품평 결과의 Preview Revision이 일치하지 않습니다.")
+-        review_result = str(tool_result.get("review_result") or "").strip().upper()
+-        if review_result not in {"APPROVED", "CONDITIONAL", "REJECTED"}:
+-            raise RuntimeError("품평 결과에 올바른 review_result가 없습니다.")
+-        updated = dict(workflow_state)
+-        updated.update({
+-            "review_status": review_result,
+-            "review_result": tool_result,
+-            "reviewed_preview_revision": tool_result["preview_revision"],
+-            "approval_status": "WAITING" if review_result == "APPROVED" else "NOT_STARTED",
+-            "current_step": {
+-                "APPROVED": "WAITING_FINAL_APPROVAL",
+-                "CONDITIONAL": "REVIEW_CONDITIONAL",
+-                "REJECTED": "REVIEW_REJECTED",
+-            }[review_result],
+-        })
+-        return updated
+-
+-    @staticmethod
+-    def _validate_ai_workflow_request(
+-        tool_name: str,
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-    ) -> None:
+-        if not workflow_state:
+-            raise RuntimeError("먼저 AI 설계변경 요청을 생성해야 합니다.")
+-        required_step = {
+-            "create_review_bom": "CHANGE_REQUESTED",
+-            "run_ai_bom_review": "REVIEW_BOM_CREATED",
+-            "generate_design_change_report": "AI_REVIEW_COMPLETED",
+-            "apply_reviewed_bom": "WAITING_FINAL_APPLY",
+-        }[tool_name]
+-        if workflow_state.get("current_step") != required_step:
+-            raise RuntimeError(f"{required_step} 상태에서만 {tool_name}을 실행할 수 있습니다.")
+-        if tool_name in {"create_review_bom", "generate_design_change_report"}:
+-            if str(arguments.get("change_id") or "").strip().upper() != str(
+-                workflow_state.get("change_id") or ""
+-            ).strip().upper():
+-                raise RuntimeError("Workflow의 change_id와 요청이 일치하지 않습니다.")
+-        if tool_name in {"run_ai_bom_review", "apply_reviewed_bom"}:
+-            if str(arguments.get("review_id") or "").strip().upper() != str(
+-                workflow_state.get("review_id") or ""
+-            ).strip().upper():
+-                raise RuntimeError("Workflow의 review_id와 요청이 일치하지 않습니다.")
+-
+-    @staticmethod
+-    def _build_ai_workflow_state(
+-        tool_name: str,
+-        workflow_state: DesignChangeWorkflowState | None,
+-        arguments: dict[str, Any],
+-        tool_result: Any,
+-    ) -> DesignChangeWorkflowState:
+-        if not isinstance(tool_result, dict) or not tool_result.get("success"):
+-            raise RuntimeError(f"{tool_name} 실행에 실패했습니다: {tool_result}")
+-        updated = dict(workflow_state or create_initial_design_change_state())
+-        if tool_result.get("production_bom_modified") is True and tool_name != "apply_reviewed_bom":
+-            raise RuntimeError("최종 적용 전 단계에서 Production E-BOM을 변경할 수 없습니다.")
+-        if tool_name == "create_ai_change_request":
+-            analysis = tool_result.get("analysis", {})
+-            updated.update({
+-                "product_id": arguments.get("product_id"),
+-                "old_material_id": arguments.get("old_material_id"),
+-                "new_material_id": arguments.get("new_material_id"),
+-                "as_of_date": arguments.get("as_of_date"),
+-                "analysis_status": analysis.get("result", "PASS"),
+-                "analysis_result": analysis,
+-                "change_id": tool_result.get("change_id"),
+-                "current_step": "CHANGE_REQUESTED",
+-            })
+-        elif tool_name == "create_review_bom":
+-            updated.update({
+-                "review_id": tool_result.get("review_id"),
+-                "preview_status": "COMPLETED",
+-                "review_status": "WAITING",
+-                "current_step": "REVIEW_BOM_CREATED",
+-            })
+-        elif tool_name == "run_ai_bom_review":
+-            result = str(tool_result.get("workflow_result", "REVIEW_FAILED")).upper()
+-            updated.update({
+-                "ai_review_status": tool_result.get("ai_review_result", "FAIL"),
+-                "review_result": tool_result,
+-                "current_step": result,
+-            })
+-        elif tool_name == "generate_design_change_report":
+-            updated.update({
+-                "report_status": "COMPLETED",
+-                "report_result": tool_result,
+-                "current_step": "WAITING_FINAL_APPLY",
+-            })
+-        elif tool_name == "apply_reviewed_bom":
+-            if tool_result.get("production_bom_modified") is not True:
+-                raise RuntimeError("Production E-BOM 적용 확인에 실패했습니다.")
+-            updated.update({
+-                "apply_status": "COMPLETED",
+-                "apply_result": tool_result,
+-                "current_step": "CHANGE_COMPLETED",
+-            })
+-        return updated
+-
+     @staticmethod
+     def _serialize_tool_result(
+         data: Any,
+diff --git a/agents/domain_intent_router.py b/agents/domain_intent_router.py
+index 099a38e..29daf49 100644
+--- a/agents/domain_intent_router.py
++++ b/agents/domain_intent_router.py
+@@ -346,60 +346,6 @@ class DomainIntentRouter:
+         normalized = self.normalize(user_query).upper()
+         return self.PLANT_CODE_PATTERN.fullmatch(normalized) is not None
+ 
+-    def is_explicit_replacement_pair_analysis(self, user_query: str) -> bool:
+-        """Detect a read-only suitability check for an explicit old/new pair.
+-
+-        Example:
+-            MODEL-789의 1234-567890을 1234-567891로 교체 가능한지 분석해줘
+-
+-        Because both current and proposed replacement items are supplied, this
+-        remains the legacy `analyze_design_change` compatibility-analysis path
+-        rather than Design Change candidate discovery.
+-        """
+-        normalized = self.normalize(user_query)
+-        version_code = self.explicit_model_scope_code(user_query)
+-        non_version_codes = [
+-            code
+-            for code in self.item_codes(user_query)
+-            if not version_code or code != version_code
+-        ]
+-        unique_codes = list(dict.fromkeys(non_version_codes))
+-        if len(unique_codes) < 2:
+-            return False
+-
+-        if not any(
+-            marker in normalized
+-            for marker in (
+-                "가능한지",
+-                "가능 여부",
+-                "가능여부",
+-                "적합",
+-                "호환",
+-                "분석",
+-                "검증",
+-            )
+-        ):
+-            return False
+-
+-        # A direct execution instruction remains on the design-change write path.
+-        return not any(
+-            marker in normalized
+-            for marker in (
+-                "교체해줘",
+-                "교체해 줘",
+-                "변경해줘",
+-                "변경해 줘",
+-                "바꿔줘",
+-                "바꿔 줘",
+-                "대체해줘",
+-                "대체해 줘",
+-                "교체하자",
+-                "변경하자",
+-                "바꾸자",
+-                "대체하자",
+-            )
+-        )
+-
+     def is_design_change_recommendation_request(self, user_query: str) -> bool:
+         normalized = self.normalize(user_query)
+         return any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS)
+diff --git a/evaluation/safety.py b/evaluation/safety.py
+index 032f794..7ac20de 100644
+--- a/evaluation/safety.py
++++ b/evaluation/safety.py
+@@ -18,8 +18,6 @@ REQUEST_CREATE_TOOLS = frozenset({
+ })
+ APPLY_TOOLS = frozenset({
+     "apply_approved_change_request",
+-    "apply_approved_design_change",
+-    "apply_reviewed_bom",
+ })
+ WORKFLOW_WRITE_TOOLS = frozenset({
+     *REQUEST_CREATE_TOOLS,
+diff --git a/mcp_client/client.py b/mcp_client/client.py
+index bfcf3f7..4db80a3 100644
+--- a/mcp_client/client.py
++++ b/mcp_client/client.py
+@@ -724,51 +724,9 @@ class DisplayBomMcpClient:
+         )
+ 
+     # =========================================================
+-    # analyze_design_change
++    # Download helpers
+     # =========================================================
+ 
+-    def analyze_design_change(
+-        self,
+-        product_id: str,
+-        old_material_id: str,
+-        new_material_id: str,
+-        as_of_date: str | None = None,
+-        plant_code: str = "P01",
+-    ) -> dict:
+-        """자재 교체 설계변경의 가능 여부와 영향을 분석합니다."""
+-
+-        return asyncio.run(
+-            self._analyze_design_change_async(
+-                product_id=product_id,
+-                old_material_id=old_material_id,
+-                new_material_id=new_material_id,
+-                as_of_date=as_of_date,
+-                plant_code=plant_code,
+-            )
+-        )
+-
+-    def create_ai_change_request(self, **arguments) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("create_ai_change_request", arguments),
+-            "create_ai_change_request",
+-        )
+-
+-    def create_review_bom(self, **arguments) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("create_review_bom", arguments), "create_review_bom"
+-        )
+-
+-    def run_ai_bom_review(self, **arguments) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("run_ai_bom_review", arguments), "run_ai_bom_review"
+-        )
+-
+-    def generate_design_change_report(self, change_id: str) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("generate_design_change_report", {"change_id": change_id}),
+-            "generate_design_change_report",
+-        )
+-
+     @staticmethod
+     def _decode_download(data: dict, tool_name: str) -> dict:
+         if data.get("success") and data.get("file_data_base64"):
+@@ -793,12 +751,6 @@ class DisplayBomMcpClient:
+         )
+         return self._decode_download(data, "export_bom_excel")
+ 
+-    def export_design_change_report(self, change_id: str) -> dict:
+-        data = self._ensure_dict(
+-            self.call_tool("export_design_change_report", {"change_id": change_id}),
+-            "export_design_change_report",
+-        )
+-        return self._decode_download(data, "export_design_change_report")
+ 
+     def export_design_change_completion_report(self, request_id: str) -> dict:
+         data = self._ensure_dict(
+@@ -807,158 +759,15 @@ class DisplayBomMcpClient:
+         )
+         return self._decode_download(data, "export_design_change_completion_report")
+ 
+-    def list_design_changes(self) -> list[dict]:
+-        return self._ensure_list(self.call_tool("list_design_changes", {}), "list_design_changes")
+ 
+-    def get_design_change(self, change_id: str) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("get_design_change", {"change_id": change_id}), "get_design_change"
+-        )
+-
+-    def list_bom_reviews(self) -> list[dict]:
+-        return self._ensure_list(self.call_tool("list_bom_reviews", {}), "list_bom_reviews")
+-
+-    def get_bom_review(self, review_id: str) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("get_bom_review", {"review_id": review_id}), "get_bom_review"
+-        )
+-
+-    def apply_reviewed_bom(self, **arguments) -> dict:
+-        return self._ensure_dict(
+-            self.call_tool("apply_reviewed_bom", arguments), "apply_reviewed_bom"
+-        )
+ 
+-    async def _analyze_design_change_async(
+-        self,
+-        product_id: str,
+-        old_material_id: str,
+-        new_material_id: str,
+-        as_of_date: str | None = None,
+-        plant_code: str = "P01",
+-    ) -> dict:
+-        result = await self._call_tool(
+-            "analyze_design_change",
+-            {
+-                "plant_code": plant_code,
+-                "product_id": product_id,
+-                "old_material_id": old_material_id,
+-                "new_material_id": new_material_id,
+-                "as_of_date": as_of_date,
+-            },
+-        )
+ 
+-        data = self._extract_result(result)
+ 
+-        return self._ensure_dict(
+-            data,
+-            "analyze_design_change",
+-        )
+ 
+     # =========================================================
+-    # create_design_change_preview
++    # Design Change workflow
+     # =========================================================
+ 
+-    def create_design_change_preview(
+-        self,
+-        product_id: str,
+-        old_material_id: str,
+-        new_material_id: str,
+-        as_of_date: str | None = None,
+-    ) -> dict:
+-        """분석 완료 건의 읽기 전용 변경 BOM Preview를 생성합니다."""
+-
+-        return asyncio.run(
+-            self._create_design_change_preview_async(
+-                product_id=product_id,
+-                old_material_id=old_material_id,
+-                new_material_id=new_material_id,
+-                as_of_date=as_of_date,
+-            )
+-        )
+-
+-    async def _create_design_change_preview_async(
+-        self,
+-        product_id: str,
+-        old_material_id: str,
+-        new_material_id: str,
+-        as_of_date: str | None = None,
+-    ) -> dict:
+-        result = await self._call_tool(
+-            "create_design_change_preview",
+-            {
+-                "product_id": product_id,
+-                "old_material_id": old_material_id,
+-                "new_material_id": new_material_id,
+-                "as_of_date": as_of_date,
+-            },
+-        )
+-        return self._ensure_dict(
+-            self._extract_result(result),
+-            "create_design_change_preview",
+-        )
+-
+-    # =========================================================
+-    # record_design_change_decision
+-    # =========================================================
+-
+-    def record_design_change_decision(
+-        self,
+-        preview_revision: str,
+-        decision: str,
+-        comment: str | None = None,
+-    ) -> dict:
+-        """Preview에 대한 사용자 승인·반려 의사를 기록합니다."""
+-
+-        return asyncio.run(
+-            self._record_design_change_decision_async(
+-                preview_revision=preview_revision,
+-                decision=decision,
+-                comment=comment,
+-            )
+-        )
+-
+-    async def _record_design_change_decision_async(
+-        self,
+-        preview_revision: str,
+-        decision: str,
+-        comment: str | None = None,
+-    ) -> dict:
+-        result = await self._call_tool(
+-            "record_design_change_decision",
+-            {
+-                "preview_revision": preview_revision,
+-                "decision": decision,
+-                "comment": comment,
+-            },
+-        )
+-        return self._ensure_dict(
+-            self._extract_result(result),
+-            "record_design_change_decision",
+-        )
+-
+-    def apply_approved_design_change(
+-        self,
+-        preview_revision: str,
+-        product_id: str,
+-        old_material_id: str,
+-        new_material_id: str,
+-        preview_as_of_date: str,
+-        effective_date: str,
+-        applied_by: str,
+-    ) -> dict:
+-        return self.call_tool(
+-            "apply_approved_design_change",
+-            {
+-                "preview_revision": preview_revision,
+-                "product_id": product_id,
+-                "old_material_id": old_material_id,
+-                "new_material_id": new_material_id,
+-                "preview_as_of_date": preview_as_of_date,
+-                "effective_date": effective_date,
+-                "applied_by": applied_by,
+-            },
+-        )
+-
+     def analyze_design_change_candidates(self, request: dict, actions: list[dict]) -> dict:
+         return self._ensure_dict(self.call_tool(
+             "analyze_design_change_candidates", {"request": request, "actions": actions}),
+diff --git a/mcp_server/capabilities/design_change.py b/mcp_server/capabilities/design_change.py
+deleted file mode 100644
+index a107aec..0000000
+--- a/mcp_server/capabilities/design_change.py
++++ /dev/null
+@@ -1,149 +0,0 @@
+-from datetime import date
+-
+-from database import SQLiteDatabase
+-from core.database_config import sqlite_database_path
+-from services.sqlite_design_change_workflow_service import SQLiteDesignChangeWorkflowService
+-
+-
+-def _workflow() -> SQLiteDesignChangeWorkflowService:
+-    return SQLiteDesignChangeWorkflowService(SQLiteDatabase(sqlite_database_path()))
+-
+-
+-def create_ai_change_request_data(**kwargs) -> dict:
+-    kwargs.pop("data_dir", None)
+-    return _workflow().create_change_request(**kwargs)
+-
+-
+-def create_review_bom_data(**kwargs) -> dict:
+-    kwargs.pop("data_dir", None)
+-    return _workflow().create_review_bom(**kwargs)
+-
+-
+-def run_ai_bom_review_data(**kwargs) -> dict:
+-    kwargs.pop("data_dir", None)
+-    return _workflow().run_ai_review(**kwargs)
+-
+-
+-def generate_design_change_report_data(**kwargs) -> dict:
+-    kwargs.pop("data_dir", None)
+-    return _workflow().generate_report(**kwargs)
+-
+-
+-def apply_reviewed_bom_data(**kwargs) -> dict:
+-    kwargs.pop("data_dir", None)
+-    return _workflow().apply_reviewed_bom(**kwargs)
+-
+-
+-def analyze_design_change_data(
+-    plant_code: str,
+-    product_id: str,
+-    old_material_id: str,
+-    new_material_id: str,
+-    as_of_date: str | date | None = None,
+-) -> dict:
+-    """자재 교체 설계변경의 가능 여부와 영향을 분석합니다."""
+-
+-    normalized_values = {
+-        "plant_code": plant_code,
+-        "product_id": product_id,
+-        "old_material_id": old_material_id,
+-        "new_material_id": new_material_id,
+-    }
+-
+-    for field_name, value in normalized_values.items():
+-        if not isinstance(value, str) or not value.strip():
+-            raise ValueError(
+-                f"{field_name}는 비어 있지 않은 문자열이어야 합니다."
+-            )
+-
+-        normalized_values[field_name] = value.strip()
+-
+-    return _workflow().analyze_replace(
+-        plant_code=normalized_values["plant_code"],
+-        product_id=normalized_values["product_id"],
+-        old_material_id=normalized_values["old_material_id"],
+-        new_material_id=normalized_values["new_material_id"],
+-        as_of_date=as_of_date,
+-    )
+-
+-
+-def create_design_change_preview_data(
+-    plant_code: str,
+-    product_id: str,
+-    old_material_id: str,
+-    new_material_id: str,
+-    as_of_date: str | date | None = None,
+-) -> dict:
+-    """분석을 재검증하고 Production BOM과 분리된 Preview를 생성합니다."""
+-
+-    analysis = analyze_design_change_data(
+-        plant_code=plant_code,
+-        product_id=product_id,
+-        old_material_id=old_material_id,
+-        new_material_id=new_material_id,
+-        as_of_date=as_of_date,
+-    )
+-    if analysis.get("result") == "FAIL":
+-        raise ValueError(
+-            "설계변경 분석이 FAIL이므로 Preview를 생성할 수 없습니다."
+-        )
+-
+-    return {"success": True, "result": "ANALYZED", "analysis_status": analysis["result"],
+-            "analysis": analysis, "production_bom_modified": False}
+-
+-
+-def record_design_change_decision_data(
+-    preview_revision: str,
+-    decision: str,
+-    comment: str | None = None,
+-) -> dict:
+-    """품평 승인된 Preview에 대한 최종 적용 승인·반려를 기록합니다.
+-
+-    이 함수는 결정 레코드만 반환하며 Production BOM을 변경하지 않습니다.
+-    Preview 존재 여부와 현재 Workflow 단계는 Agent State에서 검증합니다.
+-    """
+-
+-    if not isinstance(preview_revision, str) or not preview_revision.strip():
+-        raise ValueError("preview_revision은 비어 있지 않은 문자열이어야 합니다.")
+-
+-    if not isinstance(decision, str):
+-        raise ValueError("decision은 APPROVE 또는 REJECT여야 합니다.")
+-
+-    normalized_decision = decision.strip().upper()
+-    if normalized_decision not in {"APPROVE", "REJECT"}:
+-        raise ValueError("decision은 APPROVE 또는 REJECT여야 합니다.")
+-
+-    if comment is not None and not isinstance(comment, str):
+-        raise ValueError("comment는 문자열이어야 합니다.")
+-
+-    normalized_comment = comment.strip() if comment else None
+-    return {
+-        "success": True,
+-        "preview_revision": preview_revision.strip(),
+-        "decision": normalized_decision,
+-        "comment": normalized_comment,
+-        "production_bom_modified": False,
+-        "next_step": (
+-            "READY_TO_APPLY"
+-            if normalized_decision == "APPROVE"
+-            else "CHANGE_REJECTED"
+-        ),
+-    }
+-
+-
+-def apply_approved_design_change_data(
+-    preview_revision: str,
+-    product_id: str,
+-    old_material_id: str,
+-    new_material_id: str,
+-    preview_as_of_date: str,
+-    effective_date: str,
+-    applied_by: str,
+-    data_dir: str = "data",
+-) -> dict:
+-    """승인된 Preview와 동일한 설계변경을 Production BOM에 적용합니다."""
+-
+-    raise RuntimeError(
+-        "구형 Preview Apply 경로는 STEP25에서 제거되었습니다. "
+-        "Review BOM을 승인한 뒤 apply_reviewed_bom Tool을 사용하세요."
+-    )
+diff --git a/mcp_server/capabilities/download.py b/mcp_server/capabilities/download.py
+index 8a37741..0b0c2ae 100644
+--- a/mcp_server/capabilities/download.py
++++ b/mcp_server/capabilities/download.py
+@@ -4,9 +4,7 @@ import base64
+ from datetime import datetime
+ 
+ from mcp_server.capabilities.query import get_bom_data
+-from mcp_server.capabilities.design_change import generate_design_change_report_data
+ from services.bom_excel_export_service import BomExcelExportService
+-from services.design_change_word_report_service import DesignChangeWordReportService
+ from services.design_change_completion_report_service import DesignChangeCompletionReportService
+ from core.database_config import sqlite_database_path
+ from database import SQLiteDatabase
+@@ -64,21 +62,6 @@ def export_bom_excel_data(
+     )
+ 
+ 
+-def export_design_change_report_data(change_id: str) -> dict:
+-    """설계변경·AI 품평 데이터를 조회하고 Word 완료문서를 생성합니다."""
+-    normalized_change_id = str(change_id).strip().upper()
+-    if not normalized_change_id:
+-        raise ValueError("change_id는 비어 있지 않은 문자열이어야 합니다.")
+-    report = generate_design_change_report_data(change_id=normalized_change_id)
+-    if not report.get("success"):
+-        return report
+-    content = DesignChangeWordReportService().build(report)
+-    return _file_result(
+-        f"{normalized_change_id}_design_change_report.docx", DOCX_MIME, content,
+-        change_id=normalized_change_id, report_stage="PRE_APPLY",
+-    )
+-
+-
+ def export_design_change_completion_report_data(request_id: str) -> dict:
+     normalized = str(request_id or "").strip().upper()
+     if not normalized:
+diff --git a/mcp_server/capabilities/history.py b/mcp_server/capabilities/history.py
+deleted file mode 100644
+index ba5a74a..0000000
+--- a/mcp_server/capabilities/history.py
++++ /dev/null
+@@ -1,68 +0,0 @@
+-from database import SQLiteDatabase
+-from core.database_config import sqlite_database_path
+-
+-
+-class SQLiteWorkflowHistoryRepository:
+-    def __init__(self) -> None:
+-        self.database = SQLiteDatabase(sqlite_database_path())
+-
+-    def list_design_changes(self) -> list[dict]:
+-        with self.database.connection() as con:
+-            return [dict(row) for row in con.execute(
+-                """SELECT change_id,version_code,change_type,requested_date,effective_date,
+-                analysis_result,approval_status,apply_status,workflow_status,requested_by,
+-                approved_by,applied_by,applied_at FROM design_changes
+-                ORDER BY requested_date DESC,change_id DESC"""
+-            )]
+-
+-    def get_design_change(self, change_id: str) -> dict:
+-        with self.database.connection() as con:
+-            header = con.execute("SELECT * FROM design_changes WHERE UPPER(change_id)=UPPER(?)", (change_id,)).fetchone()
+-            if not header:
+-                return {"success": False, "change_id": change_id, "message": "설계변경 정보를 찾을 수 없습니다."}
+-            items = [dict(row) for row in con.execute("SELECT * FROM design_change_items WHERE change_id=? ORDER BY item_seq", (header["change_id"],))]
+-            reviews = [dict(row) for row in con.execute("SELECT * FROM review_boms WHERE change_id=?", (header["change_id"],))]
+-        return {"success": True, "change": dict(header), "items": items, "reviews": reviews}
+-
+-    def list_bom_reviews(self) -> list[dict]:
+-        with self.database.connection() as con:
+-            return [dict(row) for row in con.execute(
+-                """SELECT r.review_id,r.change_id,r.version_code,r.review_status,
+-                r.current_revision,r.approved_revision,r.created_by,r.reviewed_by,
+-                r.decision_reason,r.created_at,r.updated_at,
+-                (SELECT result FROM bom_reviews b WHERE b.review_id=r.review_id
+-                 ORDER BY b.completed_at DESC,b.bom_review_id DESC LIMIT 1) AS review_result
+-                FROM review_boms r ORDER BY r.created_at DESC,r.review_id DESC"""
+-            )]
+-
+-    def get_bom_review(self, review_id: str) -> dict:
+-        with self.database.connection() as con:
+-            header = con.execute("SELECT * FROM review_boms WHERE UPPER(review_id)=UPPER(?)", (review_id,)).fetchone()
+-            if not header:
+-                return {"success": False, "review_id": review_id, "message": "품평회 정보를 찾을 수 없습니다."}
+-            reviews = [dict(row) for row in con.execute("SELECT * FROM bom_reviews WHERE review_id=? ORDER BY revision_no", (header["review_id"],))]
+-            checks = [dict(row) for row in con.execute(
+-                """SELECT c.* FROM bom_review_checks c JOIN bom_reviews b
+-                ON b.bom_review_id=c.bom_review_id WHERE b.review_id=?
+-                ORDER BY b.revision_no,c.check_seq""", (header["review_id"],))]
+-        return {"success": True, "review": dict(header), "evaluations": reviews, "checks": checks}
+-
+-
+-def _repository():
+-    return SQLiteWorkflowHistoryRepository()
+-
+-
+-def list_design_changes_data() -> list[dict]:
+-    return _repository().list_design_changes()
+-
+-
+-def get_design_change_data(change_id: str) -> dict:
+-    return _repository().get_design_change(change_id)
+-
+-
+-def list_bom_reviews_data() -> list[dict]:
+-    return _repository().list_bom_reviews()
+-
+-
+-def get_bom_review_data(review_id: str) -> dict:
+-    return _repository().get_bom_review(review_id)
+diff --git a/mcp_server/server.py b/mcp_server/server.py
+index b417384..e07a888 100644
+--- a/mcp_server/server.py
++++ b/mcp_server/server.py
+@@ -29,25 +29,10 @@ from mcp_server.capabilities.query import (
+     get_product_detail_data,
+     get_item_detail_data,
+ )
+-from mcp_server.capabilities.design_change import (
+-    analyze_design_change_data,
+-    create_ai_change_request_data,
+-    create_review_bom_data,
+-    run_ai_bom_review_data,
+-    generate_design_change_report_data,
+-    apply_reviewed_bom_data,
+-)
+ from mcp_server.capabilities.download import (
+     export_bom_excel_data,
+-    export_design_change_report_data,
+     export_design_change_completion_report_data,
+ )
+-from mcp_server.capabilities.history import (
+-    get_bom_review_data,
+-    get_design_change_data,
+-    list_bom_reviews_data,
+-    list_design_changes_data,
+-)
+ from mcp_server.capabilities.design_change_workflow import (
+     apply_approved_change_request_data,
+     create_design_change_request_data,
+@@ -211,93 +196,6 @@ def list_plants(
+     return list_plants_data(reference_code, as_of_date)
+ 
+ 
+-@mcp.tool()
+-def analyze_design_change(
+-    plant_code: str,
+-    product_id: str,
+-    old_material_id: str,
+-    new_material_id: str,
+-    as_of_date: str | None = None,
+-) -> dict:
+-    """
+-    제품 BOM의 기존 자재를 신규 자재로 교체할 수 있는지 분석합니다.
+-
+-    실제 BOM 데이터는 변경하지 않으며 제품·자재 존재 여부,
+-    승인/Lifecycle, Compatibility, BOM 업무 Rule을 검증합니다.
+-
+-    Args:
+-        product_id: 설계변경 대상 제품 ID
+-        old_material_id: 현재 BOM에 존재하는 기존 자재 ID
+-        new_material_id: 교체 후보 신규 자재 ID
+-        as_of_date: 분석 기준일. 예: 2026-08-11
+-
+-    Returns:
+-        PASS / CONDITIONAL / FAIL 판정과 상세 검증 결과
+-    """
+-
+-    return analyze_design_change_data(
+-        plant_code=plant_code,
+-        product_id=product_id,
+-        old_material_id=old_material_id,
+-        new_material_id=new_material_id,
+-        as_of_date=as_of_date,
+-    )
+-
+-
+-@mcp.tool()
+-def create_ai_change_request(
+-    plant_code: str,
+-    product_id: str,
+-    old_material_id: str,
+-    new_material_id: str,
+-    reason: str,
+-    effective_date: str,
+-    requested_by: str,
+-    as_of_date: str | None = None,
+-) -> dict:
+-    """설계변경을 분석하고 적용 전 변경 요청을 등록합니다. E-BOM은 변경하지 않습니다."""
+-    return create_ai_change_request_data(
+-        plant_code=plant_code,
+-        product_id=product_id,
+-        old_material_id=old_material_id,
+-        new_material_id=new_material_id,
+-        reason=reason,
+-        effective_date=effective_date,
+-        requested_by=requested_by,
+-        as_of_date=as_of_date,
+-    )
+-
+-
+-@mcp.tool()
+-def create_review_bom(
+-    change_id: str,
+-    created_by: str,
+-    created_date: str,
+-) -> dict:
+-    """변경 예정 BOM Snapshot을 품평회 BOM Rev.1로 생성합니다."""
+-    return create_review_bom_data(
+-        change_id=change_id, created_by=created_by, created_date=created_date
+-    )
+-
+-
+-@mcp.tool()
+-def run_ai_bom_review(
+-    review_id: str,
+-    reviewed_by: str,
+-    checked_date: str,
+-) -> dict:
+-    """Review BOM의 Rule/Compatibility 체크리스트를 AI Agent가 자동 검증합니다."""
+-    return run_ai_bom_review_data(
+-        review_id=review_id, reviewed_by=reviewed_by, checked_date=checked_date
+-    )
+-
+-
+-@mcp.tool()
+-def generate_design_change_report(change_id: str) -> dict:
+-    """사용자 최종 승인 전에 설계변경·AI 품평 결과 보고서를 생성합니다."""
+-    return generate_design_change_report_data(change_id=change_id)
+-
+-
+ @mcp.tool()
+ def export_bom_excel(plant_code: str, product_id: str, as_of_date: str | None = None) -> dict:
+     """BOM 조회 결과를 읽기 전용 Excel 파일로 생성합니다."""
+@@ -306,12 +204,6 @@ def export_bom_excel(plant_code: str, product_id: str, as_of_date: str | None =
+     )
+ 
+ 
+-@mcp.tool()
+-def export_design_change_report(change_id: str) -> dict:
+-    """설계변경·AI 품평 완료문서를 읽기 전용 Word 파일로 생성합니다."""
+-    return export_design_change_report_data(change_id=change_id)
+-
+-
+ @mcp.tool()
+ def export_design_change_completion_report(request_id: str) -> dict:
+     """Apply가 완료된 Design Change Request의 설계변경 완료 Word 보고서를 생성합니다.
+@@ -321,42 +213,6 @@ def export_design_change_completion_report(request_id: str) -> dict:
+     return export_design_change_completion_report_data(request_id=request_id)
+ 
+ 
+-@mcp.tool()
+-def list_design_changes() -> list[dict]:
+-    """설계변경 요청의 진행상태와 결과 목록을 읽기 전용으로 조회합니다."""
+-    return list_design_changes_data()
+-
+-
+-@mcp.tool()
+-def get_design_change(change_id: str) -> dict:
+-    """변경 ID로 설계변경, 변경 자재, Review BOM 상세를 조회합니다."""
+-    return get_design_change_data(change_id)
+-
+-
+-@mcp.tool()
+-def list_bom_reviews() -> list[dict]:
+-    """품평회 목록과 종합판정 및 체크 결과 건수를 조회합니다."""
+-    return list_bom_reviews_data()
+-
+-
+-@mcp.tool()
+-def get_bom_review(review_id: str) -> dict:
+-    """품평회 기본정보, 체크리스트, Review BOM 상세를 조회합니다."""
+-    return get_bom_review_data(review_id)
+-
+-
+-@mcp.tool()
+-def apply_reviewed_bom(
+-    review_id: str,
+-    applied_by: str,
+-    applied_date: str | None = None,
+-) -> dict:
+-    """보고서를 확인한 사용자의 명시적 요청으로만 Production E-BOM에 반영합니다."""
+-    return apply_reviewed_bom_data(
+-        review_id=review_id, applied_by=applied_by, applied_date=applied_date
+-    )
+-
+-
+ @mcp.tool()
+ def analyze_design_change_candidates(
+     request: DesignChangeRequestInput,
+diff --git a/scripts/run_tests.py b/scripts/run_tests.py
+index 0aeecd0..3eb3216 100644
+--- a/scripts/run_tests.py
++++ b/scripts/run_tests.py
+@@ -53,7 +53,7 @@ def main() -> int:
+         argument = pytest_arguments[index]
+         if argument == "--suite":
+             if index + 1 >= len(pytest_arguments):
+-                raise SystemExit("--suite requires a value: quick, core, evaluation, legacy, full")
++                raise SystemExit("--suite requires a value: quick, core, evaluation, full")
+             suite_name = pytest_arguments[index + 1]
+             index += 2
+             continue
+diff --git a/scripts/test_suite_manifest.py b/scripts/test_suite_manifest.py
+index a6801e7..bd43715 100644
+--- a/scripts/test_suite_manifest.py
++++ b/scripts/test_suite_manifest.py
+@@ -37,14 +37,8 @@ EVALUATION_TEST_FILES: tuple[str, ...] = (
+     "tests/test_macro_routing_accuracy_regression.py",
+ )
+ 
+-# Kept only until CLEAN-03/04 removes or aligns the corresponding runtime code.
+-LEGACY_TEST_FILES: tuple[str, ...] = (
+-    "tests/test_legacy_review_bom_workflow.py",
+-)
+-
+ CORE_EXCLUDED_FILES = frozenset(
+     EVALUATION_TEST_FILES
+-    + LEGACY_TEST_FILES
+     + (
+         "tests/test_observability.py",
+         "tests/test_performance_profiler.py",
+@@ -67,12 +61,10 @@ def get_suite_files(project_root: Path, suite: str) -> tuple[str, ...]:
+         return QUICK_TEST_FILES
+     if normalized == "evaluation":
+         return EVALUATION_TEST_FILES
+-    if normalized == "legacy":
+-        return LEGACY_TEST_FILES
+     if normalized == "core":
+         return tuple(path for path in _all_test_files(project_root) if path not in CORE_EXCLUDED_FILES)
+     if normalized == "full":
+         return ()
+     raise ValueError(
+-        f"Unknown test suite: {suite}. Use one of: quick, core, evaluation, legacy, full"
++        f"Unknown test suite: {suite}. Use one of: quick, core, evaluation, full"
+     )
+diff --git a/services/design_change_word_report_service.py b/services/design_change_word_report_service.py
+deleted file mode 100644
+index bd13b66..0000000
+--- a/services/design_change_word_report_service.py
++++ /dev/null
+@@ -1,273 +0,0 @@
+-from __future__ import annotations
+-
+-from io import BytesIO
+-
+-from docx import Document
+-from docx.enum.section import WD_SECTION
+-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
+-from docx.enum.text import WD_ALIGN_PARAGRAPH
+-from docx.oxml import OxmlElement
+-from docx.oxml.ns import qn
+-from docx.shared import Inches, Pt, RGBColor
+-
+-
+-class DesignChangeWordReportService:
+-    """설계변경·AI 품평 보고서 데이터를 다운로드용 DOCX로 변환합니다."""
+-
+-    CHECK_LABELS = {
+-        "BOM_STRUCTURE": "BOM 구조",
+-        "LIFECYCLE": "Lifecycle",
+-        "APPROVAL": "자재 승인",
+-        "SUPPLIER": "공급사",
+-        "BOM_ATTRIBUTE": "BOM 속성",
+-        "COMPATIBILITY": "호환성",
+-    }
+-    STATUS_LABELS = {
+-        "PASS": "적합",
+-        "CONDITIONAL": "조건부 적합",
+-        "FAIL": "부적합",
+-        "NOT_CHECKED": "미검증",
+-    }
+-
+-    @staticmethod
+-    def _value(value, default="-") -> str:
+-        if value is None or str(value).strip() in {"", "nan", "NaN"}:
+-            return default
+-        return str(value)
+-
+-    @staticmethod
+-    def _set_cell_shading(cell, fill: str) -> None:
+-        tc_pr = cell._tc.get_or_add_tcPr()
+-        shd = tc_pr.find(qn("w:shd"))
+-        if shd is None:
+-            shd = OxmlElement("w:shd")
+-            tc_pr.append(shd)
+-        shd.set(qn("w:fill"), fill)
+-
+-    @staticmethod
+-    def _set_cell_width(cell, width_dxa: int) -> None:
+-        tc_pr = cell._tc.get_or_add_tcPr()
+-        tc_w = tc_pr.find(qn("w:tcW"))
+-        if tc_w is None:
+-            tc_w = OxmlElement("w:tcW")
+-            tc_pr.append(tc_w)
+-        tc_w.set(qn("w:w"), str(width_dxa))
+-        tc_w.set(qn("w:type"), "dxa")
+-
+-    @staticmethod
+-    def _set_table_geometry(table, widths: list[int]) -> None:
+-        table.autofit = False
+-        table.alignment = WD_TABLE_ALIGNMENT.LEFT
+-        tbl_pr = table._tbl.tblPr
+-        tbl_w = tbl_pr.find(qn("w:tblW"))
+-        if tbl_w is None:
+-            tbl_w = OxmlElement("w:tblW")
+-            tbl_pr.append(tbl_w)
+-        tbl_w.set(qn("w:w"), str(sum(widths)))
+-        tbl_w.set(qn("w:type"), "dxa")
+-        tbl_ind = OxmlElement("w:tblInd")
+-        tbl_ind.set(qn("w:w"), "120")
+-        tbl_ind.set(qn("w:type"), "dxa")
+-        tbl_pr.append(tbl_ind)
+-        grid = table._tbl.tblGrid
+-        for child in list(grid):
+-            grid.remove(child)
+-        for width in widths:
+-            col = OxmlElement("w:gridCol")
+-            col.set(qn("w:w"), str(width))
+-            grid.append(col)
+-        for row in table.rows:
+-            for cell, width in zip(row.cells, widths):
+-                DesignChangeWordReportService._set_cell_width(cell, width)
+-
+-    @staticmethod
+-    def _set_font(run, size=10.5, bold=False, color="222222") -> None:
+-        run.font.name = "Malgun Gothic"
+-        run._element.get_or_add_rPr().rFonts.set(qn("w:ascii"), "Malgun Gothic")
+-        run._element.rPr.rFonts.set(qn("w:hAnsi"), "Malgun Gothic")
+-        run._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
+-        run.font.size = Pt(size)
+-        run.bold = bold
+-        run.font.color.rgb = RGBColor.from_string(color)
+-
+-    def _style_document(self, document: Document) -> None:
+-        section = document.sections[0]
+-        section.page_width = Inches(8.5)
+-        section.page_height = Inches(11)
+-        section.top_margin = Inches(0.75)
+-        section.bottom_margin = Inches(0.75)
+-        section.left_margin = Inches(0.8)
+-        section.right_margin = Inches(0.8)
+-        section.header_distance = Inches(0.35)
+-        section.footer_distance = Inches(0.35)
+-
+-        normal = document.styles["Normal"]
+-        normal.font.name = "Malgun Gothic"
+-        normal._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
+-        normal.font.size = Pt(10.5)
+-        normal.paragraph_format.space_after = Pt(6)
+-        normal.paragraph_format.line_spacing = 1.1
+-
+-        for name, size, color, before, after in (
+-            ("Heading 1", 16, "2E74B5", 16, 8),
+-            ("Heading 2", 13, "2E74B5", 12, 6),
+-        ):
+-            style = document.styles[name]
+-            style.font.name = "Malgun Gothic"
+-            style._element.rPr.rFonts.set(qn("w:eastAsia"), "Malgun Gothic")
+-            style.font.size = Pt(size)
+-            style.font.bold = True
+-            style.font.color.rgb = RGBColor.from_string(color)
+-            style.paragraph_format.space_before = Pt(before)
+-            style.paragraph_format.space_after = Pt(after)
+-
+-        header = section.header.paragraphs[0]
+-        header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+-        self._set_font(header.add_run("Display BOM AI Agent | Design Change Report"), 8.5, color="666666")
+-        footer = section.footer.paragraphs[0]
+-        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+-        self._set_font(footer.add_run("AI 자동검증 결과는 사용자 최종 승인 전 양산 BOM에 반영되지 않습니다."), 8, color="777777")
+-
+-    def _add_title(self, document: Document, report: dict) -> None:
+-        title = document.add_paragraph()
+-        title.paragraph_format.space_after = Pt(4)
+-        self._set_font(title.add_run("설계변경 · AI 품평 보고서"), 22, True, "1F3A5F")
+-        subtitle = document.add_paragraph()
+-        subtitle.paragraph_format.space_after = Pt(14)
+-        self._set_font(
+-            subtitle.add_run(
+-                f"변경 요청 {self._value(report.get('change_id'))}  |  "
+-                f"대상 모델 {self._value(report.get('product_id'))}"
+-            ),
+-            10.5,
+-            color="555555",
+-        )
+-
+-    def _add_key_value_table(self, document: Document, rows: list[tuple[str, str]]) -> None:
+-        table = document.add_table(rows=0, cols=2)
+-        table.style = "Table Grid"
+-        for label, value in rows:
+-            cells = table.add_row().cells
+-            cells[0].text = ""
+-            cells[1].text = ""
+-            self._set_cell_shading(cells[0], "E8EEF5")
+-            self._set_font(cells[0].paragraphs[0].add_run(label), 9.5, True, "1F3A5F")
+-            self._set_font(cells[1].paragraphs[0].add_run(self._value(value)), 9.5)
+-            for cell in cells:
+-                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+-        self._set_table_geometry(table, [2200, 7160])
+-
+-    def _add_table(self, document: Document, headers: list[str], rows: list[list[str]], widths: list[int]) -> None:
+-        table = document.add_table(rows=1, cols=len(headers))
+-        table.style = "Table Grid"
+-        for index, header in enumerate(headers):
+-            cell = table.rows[0].cells[index]
+-            cell.text = ""
+-            self._set_cell_shading(cell, "E8EEF5")
+-            p = cell.paragraphs[0]
+-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+-            self._set_font(p.add_run(header), 8.5, True, "1F3A5F")
+-        for row in rows:
+-            cells = table.add_row().cells
+-            for index, value in enumerate(row):
+-                cells[index].text = ""
+-                self._set_font(cells[index].paragraphs[0].add_run(self._value(value)), 8.5)
+-                cells[index].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+-        self._set_table_geometry(table, widths)
+-
+-    def build(self, report: dict) -> bytes:
+-        if not report.get("success"):
+-            raise ValueError(report.get("message", "보고서 데이터 생성에 실패했습니다."))
+-
+-        document = Document()
+-        self._style_document(document)
+-        self._add_title(document, report)
+-
+-        change = report.get("change") or {}
+-        review = report.get("review") or {}
+-        document.add_heading("1. 설계변경 개요", level=1)
+-        self._add_key_value_table(document, [
+-            ("변경 요청 ID", report.get("change_id")),
+-            ("대상 모델", report.get("product_id")),
+-            ("변경 유형", change.get("change_type")),
+-            ("변경 사유", change.get("reason")),
+-            ("요청자", change.get("requested_by")),
+-            ("요청일 / 적용 예정일", f"{self._value(change.get('requested_date'))} / {self._value(change.get('effective_date'))}"),
+-            ("설계변경 분석 결과", self.STATUS_LABELS.get(str(change.get("analysis_result", "")).upper(), change.get("analysis_result"))),
+-        ])
+-
+-        document.add_heading("2. 변경 전 · 후 BOM", level=1)
+-        changes = report.get("change_items") or []
+-        self._add_table(
+-            document,
+-            ["구분", "BOM Parent", "Location", "기존 자재", "신규 자재", "수량"],
+-            [[
+-                item.get("action"), item.get("bom_parent"), item.get("location"),
+-                item.get("old_bom_child"), item.get("new_bom_child"), item.get("quantity"),
+-            ] for item in changes],
+-            [900, 1700, 1350, 1900, 1900, 610],
+-        )
+-
+-        document.add_heading("3. AI 품평 결과", level=1)
+-        review_result = str(review.get("review_result", "NOT_CHECKED")).upper()
+-        self._add_key_value_table(document, [
+-            ("Review BOM ID", review.get("review_id")),
+-            ("검증 Revision", report.get("report_revision")),
+-            ("AI 종합 판정", self.STATUS_LABELS.get(review_result, review_result)),
+-            ("검증 완료일", review.get("completed_date")),
+-            ("검증 주체", review.get("reviewed_by") or review.get("approved_by") or "BOM_AI_AGENT"),
+-        ])
+-
+-        summary = report.get("review_check_summary") or {}
+-        summary_rows = []
+-        for check_type, values in summary.items():
+-            status = str(values.get("status", "NOT_CHECKED")).upper()
+-            summary_rows.append([
+-                self.CHECK_LABELS.get(check_type, check_type),
+-                self.STATUS_LABELS.get(status, status),
+-                values.get("count", 0),
+-                values.get("conditional_count", 0),
+-                values.get("fail_count", 0),
+-            ])
+-        self._add_table(
+-            document,
+-            ["검증 영역", "판정", "검증 수", "조건부", "실패"],
+-            summary_rows,
+-            [2600, 1900, 1620, 1620, 1620],
+-        )
+-
+-        document.add_heading("4. 체크리스트 상세", level=1)
+-        checks = report.get("review_checks") or []
+-        check_rows = [[
+-            self.CHECK_LABELS.get(str(item.get("check_type", "")).upper(), item.get("check_type")),
+-            self.STATUS_LABELS.get(str(item.get("status", "")).upper(), item.get("status")),
+-            item.get("target_id"), item.get("message"),
+-        ] for item in checks]
+-        if check_rows:
+-            self._add_table(
+-                document,
+-                ["검증 영역", "판정", "대상", "검증 근거"],
+-                check_rows,
+-                [1700, 1200, 1900, 4560],
+-            )
+-        else:
+-            document.add_paragraph("저장된 체크리스트 상세 결과가 없습니다.")
+-
+-        document.add_heading("5. 최종 권고", level=1)
+-        recommendation = (
+-            "AI 자동검증 항목이 모두 적합하므로 사용자 확인 후 양산 E-BOM 반영을 권고합니다."
+-            if review_result == "PASS"
+-            else "미검증·조건부·실패 항목을 확인하기 전에는 양산 E-BOM 반영을 권고하지 않습니다."
+-        )
+-        p = document.add_paragraph()
+-        self._set_font(p.add_run(recommendation), 11, True, "1F3A5F")
+-        note = document.add_paragraph()
+-        self._set_font(
+-            note.add_run("본 보고서는 PRE-APPLY 단계의 검토 자료이며, 사용자의 명시적 승인 전에는 Production BOM이 변경되지 않습니다."),
+-            9.5,
+-            color="666666",
+-        )
+-
+-        output = BytesIO()
+-        document.save(output)
+-        return output.getvalue()
+diff --git a/services/sqlite_design_change_workflow_service.py b/services/sqlite_design_change_workflow_service.py
+deleted file mode 100644
+index 8e37136..0000000
+--- a/services/sqlite_design_change_workflow_service.py
++++ /dev/null
+@@ -1,302 +0,0 @@
+-from __future__ import annotations
+-
+-from collections import Counter
+-from datetime import date
+-import uuid
+-
+-from database import SchemaManager, SQLiteDatabase
+-from repositories.sqlite_repository import SQLiteBomRepository
+-from services.repository_bom_service import RepositoryBomService
+-from services.sqlite_production_bom_service import SQLiteProductionBomService
+-
+-
+-class SQLiteDesignChangeWorkflowService:
+-    """SQLite-only design-change, review and reporting workflow.
+-
+-    Every write is committed as one transaction.  Production BOM rows are only
+-    changed by ``SQLiteProductionBomService`` after an approved Review revision.
+-    """
+-
+-    def __init__(self, database: SQLiteDatabase) -> None:
+-        self.database = database
+-        SchemaManager(database).initialize()
+-        self.repository = SQLiteBomRepository(database)
+-        self.bom = RepositoryBomService(self.repository)
+-
+-    @staticmethod
+-    def _norm(value: str) -> str:
+-        return str(value).strip().upper()
+-
+-    @staticmethod
+-    def _event_id() -> str:
+-        return f"EVT-{uuid.uuid4().hex[:12].upper()}"
+-
+-    def analyze_replace(self, product_id: str, old_material_id: str,
+-                        new_material_id: str, as_of_date: str | None = None,
+-                        plant_code: str = "P01") -> dict:
+-        plant = self.repository.get_plant(self._norm(plant_code))
+-        if not plant or plant["active_yn"] != "Y":
+-            raise ValueError(f"활성 PLANT를 찾을 수 없습니다: {plant_code}")
+-        product = self._norm(product_id)
+-        old_code = self._norm(old_material_id)
+-        new_code = self._norm(new_material_id)
+-        if not product or not old_code or not new_code:
+-            raise ValueError("제품, 기존 자재, 신규 자재 코드는 필수입니다.")
+-        if old_code == new_code:
+-            raise ValueError("기존 자재와 신규 자재는 달라야 합니다.")
+-
+-        checks: list[dict] = []
+-        version = self.repository.resolve_version_code(product)
+-        checks.append({"check": "PRODUCT_EXISTS", "status": "PASS" if version else "FAIL",
+-                       "message": f"대상 VERSION: {version or product}"})
+-        if not version:
+-            return self._analysis_result(
+-                plant["plant_code"], product, old_code, new_code, checks
+-            )
+-
+-        tree = self.repository.get_tree(plant["plant_code"], version, as_of_date)
+-        targets = [row for row in tree if self._norm(row["child_item_code"]) == old_code]
+-        checks.append({"check": "OLD_MATERIAL_IN_BOM", "status": "PASS" if len(targets) == 1 else "FAIL",
+-                       "message": f"현재 BOM 대상 관계 {len(targets)}건"})
+-        new_item = self.repository.get_item(new_code)
+-        checks.append({"check": "NEW_MATERIAL_EXISTS", "status": "PASS" if new_item else "FAIL",
+-                       "message": f"신규 자재: {new_code}"})
+-        if new_item:
+-            checks.append({"check": "NEW_MATERIAL_LIFECYCLE",
+-                           "status": "PASS" if new_item["active_yn"] == "Y" else "FAIL",
+-                           "message": f"active_yn={new_item['active_yn']}"})
+-        if len(targets) == 1 and new_item:
+-            same_type = targets[0]["child_item_type"] == new_item["item_type"]
+-            checks.append({"check": "ITEM_TYPE_COMPATIBILITY", "status": "PASS" if same_type else "FAIL",
+-                           "message": f"{targets[0]['child_item_type']} → {new_item['item_type']}"})
+-            with self.database.connection() as con:
+-                incompatible = con.execute(
+-                    """SELECT result,reason FROM material_compatibility
+-                       WHERE source_item_code=? AND active_yn='Y'
+-                         AND ((target_type='VERSION' AND target_code=?)
+-                           OR (target_type='MATERIAL' AND target_code=?))
+-                       ORDER BY CASE result WHEN 'INCOMPATIBLE' THEN 1 WHEN 'CONDITIONAL' THEN 2 ELSE 3 END
+-                       LIMIT 1""", (new_code, version, old_code)).fetchone()
+-            status = "PASS"
+-            message = "등록된 부적합 호환성 조건 없음"
+-            if incompatible:
+-                status = {"COMPATIBLE": "PASS", "CONDITIONAL": "CONDITIONAL",
+-                          "INCOMPATIBLE": "FAIL"}[incompatible["result"]]
+-                message = incompatible["reason"] or incompatible["result"]
+-            checks.append({"check": "COMPATIBILITY", "status": status, "message": message})
+-        result = self._analysis_result(
+-            plant["plant_code"], version, old_code, new_code, checks
+-        )
+-        if len(targets) == 1:
+-            result["target"] = targets[0]
+-        return result
+-
+-    @staticmethod
+-    def _analysis_result(plant_code: str, product: str, old_code: str, new_code: str,
+-                         checks: list[dict]) -> dict:
+-        statuses = {row["status"] for row in checks}
+-        result = "FAIL" if "FAIL" in statuses else "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
+-        return {"success": result != "FAIL", "result": result,
+-                "plant_code": plant_code, "product_id": product,
+-                "old_material_id": old_code, "new_material_id": new_code,
+-                "checks": checks, "production_bom_modified": False}
+-
+-    def create_change_request(self, *, product_id: str, old_material_id: str,
+-                              new_material_id: str, reason: str, effective_date: str,
+-                              requested_by: str, as_of_date: str | None = None,
+-                              plant_code: str = "P01") -> dict:
+-        analysis = self.analyze_replace(
+-            product_id, old_material_id, new_material_id, as_of_date, plant_code
+-        )
+-        if analysis["result"] == "FAIL":
+-            return {"success": False, "result": "ANALYSIS_FAILED", "analysis": analysis,
+-                    "production_bom_modified": False}
+-        target = analysis["target"]
+-        change_id = f"CHG-{date.today():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}"
+-        with self.database.transaction() as con:
+-            old_revision = con.execute(
+-                """SELECT row_revision FROM bom_master WHERE plant_code=? AND parent_item_code=? AND
+-                   child_item_code=? AND location_code=? AND status='ACTIVE'
+-                   ORDER BY valid_from DESC LIMIT 1""",
+-                (analysis["plant_code"], target["parent_item_code"],
+-                 self._norm(old_material_id), target["location_code"]),
+-            ).fetchone()
+-            con.execute("""INSERT INTO design_changes(
+-                change_id,plant_code,version_code,change_type,requested_date,effective_date,reason,
+-                analysis_result,approval_status,apply_status,workflow_status,
+-                expected_bom_revision,requested_by)
+-                VALUES(?,?,?, 'REPLACE',?,?,?,?, 'AI_REVIEW_PENDING','REQUESTED','ANALYZED',?,?)""",
+-                (change_id, analysis["plant_code"], analysis["product_id"],
+-                 date.today().isoformat(), effective_date,
+-                 str(reason).strip(), analysis["result"], old_revision[0] if old_revision else 1,
+-                 str(requested_by).strip()))
+-            con.execute("""INSERT INTO design_change_items(
+-                change_id,item_seq,plant_code,action,parent_item_code,old_item_code,new_item_code,
+-                location_code,sequence_no,quantity,effective_date)
+-                VALUES(?,1,?,'REPLACE',?,?,?,?,?,?,?)""",
+-                (change_id, analysis["plant_code"], target["parent_item_code"],
+-                 self._norm(old_material_id),
+-                 self._norm(new_material_id), target["location_code"], target["sequence_no"],
+-                 target["quantity"], effective_date))
+-            for seq, check in enumerate(analysis["checks"], 1):
+-                con.execute("""INSERT INTO design_change_checks(
+-                    change_id,item_seq,check_seq,plant_code,check_type,target_code,result,blocking_yn,message)
+-                    VALUES(?,1,?,?,?,?,?,?,?)""", (change_id, seq, analysis["plant_code"], check["check"],
+-                    self._norm(new_material_id), check["status"],
+-                    "Y" if check["status"] == "FAIL" else "N", check["message"]))
+-            con.execute("""INSERT INTO workflow_events(event_id,change_id,event_type,
+-                to_status,actor_type,actor_id,reason) VALUES(?,?,'CHANGE_REQUESTED',
+-                'ANALYZED','USER',?,?)""", (self._event_id(), change_id, requested_by, reason))
+-        return {"success": True, "result": "CHANGE_REQUESTED", "change_id": change_id,
+-                "plant_code": analysis["plant_code"],
+-                "analysis": analysis, "production_bom_modified": False}
+-
+-    def create_review_bom(self, *, change_id: str, created_by: str,
+-                          created_date: str) -> dict:
+-        change_code = self._norm(change_id)
+-        review_id = f"REV-{uuid.uuid4().hex[:10].upper()}"
+-        snapshot_id = f"SNP-{uuid.uuid4().hex[:10].upper()}"
+-        with self.database.transaction() as con:
+-            change = con.execute("SELECT * FROM design_changes WHERE change_id=?", (change_code,)).fetchone()
+-            item = con.execute("SELECT * FROM design_change_items WHERE change_id=? AND item_seq=1", (change_code,)).fetchone()
+-            if not change or not item:
+-                raise ValueError("SQLite 설계변경 요청 또는 변경 Item을 찾을 수 없습니다.")
+-            if con.execute("SELECT 1 FROM review_boms WHERE change_id=?", (change_code,)).fetchone():
+-                raise ValueError("이미 Review BOM이 생성된 설계변경입니다.")
+-            tree = self.repository.get_tree(
+-                change["plant_code"], change["version_code"], created_date
+-            )
+-            if not tree:
+-                raise ValueError("Review BOM을 생성할 Production BOM이 없습니다.")
+-            con.execute("""INSERT INTO design_change_snapshots(
+-                snapshot_id,change_id,plant_code,version_code,source_bom_revision)
+-                VALUES(?,?,?,?,?)""",
+-                (snapshot_id, change_code, change["plant_code"], change["version_code"],
+-                 change["expected_bom_revision"] or 1))
+-            con.execute("""INSERT INTO review_boms(review_id,change_id,plant_code,version_code,review_status,
+-                current_revision,created_by,created_at) VALUES(?,?,?,?,'CREATED',1,?,?)""",
+-                (review_id, change_code, change["plant_code"], change["version_code"],
+-                 created_by, created_date))
+-            con.execute("""INSERT INTO review_bom_revisions(
+-                review_id,revision_no,plant_code,source,created_by,created_at)
+-                VALUES(?,1,?,'AI_PREVIEW',?,?)""",
+-                (review_id, change["plant_code"], created_by, created_date))
+-            for row in tree:
+-                is_target = (row["parent_item_code"] == item["parent_item_code"] and
+-                             row["child_item_code"] == item["old_item_code"] and
+-                             row["location_code"] == item["location_code"])
+-                child = item["new_item_code"] if is_target else row["child_item_code"]
+-                action = "REPLACE" if is_target else "KEEP"
+-                path = row["bom_path"]
+-                if is_target:
+-                    path = path.rsplit("/", 1)[0] + "/" + child
+-                values = (row["parent_item_code"], child, row["location_code"], row["sequence_no"],
+-                          row["quantity"], row["level"], path, row["required_quantity"], action)
+-                con.execute("""INSERT INTO design_change_snapshot_items(snapshot_id,plant_code,parent_item_code,
+-                    child_item_code,location_code,sequence_no,quantity,level,bom_path,
+-                    required_quantity,change_action) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+-                    (snapshot_id, change["plant_code"], *values))
+-                con.execute("""INSERT INTO review_bom_items(review_id,revision_no,plant_code,version_code,
+-                    parent_item_code,child_item_code,location_code,sequence_no,quantity,level,
+-                    bom_path,required_quantity,review_action,source,modified_yn,modified_by,modified_at)
+-                    VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,'AI_PREVIEW',?,?,?)""",
+-                    (review_id, change["plant_code"], change["version_code"],
+-                     *values[:-1], action,
+-                     "Y" if is_target else "N", created_by if is_target else None,
+-                     created_date if is_target else None))
+-            con.execute("""UPDATE design_changes SET apply_status='IN_REVIEW',workflow_status='IN_REVIEW',
+-                updated_at=CURRENT_TIMESTAMP WHERE change_id=?""", (change_code,))
+-            con.execute("""INSERT INTO workflow_events(event_id,change_id,review_id,event_type,
+-                from_status,to_status,actor_type,actor_id) VALUES(?,?,?,'REVIEW_CREATED',
+-                'ANALYZED','IN_REVIEW','USER',?)""", (self._event_id(), change_code, review_id, created_by))
+-        return {"success": True, "result": "REVIEW_CREATED", "change_id": change_code,
+-                "review_id": review_id, "review_revision": 1, "current_revision": 1,
+-                "production_bom_modified": False}
+-
+-    def run_ai_review(self, *, review_id: str, reviewed_by: str, checked_date: str) -> dict:
+-        review_code = self._norm(review_id)
+-        bom_review_id = f"AI-{uuid.uuid4().hex[:10].upper()}"
+-        with self.database.transaction() as con:
+-            review = con.execute("SELECT * FROM review_boms WHERE review_id=?", (review_code,)).fetchone()
+-            if not review:
+-                raise ValueError("SQLite Review BOM을 찾을 수 없습니다.")
+-            checks = con.execute("SELECT * FROM design_change_checks WHERE change_id=? ORDER BY check_seq",
+-                                 (review["change_id"],)).fetchall()
+-            statuses = {row["result"] for row in checks}
+-            result = "FAIL" if "FAIL" in statuses else "CONDITIONAL" if "CONDITIONAL" in statuses else "PASS"
+-            con.execute("""INSERT INTO bom_reviews(bom_review_id,review_id,revision_no,plant_code,
+-                reviewer_type,result,reviewer_id,started_at,completed_at)
+-                VALUES(?,?,?,?,'AI',?,?,?,?)""", (bom_review_id, review_code,
+-                review["current_revision"], review["plant_code"], result,
+-                reviewed_by, checked_date, checked_date))
+-            for seq, row in enumerate(checks, 1):
+-                con.execute("""INSERT INTO bom_review_checks(bom_review_id,check_seq,plant_code,check_type,
+-                    target_code,result,actual_value,expected_value,blocking_yn,message,checked_at)
+-                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""", (bom_review_id, seq,
+-                    review["plant_code"], row["check_type"],
+-                    row["target_code"], row["result"], row["actual_value"], row["expected_value"],
+-                    row["blocking_yn"], row["message"], checked_date))
+-            if result == "FAIL":
+-                review_status, approval, apply_status, workflow = "RECHECK_REQUIRED", "AI_REVIEW_PENDING", "VALIDATION_FAILED", "VALIDATION_FAILED"
+-            else:
+-                review_status, approval, apply_status, workflow = "APPROVED", "APPROVED", "APPROVED_TO_APPLY", "APPROVED_TO_APPLY"
+-            con.execute("""UPDATE review_boms SET review_status=?,approved_revision=?,reviewed_by=?,
+-                decision_reason=?,updated_at=CURRENT_TIMESTAMP WHERE review_id=?""",
+-                (review_status, review["current_revision"] if result != "FAIL" else None,
+-                 reviewed_by, f"AI 검증 {result}", review_code))
+-            con.execute("""UPDATE design_changes SET approval_status=?,apply_status=?,workflow_status=?,
+-                approved_by=?,approved_at=?,updated_at=CURRENT_TIMESTAMP WHERE change_id=?""",
+-                (approval, apply_status, workflow, reviewed_by if result != "FAIL" else None,
+-                 checked_date if result != "FAIL" else None, review["change_id"]))
+-        rule_results = [{"check": row["check_type"], "check_type": row["check_type"],
+-                         "status": row["result"], "message": row["message"]} for row in checks]
+-        return {"success": result != "FAIL", "review_id": review_code,
+-                "review_revision": review["current_revision"], "ai_review_result": result,
+-                "rule_results": rule_results, "compatibility_results": [],
+-                "workflow_result": "AI_REVIEW_COMPLETED" if result != "FAIL" else "REVIEW_FAILED",
+-                "production_bom_modified": False,
+-                "next_step": "READY_TO_APPLY" if result != "FAIL" else "RECHECK_REQUIRED"}
+-
+-    def generate_report(self, change_id: str) -> dict:
+-        change_code = self._norm(change_id)
+-        with self.database.connection() as con:
+-            change = con.execute("SELECT * FROM design_changes WHERE change_id=?", (change_code,)).fetchone()
+-            if not change:
+-                return {"success": False, "change_id": change_code, "message": "설계변경 정보를 찾을 수 없습니다."}
+-            items = [dict(row) for row in con.execute("SELECT * FROM design_change_items WHERE change_id=? ORDER BY item_seq", (change_code,))]
+-            review = con.execute("SELECT * FROM review_boms WHERE change_id=?", (change_code,)).fetchone()
+-            checks: list[dict] = []
+-            if review:
+-                checks = [dict(row) for row in con.execute("""SELECT c.* FROM bom_review_checks c
+-                    JOIN bom_reviews b ON b.bom_review_id=c.bom_review_id WHERE b.review_id=?
+-                    AND b.revision_no=? ORDER BY c.check_seq""",
+-                    (review["review_id"], review["approved_revision"] or review["current_revision"]))]
+-        mapped_items = [{"action": row["action"], "bom_parent": row["parent_item_code"],
+-                         "old_bom_child": row["old_item_code"], "new_bom_child": row["new_item_code"],
+-                         "location": row["location_code"], "quantity": row["quantity"]} for row in items]
+-        summary: dict[str, dict] = {}
+-        for check_type in {row["check_type"] for row in checks}:
+-            group = [row for row in checks if row["check_type"] == check_type]
+-            counts = Counter(row["result"] for row in group)
+-            status = "FAIL" if counts["FAIL"] else "CONDITIONAL" if counts["CONDITIONAL"] else "PASS"
+-            summary[check_type] = {"status": status, "count": len(group),
+-                                   "conditional_count": counts["CONDITIONAL"], "fail_count": counts["FAIL"]}
+-        review_dict = dict(review) if review else None
+-        if review_dict:
+-            review_dict["review_result"] = "FAIL" if any(x["result"] == "FAIL" for x in checks) else "PASS"
+-            review_dict["completed_date"] = review_dict.get("updated_at")
+-        return {"success": True, "change_id": change_code, "product_id": change["version_code"],
+-                "plant_code": change["plant_code"],
+-                "change": dict(change), "change_items": mapped_items, "change_bom": [],
+-                "review": review_dict, "report_revision": review["approved_revision"] if review else None,
+-                "review_revision_history": [], "approved_review_bom": [], "review_checks": checks,
+-                "review_check_summary": summary, "change_to_review_diff": [],
+-                "production_before_bom": [], "production_after_bom": [], "production_diff": [],
+-                "report_stage": "PRE_APPLY", "production_bom_modified": False}
+-
+-    def apply_reviewed_bom(self, *, review_id: str, applied_by: str,
+-                           applied_date: str | None = None) -> dict:
+-        result = SQLiteProductionBomService(self.database).apply_approved_review(
+-            review_id=review_id, applied_by=applied_by, applied_date=applied_date)
+-        result["review_id"] = self._norm(review_id)
+-        return result
+diff --git a/services/sqlite_production_bom_service.py b/services/sqlite_production_bom_service.py
+deleted file mode 100644
+index 93be1a6..0000000
+--- a/services/sqlite_production_bom_service.py
++++ /dev/null
+@@ -1,301 +0,0 @@
+-from __future__ import annotations
+-
+-from datetime import date, timedelta
+-import uuid
+-
+-from database import SQLiteDatabase
+-from repositories.unit_of_work import SQLiteUnitOfWork
+-
+-
+-class ProductionBomConflictError(RuntimeError):
+-    pass
+-
+-
+-class SQLiteProductionBomService:
+-    """승인 완료된 자재 교체를 단일 SQLite Transaction으로 적용합니다."""
+-
+-    def __init__(self, database: SQLiteDatabase) -> None:
+-        self.database = database
+-
+-    def apply_approved_review(
+-        self, *, review_id: str, applied_by: str, applied_date: str | date | None = None
+-    ) -> dict:
+-        """승인 Review를 재검증하고 해당 교체 Item을 Production에 적용합니다."""
+-        effective_override = date.fromisoformat(str(applied_date)) if applied_date else None
+-        with self.database.connection() as con:
+-            review = con.execute(
+-                """SELECT r.review_id,r.change_id,r.plant_code,r.version_code,r.review_status,
+-                r.current_revision,r.approved_revision,c.effective_date,c.apply_status
+-                FROM review_boms r JOIN design_changes c ON c.change_id=r.change_id
+-                WHERE UPPER(r.review_id)=UPPER(?)""",
+-                (review_id,),
+-            ).fetchone()
+-            if not review:
+-                raise ValueError("SQLite 품평회 정보를 찾을 수 없습니다.")
+-            if review["review_status"] != "APPROVED":
+-                raise ValueError("APPROVED 품평회만 Production에 적용할 수 있습니다.")
+-            if review["approved_revision"] is None or review["approved_revision"] != review["current_revision"]:
+-                raise ValueError("현재 Review Revision이 최종 승인 Revision과 일치하지 않습니다.")
+-            blocking = con.execute(
+-                """SELECT COUNT(*) FROM bom_review_checks bc
+-                JOIN bom_reviews br ON br.bom_review_id=bc.bom_review_id
+-                WHERE br.review_id=? AND br.revision_no=?
+-                  AND bc.blocking_yn='Y' AND bc.result='FAIL'""",
+-                (review["review_id"], review["approved_revision"]),
+-            ).fetchone()[0]
+-            if blocking:
+-                raise ValueError("차단 품평 항목이 있어 Production 적용을 중단했습니다.")
+-            items = con.execute(
+-                """SELECT * FROM design_change_items
+-                WHERE change_id=? AND action='REPLACE' ORDER BY item_seq""",
+-                (review["change_id"],),
+-            ).fetchall()
+-            if len(items) != 1:
+-                raise ValueError("적용 가능한 REPLACE Item이 정확히 1건이어야 합니다.")
+-            item = items[0]
+-            effective = effective_override or date.fromisoformat(
+-                item["effective_date"] or review["effective_date"]
+-            )
+-            old = con.execute(
+-                """SELECT row_revision FROM bom_master
+-                WHERE plant_code=? AND parent_item_code=?
+-                  AND child_item_code=? AND location_code=?
+-                  AND status='ACTIVE' AND valid_from<=?
+-                  AND (valid_to IS NULL OR valid_to>=?)""",
+-                (review["plant_code"], item["parent_item_code"],
+-                 item["old_item_code"], item["location_code"],
+-                 effective.isoformat(), effective.isoformat()),
+-            ).fetchall()
+-            if len(old) != 1:
+-                raise ProductionBomConflictError(
+-                    "승인 후 Production BOM이 변경되었거나 적용 대상이 유효하지 않습니다."
+-                )
+-            expected_revision = old[0]["row_revision"]
+-        return self.apply_replace(
+-            change_id=review["change_id"], plant_code=review["plant_code"],
+-            version_code=review["version_code"],
+-            parent_item_code=item["parent_item_code"], old_item_code=item["old_item_code"],
+-            new_item_code=item["new_item_code"], location_code=item["location_code"],
+-            effective_date=effective, expected_row_revision=expected_revision,
+-            applied_by=applied_by,
+-        )
+-
+-    def apply_replace(
+-        self,
+-        *,
+-        change_id: str,
+-        plant_code: str,
+-        version_code: str,
+-        parent_item_code: str,
+-        old_item_code: str,
+-        new_item_code: str,
+-        location_code: str,
+-        effective_date: str | date,
+-        expected_row_revision: int,
+-        applied_by: str,
+-    ) -> dict:
+-        effective = date.fromisoformat(str(effective_date))
+-        values = {
+-            "change_id": change_id,
+-            "plant_code": plant_code,
+-            "version_code": version_code,
+-            "parent_item_code": parent_item_code,
+-            "old_item_code": old_item_code,
+-            "new_item_code": new_item_code,
+-            "location_code": location_code,
+-            "applied_by": applied_by,
+-        }
+-        if any(not str(value).strip() for value in values.values()):
+-            raise ValueError("Production BOM 적용 필수값은 비어 있을 수 없습니다.")
+-        if old_item_code == new_item_code:
+-            raise ValueError("기존 품목과 신규 품목은 달라야 합니다.")
+-        if expected_row_revision < 1:
+-            raise ValueError("expected_row_revision은 1 이상이어야 합니다.")
+-
+-        application_id = f"APPLY-{uuid.uuid4().hex[:12].upper()}"
+-        event_id = f"EVT-{uuid.uuid4().hex[:12].upper()}"
+-        with SQLiteUnitOfWork(self.database) as uow:
+-            con = uow.connection
+-            assert con is not None
+-            change = con.execute(
+-                """
+-                SELECT approval_status,apply_status,workflow_status
+-                FROM design_changes
+-                WHERE change_id=? AND plant_code=? AND version_code=?
+-                """,
+-                (change_id, plant_code, version_code),
+-            ).fetchone()
+-            if not change:
+-                raise ValueError("SQLite 설계변경 요청을 찾을 수 없습니다.")
+-            if (
+-                change["approval_status"] != "APPROVED"
+-                or change["apply_status"] != "APPROVED_TO_APPLY"
+-                or change["workflow_status"] != "APPROVED_TO_APPLY"
+-            ):
+-                raise ValueError("승인 완료된 설계변경만 Production에 적용할 수 있습니다.")
+-
+-            old = con.execute(
+-                """
+-                SELECT bom_id,sequence_no,quantity,valid_from,valid_to,row_revision
+-                FROM bom_master
+-                WHERE plant_code=? AND parent_item_code=?
+-                  AND child_item_code=? AND location_code=?
+-                  AND status='ACTIVE'
+-                  AND valid_from <= ?
+-                  AND (valid_to IS NULL OR valid_to >= ?)
+-                """,
+-                (
+-                    plant_code, parent_item_code, old_item_code, location_code,
+-                    effective.isoformat(), effective.isoformat(),
+-                ),
+-            ).fetchall()
+-            if len(old) != 1:
+-                raise ProductionBomConflictError(
+-                    "적용 대상 활성 BOM 관계가 정확히 1건이어야 합니다."
+-                )
+-            old = old[0]
+-            if old["row_revision"] != expected_row_revision:
+-                raise ProductionBomConflictError(
+-                    "BOM Revision이 변경되어 적용을 중단했습니다."
+-                )
+-            duplicate = con.execute(
+-                """
+-                SELECT 1 FROM bom_master
+-                WHERE plant_code=? AND parent_item_code=?
+-                  AND child_item_code=? AND location_code=?
+-                  AND status='ACTIVE'
+-                  AND valid_from <= ?
+-                  AND (valid_to IS NULL OR valid_to >= ?)
+-                """,
+-                (
+-                    plant_code, parent_item_code, new_item_code, location_code,
+-                    effective.isoformat(), effective.isoformat(),
+-                ),
+-            ).fetchone()
+-            if duplicate:
+-                raise ProductionBomConflictError(
+-                    "신규 품목이 같은 위치에 이미 활성 상태입니다."
+-                )
+-            self._validate_same_item_type(con, old_item_code, new_item_code)
+-
+-            updated = con.execute(
+-                """
+-                UPDATE bom_master
+-                   SET valid_to=?,row_revision=row_revision+1,updated_at=CURRENT_TIMESTAMP
+-                 WHERE bom_id=? AND row_revision=?
+-                """,
+-                (
+-                    (effective - timedelta(days=1)).isoformat(),
+-                    old["bom_id"],
+-                    expected_row_revision,
+-                ),
+-            ).rowcount
+-            if updated != 1:
+-                raise ProductionBomConflictError("BOM 동시 변경 충돌이 발생했습니다.")
+-            con.execute(
+-                """
+-                INSERT INTO bom_master(
+-                  plant_code,parent_item_code,child_item_code,location_code,sequence_no,
+-                  quantity,valid_from,valid_to,row_revision,status
+-                ) VALUES(?,?,?,?,?,?,?,?,1,'ACTIVE')
+-                """,
+-                (
+-                    plant_code, parent_item_code, new_item_code, location_code,
+-                    old["sequence_no"], old["quantity"], effective.isoformat(),
+-                    old["valid_to"],
+-                ),
+-            )
+-            con.execute(
+-                """
+-                INSERT INTO production_apply_history(
+-                  application_id,change_id,plant_code,version_code,before_bom_revision,
+-                  after_bom_revision,apply_result,applied_by,completed_at
+-                ) VALUES(?,?,?,?,?,?,'SUCCEEDED',?,CURRENT_TIMESTAMP)
+-                """,
+-                (
+-                    application_id, change_id, plant_code, version_code,
+-                    expected_row_revision, expected_row_revision + 1, applied_by,
+-                ),
+-            )
+-            con.execute(
+-                """
+-                INSERT INTO workflow_events(
+-                  event_id,change_id,event_type,from_status,to_status,
+-                  actor_type,actor_id,reason
+-                ) VALUES(?,?,'PRODUCTION_BOM_REPLACED',
+-                         'APPROVED_TO_APPLY','APPLIED','USER',?,?)
+-                """,
+-                (
+-                    event_id, change_id, applied_by,
+-                    f"{parent_item_code}: {old_item_code} → {new_item_code}",
+-                ),
+-            )
+-            con.execute(
+-                """
+-                UPDATE design_changes
+-                   SET apply_status='APPLIED',workflow_status='APPLIED',
+-                       applied_by=?,applied_at=CURRENT_TIMESTAMP,
+-                       row_revision=row_revision+1,updated_at=CURRENT_TIMESTAMP
+-                 WHERE change_id=?
+-                """,
+-                (applied_by, change_id),
+-            )
+-            self._refresh_usage_type(con, old_item_code)
+-            self._refresh_usage_type(con, new_item_code)
+-            self._before_commit(con)
+-
+-        return {
+-            "success": True,
+-            "result": "APPLIED",
+-            "application_id": application_id,
+-            "change_id": change_id,
+-            "plant_code": plant_code,
+-            "version_code": version_code,
+-            "parent_item_code": parent_item_code,
+-            "old_item_code": old_item_code,
+-            "new_item_code": new_item_code,
+-            "location_code": location_code,
+-            "effective_date": effective.isoformat(),
+-            "production_bom_modified": True,
+-        }
+-
+-    def _before_commit(self, connection) -> None:
+-        """통합 테스트와 향후 추가 무결성 검증을 위한 Commit 직전 Hook입니다."""
+-        return None
+-
+-    @staticmethod
+-    def _validate_same_item_type(con, old_code: str, new_code: str) -> None:
+-        rows = con.execute(
+-            "SELECT item_code,item_type FROM item_master WHERE item_code IN (?,?)",
+-            (old_code, new_code),
+-        ).fetchall()
+-        types = {row["item_code"]: row["item_type"] for row in rows}
+-        if len(types) != 2:
+-            raise ValueError("기존 또는 신규 품목 Master를 찾을 수 없습니다.")
+-        if types[old_code] != types[new_code]:
+-            raise ValueError("교체 품목의 item_type이 서로 다릅니다.")
+-
+-    @staticmethod
+-    def _refresh_usage_type(con, item_code: str) -> None:
+-        assembly = con.execute(
+-            "SELECT 1 FROM assembly_master WHERE assembly_code=?", (item_code,)
+-        ).fetchone()
+-        if not assembly:
+-            return
+-        parent_count = con.execute(
+-            """
+-            SELECT COALESCE(MAX(parent_count), 0)
+-            FROM (
+-              SELECT plant_code,COUNT(DISTINCT parent_item_code) AS parent_count
+-              FROM bom_master
+-              WHERE child_item_code=? AND status='ACTIVE'
+-              GROUP BY plant_code
+-            )
+-            """,
+-            (item_code,),
+-        ).fetchone()[0]
+-        con.execute(
+-            "UPDATE assembly_master SET usage_type=?,updated_at=CURRENT_TIMESTAMP "
+-            "WHERE assembly_code=?",
+-            ("COMMON" if parent_count >= 2 else "DEDICATED", item_code),
+-        )
+diff --git a/skills/bom-design-change/SKILL.md b/skills/bom-design-change/SKILL.md
+index 93cb9d7..09a3bdf 100644
+--- a/skills/bom-design-change/SKILL.md
++++ b/skills/bom-design-change/SKILL.md
+@@ -49,24 +49,19 @@ Analysis Session
+ → 종료
+ ```
+ 
+-기존 Review BOM / AI 품평 관련 Source, MCP Capability, Table, 과거 이력은 **삭제하지 않고 보존**한다. 다만 새로운 Design Change Workflow에서 자동 호출하지 않는다.
+-
+-### Legacy Phase2 Review Workflow — 보존 전용
+-
+-Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed_bom` 경로는 기존 이력/호환성을 위해 Source에 남겨둔다. 현재 Design Change 신규 설계변경 경로에서는 사용하지 않는다.
++Review BOM / AI 품평 Runtime 경로는 현재 Core에서 사용하지 않는다. 과거 Schema/Data 정리는 별도 DB Cleanup에서 수행한다.
+ 
+ ## Query and Download Tools
+ 
+ - `get_bom`, `search_material`, `search_product`
+-- `list_design_changes`, `get_design_change`
+-- `list_bom_reviews`, `get_bom_review`
+-- `export_bom_excel`, `export_design_change_report`, `export_design_change_completion_report`
++- `list_design_change_history`
++- `export_bom_excel`, `export_design_change_completion_report`
+ 
+ 조회와 다운로드 Tool은 읽기 전용이며 Production BOM을 변경하지 않는다. 파일을 요청한 경우 내부 경로나 base64를 답변에 표시하지 않고 UI의 실제 다운로드 버튼을 사용한다.
+ 
+ ## Safety Rules
+ 
+-- 제품·자재·변경 ID·품평회 ID를 추측하거나 생성하지 않는다.
++- 제품·자재·Request/Action/Approval ID를 추측하거나 생성하지 않는다.
+ - Tool의 PASS, CONDITIONAL, FAIL을 임의로 바꾸지 않는다.
+ - 후보 점수·원가·재고·납기·공급사를 Tool 결과 없이 생성하지 않는다.
+ - 후보 승인과 최종 Apply 승인을 한 번의 사용자 동의로 합치지 않는다.
+@@ -79,11 +74,11 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
+ - 공용 ASSY 내부 변경은 영향 모델 전체를 확인하고, 모델의 ASSY 연결 교체와 구분한다.
+ - Analysis 단계와 실제 Design Change Request 생성 경계를 섞지 않는다. Request는 사용자 설계변경 진행 승인 이후에만 생성한다.
+ - 사용자 승인 없이 BOM을 변경했다고 표현하거나 적용 Tool을 호출하지 않는다.
+-- Design Change 신규 경로에서는 Review BOM/AI 품평을 요구하지 않으며, Preview와 최종 승인 Revision 일치 여부를 검증한다.
++- Design Change Core Workflow에서는 Review BOM/AI 품평을 요구하지 않으며, Preview와 최종 승인 Revision 일치 여부를 검증한다.
+ - SQLite Apply 직전에 승인된 Preview, 교체 Item 수, 현재 BOM Revision과 Action 무결성을 다시 검증한다.
+-- Design Change 신규 경로의 Production 변경은 `apply_approved_change_request`의 SQLite 단일 Transaction에서만 수행한다. Legacy Phase2 경로는 별도 보존한다.
++- Production 변경은 `apply_approved_change_request`의 SQLite 단일 Transaction에서만 수행한다.
+ - Tool 실행 실패와 업무 검증 FAIL을 구분한다.
+-- 설계변경·분석·과거 품평 이력 조회는 상태를 변경하지 않는다.
++- 설계변경·분석 이력 조회는 상태를 변경하지 않는다.
+ 
+ ## Architecture
+ 
+@@ -140,7 +135,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
+ 6. 후보 평가는 Primary Reason뿐 아니라 저장된 모든 적용 가능한 Reason Rule을 함께 적용한다.
+ 7. 복수 Reason이 COST/LEAD_TIME/QUALITY/SUPPLIER_STOP 등 공급사 평가 가중치에 영향을 주면 하나의 사유만 덮어쓰지 않고 관련 Weight Profile을 결합한다.
+ 8. 사용자가 후속 턴에 `변경 가능한 자재 알려줘`처럼 대상 코드를 반복하지 않아도 최근 대화의 제품/기존 품목 Context를 유지하여 후보 분석을 계속한다.
+-9. 복수 Reason을 감지했다는 이유만으로 Legacy `analyze_design_change` 경로 또는 신규 자재 지정 방식으로 되돌아가지 않는다.
++9. 복수 Reason을 감지했다는 이유만으로 후보 탐색을 건너뛰거나 신규 자재 지정을 강제하지 않는다.
+ 10. Explain 결과에는 Primary Reason과 Secondary Reasons, 각 Rule의 change_reason을 구분해 제공한다.
+ 
+ 
+@@ -179,7 +174,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
+ 6. Request 생성 이후에는 Workflow Memory로 전환하고 Preview → 최종 Apply 승인 → Atomic Apply 순서를 강제한다.
+ 7. 현재 Design Change 활성 경로에서는 별도 Review BOM/AI 품평을 수행하지 않는다.
+ 8. Apply 성공 후 Word 완료 보고서를 생성하면 Workflow를 종료한다.
+-9. Review/품평 관련 기존 소스·테이블·MCP Capability는 삭제하지 않고 Legacy 보존 상태로 유지한다.
++9. Review/품평 Runtime 경로는 사용하지 않는다. 과거 Schema/Data는 DB Cleanup 범위에서 별도로 정리한다.
+ 10. 분석 이력과 실제 설계변경 Request 이력을 동일 개념으로 취급하지 않는다.
+ 
+ 
+@@ -193,7 +188,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
+ 6. BOM 조회 또는 설계변경에 PLANT가 필요하지만 사용자 요청과 활성 Analysis/Workflow에 plant_code가 없으면 먼저 `list_plants`를 조회한다.
+ 7. `list_plants` 결과의 코드와 이름을 사용자에게 선택지로 제시하고, 사용자가 PLANT를 선택하기 전에는 BOM 조회·후보 분석·Request 생성 Tool을 실행하지 않는다.
+ 8. PLANT를 임의로 기본 선택하거나 추측하지 않는다. 사용자가 다음 턴에 선택한 PLANT를 직전 요청 Context와 결합해 업무를 계속한다.
+-9. 현재 Design Change에서 품평회 단계는 비활성 상태이므로 Streamlit 주요 메뉴에서 품평회 이력 메뉴를 노출하지 않는다. 기존 품평 관련 Source/Table은 삭제하지 않고 Legacy 보존한다.
++9. 현재 Design Change에서는 품평회 단계를 사용하지 않으며 Streamlit 주요 메뉴에서도 품평회 이력을 노출하지 않는다.
+ 
+ ## STEP37 Product-wide Cost Opportunity Scan Rules
+ 
+diff --git a/tests/test_bom_agent_graph.py b/tests/test_bom_agent_graph.py
+index 2a57766..00a6893 100644
+--- a/tests/test_bom_agent_graph.py
++++ b/tests/test_bom_agent_graph.py
+@@ -60,8 +60,8 @@ def make_design_change_tool_definitions():
+         {
+             "type": "function",
+             "function": {
+-                "name": "analyze_design_change",
+-                "description": "설계변경 분석",
++                "name": "analyze_design_change_candidates",
++                "description": "설계변경 후보 분석",
+                 "parameters": {
+                     "type": "object",
+                     "properties": {},
+@@ -275,33 +275,27 @@ def test_graph_separates_different_threads():
+ def test_graph_persists_design_change_workflow_state():
+     client = Mock()
+     mcp_client = Mock()
+-    mcp_client.get_tool_definitions.return_value = (
+-        make_design_change_tool_definitions()
+-    )
++    mcp_client.get_tool_definitions.return_value = make_design_change_tool_definitions()
+     mcp_client.call_tool.return_value = {
+-        "result": "CONDITIONAL",
+-        "changeable": True,
++        "analysis_id": "ANL-001",
++        "request": {"version_code": "MODEL-001", "plant_code": "P01"},
++        "actions": [{"action_id": "ACT-001", "action_type": "REPLACE"}],
++        "candidates": [],
++        "status_counts": {"PASS": 0, "CONDITIONAL": 0, "FAIL": 0},
++        "analysis_context": {},
+     }
+-    client.create_agent_completion.side_effect = [
+-        make_assistant_message(
+-            content=None,
+-            tool_calls=[
+-                make_tool_call(
+-                    tool_call_id="call-analysis",
+-                    name="analyze_design_change",
+-                    arguments=(
+-                        '{"product_id": "PRD-001", '
+-                        '"old_material_id": "MAT-OLD", '
+-                        '"new_material_id": "MAT-NEW"}'
+-                    ),
+-                )
+-            ],
+-        ),
+-        make_assistant_message(
+-            content="조건부 승인입니다.",
+-            tool_calls=None,
+-        ),
+-    ]
++    client.create_agent_completion.return_value = make_assistant_message(
++        content=None,
++        tool_calls=[make_tool_call(
++            tool_call_id="call-analysis",
++            name="analyze_design_change_candidates",
++            arguments=(
++                '{"request":{"version_code":"MODEL-001","plant_code":"P01"},'
++                '"actions":[{"action_type":"REPLACE","old_item_code":"MAT-OLD",'
++                '"new_item_code":"MAT-NEW"}]}'
++            ),
++        )],
++    )
+     graph = BomAgentGraph(
+         client=client,
+         mcp_client=mcp_client,
+@@ -311,10 +305,9 @@ def test_graph_persists_design_change_workflow_state():
+     graph.run("설계변경을 분석해줘", thread_id="change-001")
+     workflow = graph.get_design_change_state("change-001")
+ 
+-    assert workflow["product_id"] == "PRD-001"
+-    assert workflow["analysis_status"] == "CONDITIONAL"
+-    assert workflow["current_step"] == "ANALYSIS_COMPLETED"
+-
++    assert workflow["analysis_id"] == "ANL-001"
++    assert workflow["request_id"] is None
++    assert workflow["current_step"] == "ANALYSIS_READY"
+ 
+ def test_graph_returns_initial_workflow_for_new_thread():
+     graph = BomAgentGraph(
+diff --git a/tests/test_bom_agent_node.py b/tests/test_bom_agent_node.py
+index 9847000..f7ba1fa 100644
+--- a/tests/test_bom_agent_node.py
++++ b/tests/test_bom_agent_node.py
+@@ -202,7 +202,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
+     mcp_client.get_tool_definitions.return_value = [
+         {"type": "function", "function": {"name": "get_bom"}},
+         {"type": "function", "function": {"name": "search_product"}},
+-        {"type": "function", "function": {"name": "analyze_design_change"}},
+         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
+         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
+     ]
+@@ -223,7 +222,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
+     names = {tool["function"]["name"] for tool in tools}
+     assert "get_bom" in names
+     assert "search_product" in names
+-    assert "analyze_design_change" not in names
+     assert "analyze_design_change_candidates" in names
+     assert "evaluate_replacement_candidates" not in names
+     context = client.create_agent_completion.call_args.kwargs["skill_context"]
+@@ -237,7 +235,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
+     mcp_client = Mock()
+     mcp_client.get_tool_definitions.return_value = [
+         {"type": "function", "function": {"name": "get_bom"}},
+-        {"type": "function", "function": {"name": "analyze_design_change"}},
+         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
+         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
+     ]
+@@ -274,7 +271,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
+     tools = client.create_agent_completion.call_args.kwargs["tools"]
+     names = {tool["function"]["name"] for tool in tools}
+     assert "analyze_design_change_candidates" in names
+-    assert "analyze_design_change" not in names
+     assert "evaluate_replacement_candidates" not in names
+ 
+ 
+@@ -304,12 +300,11 @@ def test_design_change_explicit_product_and_item_uses_deterministic_analysis_mac
+     assert action["action_type"] == "REPLACE"
+     assert action["old_item_code"] == "1234-567890"
+ 
+-def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
++def test_explicit_old_to_new_analysis_uses_current_analysis_tool():
+     client = Mock()
+     mcp_client = Mock()
+     mcp_client.get_tool_definitions.return_value = [
+-        {"type": "function", "function": {"name": "get_bom"}},
+-        {"type": "function", "function": {"name": "analyze_design_change"}},
++        {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
+         {"type": "function", "function": {"name": "create_design_change_request"}},
+     ]
+     client.create_agent_completion.return_value = make_assistant_message(
+@@ -318,26 +313,19 @@ def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
+     )
+     node = BomAgentNode(client, mcp_client, "BOM change analysis")
+ 
+-    node(
+-        {
+-            "messages": [HumanMessage(
+-                content=(
+-                    "MODEL-789의 1234-567890을 "
+-                    "1234-567891로 교체 가능한지 분석해줘"
+-                )
+-            )],
+-            "design_change": {"current_step": "NOT_STARTED"},
+-        }
+-    )
++    node({
++        "messages": [HumanMessage(content=(
++            "P01에서 MODEL-789의 1234-567890을 "
++            "1234-567891로 교체 가능한지 분석해줘"
++        ))],
++        "design_change": {"current_step": "NOT_STARTED"},
++    })
+ 
+     kwargs = client.create_agent_completion.call_args.kwargs
+-    tools = kwargs["tools"]
+-    names = {tool["function"]["name"] for tool in tools}
+-    assert "analyze_design_change" in names
+-    assert "create_design_change_request" not in names
++    names = {tool["function"]["name"] for tool in kwargs["tools"]}
++    assert names == {"analyze_design_change_candidates"}
+     assert kwargs["tool_choice"] == "auto"
+ 
+-
+ def test_design_change_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
+     """REQUESTED is a legacy/backward-compatible state after STEP34.
+ 
+@@ -381,7 +369,6 @@ def test_design_change_multi_reason_change_request_uses_macro_without_new_item()
+     mcp_client = Mock()
+     mcp_client.get_tool_definitions.return_value = [
+         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
+-        {"type": "function", "function": {"name": "analyze_design_change"}},
+     ]
+     node = BomAgentNode(client, mcp_client, "Design Change workflow")
+ 
+diff --git a/tests/test_context_continuation.py b/tests/test_context_continuation.py
+index 0d1aa25..187b8a0 100644
+--- a/tests/test_context_continuation.py
++++ b/tests/test_context_continuation.py
+@@ -8,13 +8,12 @@ def test_plant_only_selection_is_explicit_slot_value():
+     assert router.is_plant_only_selection("P01에서 변경해줘") is False
+ 
+ 
+-def test_explicit_old_new_pair_analysis_is_not_candidate_discovery():
++def test_explicit_old_new_pair_is_current_design_change_analysis():
+     router = DomainIntentRouter()
+ 
+-    assert router.is_explicit_replacement_pair_analysis(
++    decision = router.route(
+         "MODEL-789의 1234-567890을 1234-567891로 교체 가능한지 분석해줘"
+-    ) is True
++    )
+ 
+-    assert router.is_explicit_replacement_pair_analysis(
+-        "MODEL-789의 1234-567890을 1234-567891로 교체해줘"
+-    ) is False
++    assert decision.design_change_mode is True
++    assert decision.intent == "DESIGN_CHANGE"
+diff --git a/tests/test_legacy_review_bom_workflow.py b/tests/test_legacy_review_bom_workflow.py
+deleted file mode 100644
+index 1559260..0000000
+--- a/tests/test_legacy_review_bom_workflow.py
++++ /dev/null
+@@ -1,105 +0,0 @@
+-from __future__ import annotations
+-
+-import shutil
+-
+-import pytest
+-
+-from database import SQLiteDatabase
+-from mcp_server.capabilities.design_change import (
+-    apply_reviewed_bom_data,
+-    create_ai_change_request_data,
+-    create_review_bom_data,
+-    generate_design_change_report_data,
+-    run_ai_bom_review_data,
+-)
+-from mcp_server.capabilities.query import get_bom_data
+-from services.sqlite_production_bom_service import SQLiteProductionBomService
+-
+-
+-@pytest.fixture
+-def runtime_db(tmp_path, monkeypatch):
+-    source = "data/test_display_bom.db"
+-    target = tmp_path / "display_bom.db"
+-    shutil.copy2(source, target)
+-    monkeypatch.setenv("BOM_SQLITE_PATH", str(target))
+-    return SQLiteDatabase(target)
+-
+-
+-def _workflow(runtime_db):
+-    before = get_bom_data("LTA400HR01-001", "2026-08-13")
+-    assert before
+-    request = create_ai_change_request_data(
+-        product_id="LTA400HR01-001",
+-        old_material_id="0001-200004",
+-        new_material_id="9000-290002",
+-        reason="STEP25 SQLite E2E",
+-        effective_date="2026-08-20",
+-        requested_by="TESTER",
+-        as_of_date="2026-08-13",
+-    )
+-    assert request["success"] is True
+-    review = create_review_bom_data(
+-        change_id=request["change_id"], created_by="TESTER", created_date="2026-08-13"
+-    )
+-    assert review["result"] == "REVIEW_CREATED"
+-    evaluation = run_ai_bom_review_data(
+-        review_id=review["review_id"], reviewed_by="BOM_AI_AGENT", checked_date="2026-08-13"
+-    )
+-    assert evaluation["ai_review_result"] == "PASS"
+-    report = generate_design_change_report_data(change_id=request["change_id"])
+-    assert report["success"] is True
+-    assert report["review"]["approved_revision"] == 1
+-    return request, review
+-
+-
+-def test_all_workflow_mcp_capabilities_use_sqlite(runtime_db):
+-    request, review = _workflow(runtime_db)
+-    applied = apply_reviewed_bom_data(
+-        review_id=review["review_id"], applied_by="TESTER", applied_date="2026-08-20"
+-    )
+-    assert applied["result"] == "APPLIED"
+-    with runtime_db.connection() as con:
+-        assert con.execute(
+-            "SELECT apply_status FROM design_changes WHERE change_id=?", (request["change_id"],)
+-        ).fetchone()[0] == "APPLIED"
+-        assert con.execute(
+-            "SELECT COUNT(*) FROM production_apply_history WHERE change_id=? AND apply_result='SUCCEEDED'",
+-            (request["change_id"],),
+-        ).fetchone()[0] == 1
+-
+-
+-def test_sqlite_apply_rolls_back_bom_and_workflow(runtime_db, monkeypatch):
+-    request, review = _workflow(runtime_db)
+-    service = SQLiteProductionBomService(runtime_db)
+-
+-    def fail(_connection):
+-        raise RuntimeError("forced rollback")
+-
+-    monkeypatch.setattr(service, "_before_commit", fail)
+-    with pytest.raises(RuntimeError, match="forced rollback"):
+-        service.apply_approved_review(
+-            review_id=review["review_id"], applied_by="TESTER", applied_date="2026-08-20"
+-        )
+-    with runtime_db.connection() as con:
+-        assert con.execute(
+-            "SELECT apply_status FROM design_changes WHERE change_id=?", (request["change_id"],)
+-        ).fetchone()[0] == "APPROVED_TO_APPLY"
+-        assert con.execute(
+-            "SELECT COUNT(*) FROM production_apply_history WHERE change_id=?", (request["change_id"],)
+-        ).fetchone()[0] == 0
+-
+-
+-def test_unapproved_review_cannot_apply(runtime_db):
+-    request = create_ai_change_request_data(
+-        product_id="LTA400HR01-001", old_material_id="0001-200004",
+-        new_material_id="9000-290002", reason="approval guard",
+-        effective_date="2026-08-20", requested_by="TESTER", as_of_date="2026-08-13",
+-    )
+-    review = create_review_bom_data(
+-        change_id=request["change_id"], created_by="TESTER", created_date="2026-08-13"
+-    )
+-    with pytest.raises(ValueError, match="APPROVED"):
+-        apply_reviewed_bom_data(
+-            review_id=review["review_id"], applied_by="TESTER", applied_date="2026-08-20"
+-        )
+-
+diff --git a/tests/test_local_analysis_transport.py b/tests/test_local_analysis_transport.py
+index a9fe631..4216c16 100644
+--- a/tests/test_local_analysis_transport.py
++++ b/tests/test_local_analysis_transport.py
+@@ -26,7 +26,6 @@ def test_apply_and_request_tools_never_use_local_analysis_transport(monkeypatch)
+         "create_multi_action_preview",
+         "record_final_apply_approval",
+         "apply_approved_change_request",
+-        "apply_approved_design_change",
+     }
+     for tool_name in protected:
+         assert DisplayBomMcpClient._use_local_analysis_fast_path(tool_name) is False
+diff --git a/tests/test_mcp_client_error_handling.py b/tests/test_mcp_client_error_handling.py
+index 908ce71..22ef42c 100644
+--- a/tests/test_mcp_client_error_handling.py
++++ b/tests/test_mcp_client_error_handling.py
+@@ -35,12 +35,12 @@ def test_tool_business_error_is_raised_after_mcp_contexts_close(monkeypatch):
+             return None
+ 
+         async def call_tool(self, _tool_name, *, arguments):
+-            assert arguments == {"old_material_id": "0001-310101"}
++            assert arguments == {"request": {"version_code": "MODEL-001"}, "actions": []}
+             return SimpleNamespace(
+                 is_error=True,
+                 content=[SimpleNamespace(
+                     text=(
+-                        "Error executing tool analyze_design_change: "
++                        "Error executing tool analyze_design_change_candidates: "
+                         "기존 자재와 신규 자재는 달라야 합니다."
+                     )
+                 )],
+@@ -53,8 +53,8 @@ def test_tool_business_error_is_raised_after_mcp_contexts_close(monkeypatch):
+ 
+     with pytest.raises(RuntimeError, match="기존 자재와 신규 자재는 달라야"):
+         asyncio.run(client._call_tool(
+-            "analyze_design_change",
+-            {"old_material_id": "0001-310101"},
++            "analyze_design_change_candidates",
++            {"request": {"version_code": "MODEL-001"}, "actions": []},
+         ))
+ 
+     assert events == [
+diff --git a/tests/test_skill_loader.py b/tests/test_skill_loader.py
+index c54df79..2436e0c 100644
+--- a/tests/test_skill_loader.py
++++ b/tests/test_skill_loader.py
+@@ -38,7 +38,8 @@ def test_load_bom_design_change_skill() -> None:
+     )
+ 
+     assert "# BOM Design Change Skill" in content
+-    assert "analyze_design_change" in content
++    assert "analyze_design_change_candidates" in content
++    assert "create_review_bom" not in content
+     assert "FAIL" in content
+     assert "Production BOM" in content
+ 

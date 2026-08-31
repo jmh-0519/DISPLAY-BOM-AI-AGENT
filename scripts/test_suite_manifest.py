@@ -39,9 +39,7 @@ EVALUATION_TEST_FILES: tuple[str, ...] = (
 
 # Kept only until CLEAN-03/04 removes or aligns the corresponding runtime code.
 LEGACY_TEST_FILES: tuple[str, ...] = (
-    "tests/test_azure_bom_agent.py",
     "tests/test_legacy_review_bom_workflow.py",
-    "tests/test_design_change_management.py",
 )
 
 CORE_EXCLUDED_FILES = frozenset(
