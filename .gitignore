@@ -66,3 +66,7 @@ logs/
 
 # Agent evaluation runtime artifacts
 .perf/
+
+# RAG private knowledge and local vector index
+knowledge/documents/private/
+data/rag/
