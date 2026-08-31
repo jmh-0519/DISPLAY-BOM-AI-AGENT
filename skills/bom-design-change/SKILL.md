@@ -49,24 +49,19 @@ Analysis Session
 → 종료
 ```
 
-기존 Review BOM / AI 품평 관련 Source, MCP Capability, Table, 과거 이력은 **삭제하지 않고 보존**한다. 다만 새로운 Design Change Workflow에서 자동 호출하지 않는다.
-
-### Legacy Phase2 Review Workflow — 보존 전용
-
-Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed_bom` 경로는 기존 이력/호환성을 위해 Source에 남겨둔다. 현재 Design Change 신규 설계변경 경로에서는 사용하지 않는다.
+Review BOM / AI 품평 Runtime 경로는 현재 Core에서 사용하지 않는다. 과거 Schema/Data 정리는 별도 DB Cleanup에서 수행한다.
 
 ## Query and Download Tools
 
 - `get_bom`, `search_material`, `search_product`
-- `list_design_changes`, `get_design_change`
-- `list_bom_reviews`, `get_bom_review`
-- `export_bom_excel`, `export_design_change_report`, `export_design_change_completion_report`
+- `list_design_change_history`
+- `export_bom_excel`, `export_design_change_completion_report`
 
 조회와 다운로드 Tool은 읽기 전용이며 Production BOM을 변경하지 않는다. 파일을 요청한 경우 내부 경로나 base64를 답변에 표시하지 않고 UI의 실제 다운로드 버튼을 사용한다.
 
 ## Safety Rules
 
-- 제품·자재·변경 ID·품평회 ID를 추측하거나 생성하지 않는다.
+- 제품·자재·Request/Action/Approval ID를 추측하거나 생성하지 않는다.
 - Tool의 PASS, CONDITIONAL, FAIL을 임의로 바꾸지 않는다.
 - 후보 점수·원가·재고·납기·공급사를 Tool 결과 없이 생성하지 않는다.
 - 후보 승인과 최종 Apply 승인을 한 번의 사용자 동의로 합치지 않는다.
@@ -79,11 +74,11 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
 - 공용 ASSY 내부 변경은 영향 모델 전체를 확인하고, 모델의 ASSY 연결 교체와 구분한다.
 - Analysis 단계와 실제 Design Change Request 생성 경계를 섞지 않는다. Request는 사용자 설계변경 진행 승인 이후에만 생성한다.
 - 사용자 승인 없이 BOM을 변경했다고 표현하거나 적용 Tool을 호출하지 않는다.
-- Design Change 신규 경로에서는 Review BOM/AI 품평을 요구하지 않으며, Preview와 최종 승인 Revision 일치 여부를 검증한다.
+- Design Change Core Workflow에서는 Review BOM/AI 품평을 요구하지 않으며, Preview와 최종 승인 Revision 일치 여부를 검증한다.
 - SQLite Apply 직전에 승인된 Preview, 교체 Item 수, 현재 BOM Revision과 Action 무결성을 다시 검증한다.
-- Design Change 신규 경로의 Production 변경은 `apply_approved_change_request`의 SQLite 단일 Transaction에서만 수행한다. Legacy Phase2 경로는 별도 보존한다.
+- Production 변경은 `apply_approved_change_request`의 SQLite 단일 Transaction에서만 수행한다.
 - Tool 실행 실패와 업무 검증 FAIL을 구분한다.
-- 설계변경·분석·과거 품평 이력 조회는 상태를 변경하지 않는다.
+- 설계변경·분석 이력 조회는 상태를 변경하지 않는다.
 
 ## Architecture
 
@@ -140,7 +135,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
 6. 후보 평가는 Primary Reason뿐 아니라 저장된 모든 적용 가능한 Reason Rule을 함께 적용한다.
 7. 복수 Reason이 COST/LEAD_TIME/QUALITY/SUPPLIER_STOP 등 공급사 평가 가중치에 영향을 주면 하나의 사유만 덮어쓰지 않고 관련 Weight Profile을 결합한다.
 8. 사용자가 후속 턴에 `변경 가능한 자재 알려줘`처럼 대상 코드를 반복하지 않아도 최근 대화의 제품/기존 품목 Context를 유지하여 후보 분석을 계속한다.
-9. 복수 Reason을 감지했다는 이유만으로 Legacy `analyze_design_change` 경로 또는 신규 자재 지정 방식으로 되돌아가지 않는다.
+9. 복수 Reason을 감지했다는 이유만으로 후보 탐색을 건너뛰거나 신규 자재 지정을 강제하지 않는다.
 10. Explain 결과에는 Primary Reason과 Secondary Reasons, 각 Rule의 change_reason을 구분해 제공한다.
 
 
@@ -179,7 +174,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
 6. Request 생성 이후에는 Workflow Memory로 전환하고 Preview → 최종 Apply 승인 → Atomic Apply 순서를 강제한다.
 7. 현재 Design Change 활성 경로에서는 별도 Review BOM/AI 품평을 수행하지 않는다.
 8. Apply 성공 후 Word 완료 보고서를 생성하면 Workflow를 종료한다.
-9. Review/품평 관련 기존 소스·테이블·MCP Capability는 삭제하지 않고 Legacy 보존 상태로 유지한다.
+9. Review/품평 Runtime 경로는 사용하지 않는다. 과거 Schema/Data는 DB Cleanup 범위에서 별도로 정리한다.
 10. 분석 이력과 실제 설계변경 Request 이력을 동일 개념으로 취급하지 않는다.
 
 
@@ -193,7 +188,7 @@ Phase2에서 구현한 `create_review_bom`, `run_ai_bom_review`, `apply_reviewed
 6. BOM 조회 또는 설계변경에 PLANT가 필요하지만 사용자 요청과 활성 Analysis/Workflow에 plant_code가 없으면 먼저 `list_plants`를 조회한다.
 7. `list_plants` 결과의 코드와 이름을 사용자에게 선택지로 제시하고, 사용자가 PLANT를 선택하기 전에는 BOM 조회·후보 분석·Request 생성 Tool을 실행하지 않는다.
 8. PLANT를 임의로 기본 선택하거나 추측하지 않는다. 사용자가 다음 턴에 선택한 PLANT를 직전 요청 Context와 결합해 업무를 계속한다.
-9. 현재 Design Change에서 품평회 단계는 비활성 상태이므로 Streamlit 주요 메뉴에서 품평회 이력 메뉴를 노출하지 않는다. 기존 품평 관련 Source/Table은 삭제하지 않고 Legacy 보존한다.
+9. 현재 Design Change에서는 품평회 단계를 사용하지 않으며 Streamlit 주요 메뉴에서도 품평회 이력을 노출하지 않는다.
 
 ## STEP37 Product-wide Cost Opportunity Scan Rules
 

@@ -202,7 +202,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "search_product"}},
-        {"type": "function", "function": {"name": "analyze_design_change"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
@@ -223,7 +222,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
     names = {tool["function"]["name"] for tool in tools}
     assert "get_bom" in names
     assert "search_product" in names
-    assert "analyze_design_change" not in names
     assert "analyze_design_change_candidates" in names
     assert "evaluate_replacement_candidates" not in names
     context = client.create_agent_completion.call_args.kwargs["skill_context"]
@@ -237,7 +235,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
-        {"type": "function", "function": {"name": "analyze_design_change"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
@@ -274,7 +271,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
     tools = client.create_agent_completion.call_args.kwargs["tools"]
     names = {tool["function"]["name"] for tool in tools}
     assert "analyze_design_change_candidates" in names
-    assert "analyze_design_change" not in names
     assert "evaluate_replacement_candidates" not in names
 
 
@@ -304,12 +300,11 @@ def test_design_change_explicit_product_and_item_uses_deterministic_analysis_mac
     assert action["action_type"] == "REPLACE"
     assert action["old_item_code"] == "1234-567890"
 
-def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
+def test_explicit_old_to_new_analysis_uses_current_analysis_tool():
     client = Mock()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
-        {"type": "function", "function": {"name": "get_bom"}},
-        {"type": "function", "function": {"name": "analyze_design_change"}},
+        {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
         {"type": "function", "function": {"name": "create_design_change_request"}},
     ]
     client.create_agent_completion.return_value = make_assistant_message(
@@ -318,25 +313,18 @@ def test_explicit_old_to_new_analysis_keeps_legacy_analysis_tool():
     )
     node = BomAgentNode(client, mcp_client, "BOM change analysis")
 
-    node(
-        {
-            "messages": [HumanMessage(
-                content=(
-                    "MODEL-789의 1234-567890을 "
-                    "1234-567891로 교체 가능한지 분석해줘"
-                )
-            )],
-            "design_change": {"current_step": "NOT_STARTED"},
-        }
-    )
+    node({
+        "messages": [HumanMessage(content=(
+            "P01에서 MODEL-789의 1234-567890을 "
+            "1234-567891로 교체 가능한지 분석해줘"
+        ))],
+        "design_change": {"current_step": "NOT_STARTED"},
+    })
 
     kwargs = client.create_agent_completion.call_args.kwargs
-    tools = kwargs["tools"]
-    names = {tool["function"]["name"] for tool in tools}
-    assert "analyze_design_change" in names
-    assert "create_design_change_request" not in names
-    assert kwargs["tool_choice"] == "auto"
-
+    names = {tool["function"]["name"] for tool in kwargs["tools"]}
+    assert names == {"analyze_design_change_candidates"}
+    assert kwargs["tool_choice"] == "analyze_design_change_candidates"
 
 def test_design_change_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
     """REQUESTED is a legacy/backward-compatible state after STEP34.
@@ -381,7 +369,6 @@ def test_design_change_multi_reason_change_request_uses_macro_without_new_item()
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
-        {"type": "function", "function": {"name": "analyze_design_change"}},
     ]
     node = BomAgentNode(client, mcp_client, "Design Change workflow")
 

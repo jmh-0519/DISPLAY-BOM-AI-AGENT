@@ -4,9 +4,7 @@ import base64
 from datetime import datetime
 
 from mcp_server.capabilities.query import get_bom_data
-from mcp_server.capabilities.design_change import generate_design_change_report_data
 from services.bom_excel_export_service import BomExcelExportService
-from services.design_change_word_report_service import DesignChangeWordReportService
 from services.design_change_completion_report_service import DesignChangeCompletionReportService
 from core.database_config import sqlite_database_path
 from database import SQLiteDatabase
@@ -61,21 +59,6 @@ def export_bom_excel_data(
         query_conditions={"plant_code": normalized_plant_code,
                           "product_id": normalized_product_id,
                           "as_of_date": as_of_date},
-    )
-
-
-def export_design_change_report_data(change_id: str) -> dict:
-    """설계변경·AI 품평 데이터를 조회하고 Word 완료문서를 생성합니다."""
-    normalized_change_id = str(change_id).strip().upper()
-    if not normalized_change_id:
-        raise ValueError("change_id는 비어 있지 않은 문자열이어야 합니다.")
-    report = generate_design_change_report_data(change_id=normalized_change_id)
-    if not report.get("success"):
-        return report
-    content = DesignChangeWordReportService().build(report)
-    return _file_result(
-        f"{normalized_change_id}_design_change_report.docx", DOCX_MIME, content,
-        change_id=normalized_change_id, report_stage="PRE_APPLY",
     )
 
 

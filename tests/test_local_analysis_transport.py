@@ -26,7 +26,6 @@ def test_apply_and_request_tools_never_use_local_analysis_transport(monkeypatch)
         "create_multi_action_preview",
         "record_final_apply_approval",
         "apply_approved_change_request",
-        "apply_approved_design_change",
     }
     for tool_name in protected:
         assert DisplayBomMcpClient._use_local_analysis_fast_path(tool_name) is False

@@ -60,8 +60,8 @@ def make_design_change_tool_definitions():
         {
             "type": "function",
             "function": {
-                "name": "analyze_design_change",
-                "description": "설계변경 분석",
+                "name": "analyze_design_change_candidates",
+                "description": "설계변경 후보 분석",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -275,30 +275,31 @@ def test_graph_separates_different_threads():
 def test_graph_persists_design_change_workflow_state():
     client = Mock()
     mcp_client = Mock()
-    mcp_client.get_tool_definitions.return_value = (
-        make_design_change_tool_definitions()
-    )
+    mcp_client.get_tool_definitions.return_value = make_design_change_tool_definitions()
     mcp_client.call_tool.return_value = {
-        "result": "CONDITIONAL",
-        "changeable": True,
+        "analysis_id": "ANL-001",
+        "request": {"version_code": "MODEL-001", "plant_code": "P01"},
+        "actions": [{"action_id": "ACT-001", "action_type": "REPLACE"}],
+        "candidates": [],
+        "status_counts": {"PASS": 0, "CONDITIONAL": 0, "FAIL": 0},
+        "analysis_context": {},
     }
     client.create_agent_completion.side_effect = [
         make_assistant_message(
             content=None,
-            tool_calls=[
-                make_tool_call(
-                    tool_call_id="call-analysis",
-                    name="analyze_design_change",
-                    arguments=(
-                        '{"product_id": "PRD-001", '
-                        '"old_material_id": "MAT-OLD", '
-                        '"new_material_id": "MAT-NEW"}'
-                    ),
-                )
-            ],
+            tool_calls=[make_tool_call(
+                tool_call_id="call-analysis",
+                name="analyze_design_change_candidates",
+                arguments=(
+                    '{"request":{"version_code":"MODEL-001","plant_code":"P01"},'
+                    '"actions":[{"action_type":"REPLACE",'
+                    '"old_item_code":"1234-567890",'
+                    '"new_item_code":"1234-567891"}]}'
+                ),
+            )],
         ),
         make_assistant_message(
-            content="조건부 승인입니다.",
+            content="설계변경 분석 결과를 확인했습니다.",
             tool_calls=None,
         ),
     ]
@@ -308,13 +309,16 @@ def test_graph_persists_design_change_workflow_state():
         skill_context="설계변경 규칙",
     )
 
-    graph.run("설계변경을 분석해줘", thread_id="change-001")
+    graph.run(
+        "P01에서 MODEL-001의 1234-567890을 "
+        "1234-567891로 교체 가능한지 분석해줘",
+        thread_id="change-001",
+    )
     workflow = graph.get_design_change_state("change-001")
 
-    assert workflow["product_id"] == "PRD-001"
-    assert workflow["analysis_status"] == "CONDITIONAL"
-    assert workflow["current_step"] == "ANALYSIS_COMPLETED"
-
+    assert workflow["analysis_id"] == "ANL-001"
+    assert workflow["request_id"] is None
+    assert workflow["current_step"] == "ANALYSIS_READY"
 
 def test_graph_returns_initial_workflow_for_new_thread():
     graph = BomAgentGraph(

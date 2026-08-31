@@ -724,50 +724,8 @@ class DisplayBomMcpClient:
         )
 
     # =========================================================
-    # analyze_design_change
+    # Download helpers
     # =========================================================
-
-    def analyze_design_change(
-        self,
-        product_id: str,
-        old_material_id: str,
-        new_material_id: str,
-        as_of_date: str | None = None,
-        plant_code: str = "P01",
-    ) -> dict:
-        """자재 교체 설계변경의 가능 여부와 영향을 분석합니다."""
-
-        return asyncio.run(
-            self._analyze_design_change_async(
-                product_id=product_id,
-                old_material_id=old_material_id,
-                new_material_id=new_material_id,
-                as_of_date=as_of_date,
-                plant_code=plant_code,
-            )
-        )
-
-    def create_ai_change_request(self, **arguments) -> dict:
-        return self._ensure_dict(
-            self.call_tool("create_ai_change_request", arguments),
-            "create_ai_change_request",
-        )
-
-    def create_review_bom(self, **arguments) -> dict:
-        return self._ensure_dict(
-            self.call_tool("create_review_bom", arguments), "create_review_bom"
-        )
-
-    def run_ai_bom_review(self, **arguments) -> dict:
-        return self._ensure_dict(
-            self.call_tool("run_ai_bom_review", arguments), "run_ai_bom_review"
-        )
-
-    def generate_design_change_report(self, change_id: str) -> dict:
-        return self._ensure_dict(
-            self.call_tool("generate_design_change_report", {"change_id": change_id}),
-            "generate_design_change_report",
-        )
 
     @staticmethod
     def _decode_download(data: dict, tool_name: str) -> dict:
@@ -793,12 +751,6 @@ class DisplayBomMcpClient:
         )
         return self._decode_download(data, "export_bom_excel")
 
-    def export_design_change_report(self, change_id: str) -> dict:
-        data = self._ensure_dict(
-            self.call_tool("export_design_change_report", {"change_id": change_id}),
-            "export_design_change_report",
-        )
-        return self._decode_download(data, "export_design_change_report")
 
     def export_design_change_completion_report(self, request_id: str) -> dict:
         data = self._ensure_dict(
@@ -807,157 +759,14 @@ class DisplayBomMcpClient:
         )
         return self._decode_download(data, "export_design_change_completion_report")
 
-    def list_design_changes(self) -> list[dict]:
-        return self._ensure_list(self.call_tool("list_design_changes", {}), "list_design_changes")
 
-    def get_design_change(self, change_id: str) -> dict:
-        return self._ensure_dict(
-            self.call_tool("get_design_change", {"change_id": change_id}), "get_design_change"
-        )
 
-    def list_bom_reviews(self) -> list[dict]:
-        return self._ensure_list(self.call_tool("list_bom_reviews", {}), "list_bom_reviews")
 
-    def get_bom_review(self, review_id: str) -> dict:
-        return self._ensure_dict(
-            self.call_tool("get_bom_review", {"review_id": review_id}), "get_bom_review"
-        )
 
-    def apply_reviewed_bom(self, **arguments) -> dict:
-        return self._ensure_dict(
-            self.call_tool("apply_reviewed_bom", arguments), "apply_reviewed_bom"
-        )
-
-    async def _analyze_design_change_async(
-        self,
-        product_id: str,
-        old_material_id: str,
-        new_material_id: str,
-        as_of_date: str | None = None,
-        plant_code: str = "P01",
-    ) -> dict:
-        result = await self._call_tool(
-            "analyze_design_change",
-            {
-                "plant_code": plant_code,
-                "product_id": product_id,
-                "old_material_id": old_material_id,
-                "new_material_id": new_material_id,
-                "as_of_date": as_of_date,
-            },
-        )
-
-        data = self._extract_result(result)
-
-        return self._ensure_dict(
-            data,
-            "analyze_design_change",
-        )
 
     # =========================================================
-    # create_design_change_preview
+    # Design Change workflow
     # =========================================================
-
-    def create_design_change_preview(
-        self,
-        product_id: str,
-        old_material_id: str,
-        new_material_id: str,
-        as_of_date: str | None = None,
-    ) -> dict:
-        """분석 완료 건의 읽기 전용 변경 BOM Preview를 생성합니다."""
-
-        return asyncio.run(
-            self._create_design_change_preview_async(
-                product_id=product_id,
-                old_material_id=old_material_id,
-                new_material_id=new_material_id,
-                as_of_date=as_of_date,
-            )
-        )
-
-    async def _create_design_change_preview_async(
-        self,
-        product_id: str,
-        old_material_id: str,
-        new_material_id: str,
-        as_of_date: str | None = None,
-    ) -> dict:
-        result = await self._call_tool(
-            "create_design_change_preview",
-            {
-                "product_id": product_id,
-                "old_material_id": old_material_id,
-                "new_material_id": new_material_id,
-                "as_of_date": as_of_date,
-            },
-        )
-        return self._ensure_dict(
-            self._extract_result(result),
-            "create_design_change_preview",
-        )
-
-    # =========================================================
-    # record_design_change_decision
-    # =========================================================
-
-    def record_design_change_decision(
-        self,
-        preview_revision: str,
-        decision: str,
-        comment: str | None = None,
-    ) -> dict:
-        """Preview에 대한 사용자 승인·반려 의사를 기록합니다."""
-
-        return asyncio.run(
-            self._record_design_change_decision_async(
-                preview_revision=preview_revision,
-                decision=decision,
-                comment=comment,
-            )
-        )
-
-    async def _record_design_change_decision_async(
-        self,
-        preview_revision: str,
-        decision: str,
-        comment: str | None = None,
-    ) -> dict:
-        result = await self._call_tool(
-            "record_design_change_decision",
-            {
-                "preview_revision": preview_revision,
-                "decision": decision,
-                "comment": comment,
-            },
-        )
-        return self._ensure_dict(
-            self._extract_result(result),
-            "record_design_change_decision",
-        )
-
-    def apply_approved_design_change(
-        self,
-        preview_revision: str,
-        product_id: str,
-        old_material_id: str,
-        new_material_id: str,
-        preview_as_of_date: str,
-        effective_date: str,
-        applied_by: str,
-    ) -> dict:
-        return self.call_tool(
-            "apply_approved_design_change",
-            {
-                "preview_revision": preview_revision,
-                "product_id": product_id,
-                "old_material_id": old_material_id,
-                "new_material_id": new_material_id,
-                "preview_as_of_date": preview_as_of_date,
-                "effective_date": effective_date,
-                "applied_by": applied_by,
-            },
-        )
 
     def analyze_design_change_candidates(self, request: dict, actions: list[dict]) -> dict:
         return self._ensure_dict(self.call_tool(

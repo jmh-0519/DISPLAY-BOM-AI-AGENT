@@ -616,9 +616,7 @@ class BomAgentGraph:
         """MCP 다운로드 ToolMessage를 Streamlit용 파일 객체로 변환합니다."""
         artifacts = []
         for message in messages:
-            if not isinstance(message, ToolMessage) or message.name not in {
-                "export_bom_excel", "export_design_change_report",
-            }:
+            if not isinstance(message, ToolMessage) or message.name != "export_bom_excel":
                 continue
             try:
                 data = json.loads(str(message.content))

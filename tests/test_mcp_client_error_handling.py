@@ -35,12 +35,12 @@ def test_tool_business_error_is_raised_after_mcp_contexts_close(monkeypatch):
             return None
 
         async def call_tool(self, _tool_name, *, arguments):
-            assert arguments == {"old_material_id": "0001-310101"}
+            assert arguments == {"request": {"version_code": "MODEL-001"}, "actions": []}
             return SimpleNamespace(
                 is_error=True,
                 content=[SimpleNamespace(
                     text=(
-                        "Error executing tool analyze_design_change: "
+                        "Error executing tool analyze_design_change_candidates: "
                         "기존 자재와 신규 자재는 달라야 합니다."
                     )
                 )],
@@ -53,8 +53,8 @@ def test_tool_business_error_is_raised_after_mcp_contexts_close(monkeypatch):
 
     with pytest.raises(RuntimeError, match="기존 자재와 신규 자재는 달라야"):
         asyncio.run(client._call_tool(
-            "analyze_design_change",
-            {"old_material_id": "0001-310101"},
+            "analyze_design_change_candidates",
+            {"request": {"version_code": "MODEL-001"}, "actions": []},
         ))
 
     assert events == [

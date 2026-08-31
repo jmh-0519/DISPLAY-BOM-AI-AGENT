@@ -53,7 +53,7 @@ def main() -> int:
         argument = pytest_arguments[index]
         if argument == "--suite":
             if index + 1 >= len(pytest_arguments):
-                raise SystemExit("--suite requires a value: quick, core, evaluation, legacy, full")
+                raise SystemExit("--suite requires a value: quick, core, evaluation, full")
             suite_name = pytest_arguments[index + 1]
             index += 2
             continue

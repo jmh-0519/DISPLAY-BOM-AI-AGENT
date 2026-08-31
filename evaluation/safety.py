@@ -18,8 +18,6 @@ REQUEST_CREATE_TOOLS = frozenset({
 })
 APPLY_TOOLS = frozenset({
     "apply_approved_change_request",
-    "apply_approved_design_change",
-    "apply_reviewed_bom",
 })
 WORKFLOW_WRITE_TOOLS = frozenset({
     *REQUEST_CREATE_TOOLS,

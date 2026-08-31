@@ -84,18 +84,6 @@ class BomAgentNode:
     FOLLOW_UP_COMPARE_MARKERS = DomainIntentRouter.FOLLOW_UP_COMPARE_MARKERS
     ANALYSIS_RESTART_MARKERS = DomainIntentRouter.ANALYSIS_RESTART_MARKERS
 
-    LEGACY_DESIGN_CHANGE_TOOLS = {
-        "analyze_design_change",
-        "create_design_change_preview",
-        "record_design_change_decision",
-        "apply_approved_design_change",
-        "create_ai_change_request",
-        "create_review_bom",
-        "run_ai_bom_review",
-        "generate_design_change_report",
-        "apply_reviewed_bom",
-    }
-
     DESIGN_CHANGE_RECOMMENDATION_MARKERS = DomainIntentRouter.DESIGN_CHANGE_RECOMMENDATION_MARKERS
     PRODUCT_COST_SCAN_SCOPE_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_SCOPE_MARKERS
     PRODUCT_COST_SCAN_COST_MARKERS = DomainIntentRouter.PRODUCT_COST_SCAN_COST_MARKERS
@@ -557,17 +545,8 @@ class BomAgentNode:
         product_cost_scan_intent = routing_decision.product_cost_scan
         current_recommendation_intent = routing_decision.recommendation
         current_change_intent = routing_decision.change
-        explicit_pair_analysis = (
-            self.domain_intent_router.is_explicit_replacement_pair_analysis(
-                user_query
-            )
-        )
-        design_change_mode = (
-            False if explicit_pair_analysis else routing_decision.design_change_mode
-        )
-        plant_required = (
-            False if explicit_pair_analysis else routing_decision.requires_plant
-        )
+        design_change_mode = routing_decision.design_change_mode
+        plant_required = routing_decision.requires_plant
         active_plant_code = str(routing_workflow_state.get("plant_code") or "").strip().upper()
         plant_code_in_context = self.domain_intent_router.extract_plant_code(design_change_context)
         plant_context_ready = bool(active_plant_code or plant_code_in_context)
@@ -667,8 +646,7 @@ class BomAgentNode:
         analysis_memory = routing_workflow_state.get("analysis_memory") or {}
 
         design_change_instruction = (
-            "현재 요청은 설계변경 후보 추천 Workflow입니다. "
-            "analyze_design_change는 호출하지 마세요. "
+            "현재 요청은 Design Change Analysis/Workflow입니다. "
             "제품과 변경 대상 기존 품목이 현재 또는 직전 대화에 명확하면 "
             "analyze_design_change_candidates를 호출해 Request 생성 없이 Analysis Session을 시작하세요. "
             "REPLACE 후보 추천에서는 신규 자재 ID를 사용자에게 요구하지 마세요. "
@@ -689,15 +667,14 @@ class BomAgentNode:
             "get_bom은 사용자가 BOM 자체를 보고 싶어 하거나 대상 식별이 불명확할 때만 "
             "사용하고, get_bom 결과만 보여주고 설계변경 Workflow를 종료하지 마세요. "
             "후보 탐색과 평가는 analyze_design_change_candidates 한 번으로 수행합니다. "
+            "사용자가 기존품과 신규품 코드를 모두 지정한 교체 적합성 분석도 동일 Tool을 사용하고 "
+            "old_item_code와 new_item_code를 모두 명시하세요. "
             "분석/재검증/후보 임시선택/공용 영향 확인 단계에서는 change request를 생성하지 마세요. "
             "사용자가 분석 결과를 확인하고 설계변경 진행을 명시적으로 승인한 뒤에만 실제 Request를 생성합니다. "
             "후보 선택·공용 영향 확인·Preview·최종 Apply 승인은 반드시 "
             "사용자 UI 조작으로만 진행하며 Agent가 자동 호출하지 마세요."
             if design_change_mode
-            else (
-                "기존 자재와 사용자가 지정한 신규 자재가 모두 명확한 "
-                "교체 적합성 분석에만 analyze_design_change를 사용하세요."
-            )
+            else "현재 요청은 일반 BOM 조회/질의입니다."
         )
         runtime_skill_context = (
             f"{self.skill_context}\n\n"
@@ -1234,8 +1211,6 @@ class BomAgentNode:
                 elif name not in cls.DESIGN_CHANGE_EXPLAIN_TOOLS:
                     continue
             if design_change_mode:
-                if name in cls.LEGACY_DESIGN_CHANGE_TOOLS:
-                    continue
                 if name in cls.DESIGN_CHANGE_TOOLS:
                     if name in cls.UI_ONLY_DESIGN_CHANGE_TOOLS:
                         continue

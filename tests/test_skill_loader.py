@@ -38,7 +38,8 @@ def test_load_bom_design_change_skill() -> None:
     )
 
     assert "# BOM Design Change Skill" in content
-    assert "analyze_design_change" in content
+    assert "analyze_design_change_candidates" in content
+    assert "create_review_bom" not in content
     assert "FAIL" in content
     assert "Production BOM" in content
 

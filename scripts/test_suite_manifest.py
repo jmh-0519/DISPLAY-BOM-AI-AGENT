@@ -37,14 +37,8 @@ EVALUATION_TEST_FILES: tuple[str, ...] = (
     "tests/test_macro_routing_accuracy_regression.py",
 )
 
-# Kept only until CLEAN-03/04 removes or aligns the corresponding runtime code.
-LEGACY_TEST_FILES: tuple[str, ...] = (
-    "tests/test_legacy_review_bom_workflow.py",
-)
-
 CORE_EXCLUDED_FILES = frozenset(
     EVALUATION_TEST_FILES
-    + LEGACY_TEST_FILES
     + (
         "tests/test_observability.py",
         "tests/test_performance_profiler.py",
@@ -67,12 +61,10 @@ def get_suite_files(project_root: Path, suite: str) -> tuple[str, ...]:
         return QUICK_TEST_FILES
     if normalized == "evaluation":
         return EVALUATION_TEST_FILES
-    if normalized == "legacy":
-        return LEGACY_TEST_FILES
     if normalized == "core":
         return tuple(path for path in _all_test_files(project_root) if path not in CORE_EXCLUDED_FILES)
     if normalized == "full":
         return ()
     raise ValueError(
-        f"Unknown test suite: {suite}. Use one of: quick, core, evaluation, legacy, full"
+        f"Unknown test suite: {suite}. Use one of: quick, core, evaluation, full"
     )

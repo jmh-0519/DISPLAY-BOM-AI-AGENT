@@ -347,14 +347,15 @@ class DomainIntentRouter:
         return self.PLANT_CODE_PATTERN.fullmatch(normalized) is not None
 
     def is_explicit_replacement_pair_analysis(self, user_query: str) -> bool:
-        """Detect a read-only suitability check for an explicit old/new pair.
+        """Detect a read-only suitability analysis for an explicit old/new pair.
 
-        Example:
+        Example::
+
             MODEL-789의 1234-567890을 1234-567891로 교체 가능한지 분석해줘
 
-        Because both current and proposed replacement items are supplied, this
-        remains the legacy `analyze_design_change` compatibility-analysis path
-        rather than Design Change candidate discovery.
+        This used to be routed to the removed legacy ``analyze_design_change``
+        Tool.  The current Core routes the same intent into the read-only
+        ``analyze_design_change_candidates`` Analysis Session instead.
         """
         normalized = self.normalize(user_query)
         version_code = self.explicit_model_scope_code(user_query)
@@ -381,7 +382,7 @@ class DomainIntentRouter:
         ):
             return False
 
-        # A direct execution instruction remains on the design-change write path.
+        # A direct execution instruction remains a write/change request.
         return not any(
             marker in normalized
             for marker in (
@@ -401,6 +402,8 @@ class DomainIntentRouter:
         )
 
     def is_design_change_recommendation_request(self, user_query: str) -> bool:
+        if self.is_explicit_replacement_pair_analysis(user_query):
+            return True
         normalized = self.normalize(user_query)
         return any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS)
 
