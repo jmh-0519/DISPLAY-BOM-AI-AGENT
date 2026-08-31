@@ -7,7 +7,7 @@ from agents.bom_agent_node import BomAgentNode
 
 def _workflow_state() -> dict:
     return {
-        "current_step": "WAITING_CANDIDATE_APPROVAL",
+        "current_step": "CANDIDATE_APPROVED",
         "request_id": "REQ-1",
         "actions": [{"action_id": "ACT-1"}],
         "analysis_memory": {
@@ -30,7 +30,6 @@ def _node() -> tuple[BomAgentNode, Mock]:
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": name}}
         for name in (
-            "evaluate_replacement_candidates",
             "get_design_change_analysis",
             "get_candidate_evaluation_detail",
             "compare_design_change_candidates",

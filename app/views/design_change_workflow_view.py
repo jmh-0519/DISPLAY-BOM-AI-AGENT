@@ -7,15 +7,11 @@ from agents.design_change_workflow_state import apply_design_change_tool_result
 from mcp_client.client import DisplayBomMcpClient
 from app.views.design_change_history_page import render_design_change_request_detail
 
-
 ANALYSIS_STEPS = {
     "ANALYSIS_READY",
     "ANALYSIS_REVALIDATED",
     "ANALYSIS_IMPACT_REVIEW",
     "ANALYSIS_CONFIRMED",
-    # Backward-compatible pre-STEP34 request-first states:
-    "REQUESTED", "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-    "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED",
 }
 
 WORKFLOW_STEPS = {
@@ -27,16 +23,13 @@ WORKFLOW_STEPS = {
     "BLOCKED",
 }
 
-
 def _dom_token(value) -> str:
     raw = str(value or "na")
     return "".join(ch if ch.isalnum() else "-" for ch in raw).strip("-") or "na"
 
-
 def _candidate_selection_anchor(workflow: dict) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
     return f"design-change-candidate-selection-{_dom_token(context_id)}"
-
 
 def _revalidation_input_anchor(workflow: dict, action_id, candidate_code) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
@@ -45,18 +38,15 @@ def _revalidation_input_anchor(workflow: dict, action_id, candidate_code) -> str
         f"{_dom_token(action_id)}-{_dom_token(candidate_code)}"
     )
 
-
 def _revalidation_result_anchor(workflow: dict, index: int) -> str:
     context_id = workflow.get("analysis_id") or workflow.get("request_id") or "analysis"
     return f"design-change-revalidation-result-{_dom_token(context_id)}-{index}"
-
 
 def _render_anchor(anchor_id: str) -> None:
     st.markdown(
         f'<div id="{anchor_id}" style="scroll-margin-top: 18px; height: 1px;"></div>',
         unsafe_allow_html=True,
     )
-
 
 def _schedule_scroll(anchor_id: str) -> None:
     # The target can legitimately be the same on consecutive clicks.  Keep a
@@ -68,7 +58,6 @@ def _schedule_scroll(anchor_id: str) -> None:
         "anchor_id": anchor_id,
         "event_id": event_id,
     }
-
 
 def _render_pending_scroll() -> None:
     pending = st.session_state.pop("design_change_scroll_target", None)
@@ -111,7 +100,6 @@ def _render_pending_scroll() -> None:
         width=1,
         tab_index=-1,
     )
-
 
 def candidate_rows(workflow: dict) -> list[dict]:
     """Return comparison-friendly candidate rows without exposing internal JSON.
@@ -165,7 +153,6 @@ def candidate_rows(workflow: dict) -> list[dict]:
         })
     return rows
 
-
 def candidate_missing_attributes(candidate: dict) -> list[str]:
     """Return only attributes that can be supplied to revalidate a candidate."""
     missing: list[str] = []
@@ -183,7 +170,6 @@ def candidate_missing_attributes(candidate: dict) -> list[str]:
             missing.append(str(result["attribute"]))
     return list(dict.fromkeys(missing))
 
-
 def impact_rows(workflow: dict) -> list[dict]:
     return [{
         "plant_code": row.get("plant_code") or workflow.get("plant_code"),
@@ -191,7 +177,6 @@ def impact_rows(workflow: dict) -> list[dict]:
         "impact_type": row.get("impact_type"),
         "impact_path": row.get("impact_path"),
     } for row in workflow.get("impacts", [])]
-
 
 def _style_change_frame(frame: pd.DataFrame):
     """Highlight before/after values consistently across Analysis and Request UI."""
@@ -209,7 +194,6 @@ def _style_change_frame(frame: pd.DataFrame):
             "font-weight": "700",
         })
     return styler
-
 
 def preview_model_rows(workflow: dict, client: DisplayBomMcpClient | None = None) -> list[dict]:
     """Return only top-level impacted MODELs for the final Preview UI.
@@ -274,7 +258,6 @@ def preview_model_rows(workflow: dict, client: DisplayBomMcpClient | None = None
         })
     return rows
 
-
 def impact_model_rows(workflow: dict) -> list[dict]:
     review = workflow.get("impact_review") or {}
     return [{
@@ -290,7 +273,6 @@ def impact_model_rows(workflow: dict) -> list[dict]:
             for value in row.get("action_impacts", [])
         ) if row.get("action_impacts") else row.get("changed_spec_count", 0),
     } for row in review.get("impacted_models", [])]
-
 
 def impact_spec_rows(workflow: dict, changed_only: bool = False) -> list[dict]:
     review = workflow.get("impact_review") or {}
@@ -333,25 +315,17 @@ def impact_spec_rows(workflow: dict, changed_only: bool = False) -> list[dict]:
             })
     return rows
 
-
 def is_workflow_visible(workflow: dict) -> bool:
     return workflow.get("current_step") in WORKFLOW_STEPS
 
-
 def available_action(workflow: dict) -> str | None:
     step = workflow.get("current_step")
-    if step == "CANDIDATE_APPROVED" and workflow.get("requires_exception"):
-        return "EXCEPTION_APPROVAL"
     return {
-        "WAITING_CANDIDATE_APPROVAL": "CANDIDATE_SELECTION",
-        "CONDITIONAL_REVIEW_REQUIRED": "CONDITIONAL_REVIEW",
-        "IMPACT_REVIEW_REQUIRED": "IMPACT_APPROVAL",
         "CANDIDATE_APPROVED": "CREATE_PREVIEW",
         "WAITING_FINAL_APPROVAL": "FINAL_APPROVAL",
         "FINAL_APPROVED": "APPLY",
         "APPLIED": "REPORT",
     }.get(step)
-
 
 def _complete_workflow_action(
     workflow: dict,
@@ -378,14 +352,12 @@ def _complete_workflow_action(
         _schedule_scroll(scroll_target)
     st.rerun()
 
-
 def _current_status_label(target: dict) -> str:
     status_fields = target.get("status_fields") or {}
     for key in ("lifecycle_status", "supply_status", "quality_status"):
         if status_fields.get(key):
             return f"{key}={status_fields[key]}"
     return "ACTIVE" if target.get("active_yn") == "Y" else "INACTIVE"
-
 
 def _reason_evidence_summary(context: dict, target: dict) -> str:
     """Summarize user-reason evidence without treating user language as DB fact."""
@@ -422,7 +394,6 @@ def _reason_evidence_summary(context: dict, target: dict) -> str:
             )
     return " / ".join(messages) or "-"
 
-
 def _display_value(value) -> str:
     if value is None:
         return "-"
@@ -432,14 +403,12 @@ def _display_value(value) -> str:
         return f"{value:g}"
     return str(value)
 
-
 def _display_df(rows: list[dict]) -> pd.DataFrame:
     """Return a presentation-only DataFrame with Arrow-safe string columns."""
     return pd.DataFrame([
         {key: _display_value(value) for key, value in row.items()}
         for row in rows
     ])
-
 
 def _render_target_summary(workflow: dict, *, context_override: dict | None = None) -> None:
     context = context_override or workflow.get("analysis_context") or {}
@@ -474,14 +443,12 @@ def _render_target_summary(workflow: dict, *, context_override: dict | None = No
     # It is short business context and must be visible without an inner scrollbar.
     st.table(_display_df(rows).style.hide(axis="index"))
 
-
 def _candidate_reason_codes(workflow: dict) -> list[str]:
     context = workflow.get("analysis_context") or {}
     return list(dict.fromkeys(
         context.get("reason_codes")
         or ([context.get("reason_code")] if context.get("reason_code") else [])
     ))
-
 
 def _candidate_decision_summary(row: dict) -> str:
     """Return a short evidence-derived final-decision comment for the comparison table."""
@@ -520,7 +487,6 @@ def _candidate_decision_summary(row: dict) -> str:
         return "기술·공급·재고 필수조건 충족"
     return "평가 근거 확인 필요"
 
-
 def _candidate_display_frame(rows: list[dict]) -> pd.DataFrame:
     display_rows = []
     for row in rows:
@@ -550,7 +516,6 @@ def _candidate_display_frame(rows: list[dict]) -> pd.DataFrame:
         })
     return pd.DataFrame(display_rows)
 
-
 def _render_candidate_tables(rows: list[dict]) -> None:
     if not rows:
         st.warning("검색된 대체 후보가 없습니다.")
@@ -575,7 +540,6 @@ def _render_candidate_tables(rows: list[dict]) -> None:
         with st.expander(f"검토 제외 후보 (FAIL) · {len(failed)}건", expanded=not passed and not conditional):
             st.dataframe(_candidate_display_frame(failed), width="stretch", hide_index=True)
 
-
 def _render_analysis_metrics(workflow: dict, rows: list[dict], *, context_override: dict | None = None) -> None:
     if not rows:
         return
@@ -592,13 +556,11 @@ def _render_analysis_metrics(workflow: dict, rows: list[dict], *, context_overri
     bom_quantity = context.get("new_quantity") if context.get("action_type") in {"ADD", "QUANTITY_CHANGE"} else context.get("old_quantity")
     cols[4].metric("BOM 수량", bom_quantity if bom_quantity is not None else "-")
 
-
 def _required_candidate_actions(workflow: dict) -> list[dict]:
     return [
         action for action in workflow.get("actions", [])
         if action.get("action_type") in {"REPLACE", "ADD"}
     ]
-
 
 def _selection_review_frame(workflow: dict, selected_rows: list[dict]) -> pd.DataFrame:
     context = workflow.get("analysis_context") or {}
@@ -625,14 +587,12 @@ def _selection_review_frame(workflow: dict, selected_rows: list[dict]) -> pd.Dat
         })
     return pd.DataFrame(rows)
 
-
 def _selected_candidate_missing_requirements(row: dict) -> list[str]:
     values = [
         value.strip() for value in str(row.get("missing_data") or "").split(",")
         if value.strip()
     ]
     return list(dict.fromkeys(values))
-
 
 def _analysis_payload(workflow: dict) -> dict:
     return {
@@ -642,7 +602,6 @@ def _analysis_payload(workflow: dict) -> dict:
         "candidates": [dict(value) for value in workflow.get("candidates", [])],
         "analysis_context": workflow.get("analysis_context"),
     }
-
 
 def _render_selection_review_responsive(workflow: dict, selected_rows: list[dict]) -> None:
     context = workflow.get("analysis_context") or {}
@@ -715,7 +674,6 @@ def _render_selection_review_responsive(workflow: dict, selected_rows: list[dict
         if evidence_rows:
             with st.expander("선택 후보 기술/Rule 상세", expanded=False):
                 st.dataframe(_display_df(evidence_rows), hide_index=True, width="stretch")
-
 
 def _render_revalidation_history(workflow: dict) -> None:
     history = workflow.get("revalidation_history") or []
@@ -862,12 +820,10 @@ def _render_selected_candidate_revalidation(
                 scroll_target=_revalidation_result_anchor(workflow, next_history_index),
             )
 
-
 def _analysis_selection_rows(workflow: dict) -> list[dict]:
     """Keep the original candidate pool selectable across repeated revalidation runs."""
     source = workflow.get("analysis_initial_candidates") or workflow.get("candidates") or []
     return candidate_rows({**workflow, "candidates": [dict(value) for value in source]})
-
 
 def _latest_candidate_row(workflow: dict, base_row: dict) -> dict:
     """Return the latest evaluation for a selectable candidate without changing the original pool."""
@@ -878,7 +834,6 @@ def _latest_candidate_row(workflow: dict, base_row: dict) -> dict:
         if row.get("candidate_item_code") == code and row.get("action_id") == action_id:
             return row
     return base_row
-
 
 def _proceed_analysis_to_final_confirmation(
     workflow: dict,
@@ -973,7 +928,6 @@ def _proceed_analysis_to_final_confirmation(
     }
     st.rerun()
 
-
 def _render_candidate_free_action_analysis(
     workflow: dict,
     client: DisplayBomMcpClient,
@@ -1047,7 +1001,6 @@ def _render_candidate_free_action_analysis(
             selections=[],
             exception_reason=exception_reason,
         )
-
 
 def _render_candidate_selection(workflow: dict, rows: list[dict], client: DisplayBomMcpClient, on_workflow_update) -> None:
     if not any(row.get("status") in {"PASS", "CONDITIONAL"} for row in rows):
@@ -1164,62 +1117,6 @@ def _selected_conditional_rows(workflow: dict) -> list[dict]:
         if row.get("candidate_id") in selected and row.get("status") == "CONDITIONAL"
     ]
 
-
-def _render_conditional_review_gate(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
-    selected = _selected_conditional_rows(workflow)
-    st.markdown("#### CONDITIONAL 후보 추가확인")
-    st.warning(
-        "후보 선택은 저장되었지만 아직 1차 후보 승인이 완료되지 않았습니다. "
-        "아래 부족 데이터를 확인하고 가능한 항목은 보완·재검증하세요. "
-        "계속 CONDITIONAL인 경우에만 예외승인 사유를 기록할 수 있습니다."
-    )
-    if selected:
-        overview = []
-        for row in selected:
-            overview.append({
-                "후보 코드": row.get("candidate_item_code"),
-                "종합 적합성": row.get("status"),
-                "종합 판단 요약": _candidate_decision_summary(row),
-                "보완 필요 데이터": row.get("missing_data") or "평가 근거 상세 확인 필요",
-                "공급 평가": row.get("supplier_status"),
-                "재고 평가": row.get("inventory_status"),
-                "BOM 수량": row.get("bom_quantity"),
-            })
-        st.table(_display_df(overview))
-
-    # Reuse the existing deterministic attribute-data revalidation path when possible.
-    _render_conditional_revalidation(workflow, client, on_workflow_update)
-
-    st.markdown("**재검증 후에도 CONDITIONAL인 경우 예외승인**")
-    reason = st.text_area(
-        "CONDITIONAL 예외승인 사유",
-        key=f"conditional_preworkflow_exception_{workflow.get('request_id')}",
-        placeholder="부족 데이터를 보완할 수 없는 업무 사유와 조건부 후보를 사용해야 하는 이유를 입력하세요.",
-    )
-    if st.button("예외승인 후 다음 단계 진행", type="primary"):
-        if not reason.strip():
-            st.error("예외승인 사유를 입력해 주세요.")
-            return
-        result = client.record_exception_approval(
-            request_id=workflow["request_id"],
-            reason=reason.strip(),
-            approved_by="streamlit-user",
-        )
-        status = result.get("workflow_status")
-        message = (
-            "예외승인이 기록되었습니다. 공용 BOM 영향범위를 확인해 주세요."
-            if status == "IMPACT_REVIEW_REQUIRED"
-            else "예외승인과 1차 후보 승인이 완료되어 설계변경 Workflow가 시작되었습니다."
-        )
-        _complete_workflow_action(
-            workflow,
-            "record_exception_approval",
-            result,
-            message,
-            on_workflow_update,
-        )
-
-
 def _render_impact_review(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
     """Render the read-only shared impact summary without a separate approval step."""
     review = workflow.get("impact_review") or {}
@@ -1243,7 +1140,6 @@ def _render_impact_review(workflow: dict, client: DisplayBomMcpClient, on_workfl
         with st.expander("동일 Spec까지 전체 비교"):
             st.dataframe(pd.DataFrame(all_specs), width="stretch", hide_index=True)
     st.caption(f"영향 모델 수: {review.get('impacted_model_count', len(models))}")
-
 
 def _render_analysis_proceed_gate(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
     st.markdown("#### 해당 분석안으로 설계변경 진행")
@@ -1324,7 +1220,6 @@ def _confirmed_selected_candidate_rows(workflow: dict) -> list[dict]:
         if row is not None:
             selected_rows.append(row)
     return selected_rows
-
 
 def _render_confirmed_analysis_summary(workflow: dict) -> None:
     """Render only the user's confirmed selection after candidate analysis is finalized."""
@@ -1424,7 +1319,6 @@ def _render_confirmed_analysis_summary(workflow: dict) -> None:
         st.markdown("#### 확정 Action 분석")
         st.dataframe(_display_df(action_rows), hide_index=True, width="stretch")
 
-
 def _render_pre_workflow_analysis(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
     if not workflow.get("candidates") and not workflow.get("actions"):
         return
@@ -1458,12 +1352,6 @@ def _render_pre_workflow_analysis(workflow: dict, client: DisplayBomMcpClient, o
             _render_candidate_selection(workflow, initial_rows, client, on_workflow_update)
         else:
             _render_candidate_free_action_analysis(workflow, client, on_workflow_update)
-    elif step == "WAITING_CANDIDATE_APPROVAL":
-        _render_candidate_selection(workflow, candidate_rows(workflow), client, on_workflow_update)
-    elif step == "CONDITIONAL_REVIEW_REQUIRED":
-        _render_conditional_review_gate(workflow, client, on_workflow_update)
-    elif step == "IMPACT_REVIEW_REQUIRED":
-        _render_impact_review(workflow, client, on_workflow_update)
 
     # Revalidation history is useful while the user is still comparing candidates.
     # After analysis confirmation the page switches to the confirmed-selection view above.
@@ -1482,7 +1370,6 @@ def _final_confirmation_action_rows(actions: list[dict]) -> list[dict]:
         "변경 후 수량": action.get("new_quantity"),
         "종합 판정": action.get("evaluation_status"),
     } for action in actions]
-
 
 def _render_final_confirmation(workflow: dict, client: DisplayBomMcpClient) -> None:
     """Render one de-duplicated Request + Preview confirmation surface."""
@@ -1529,7 +1416,6 @@ def _render_final_confirmation(workflow: dict, client: DisplayBomMcpClient) -> N
         st.markdown("**공용 영향 변경 Spec**")
         st.dataframe(_display_df(changed_specs), hide_index=True, width="stretch")
 
-
 def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_update) -> None:
     request_id = workflow.get("request_id")
     current_step = workflow.get("current_step")
@@ -1562,21 +1448,7 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
         return
 
     action = available_action(workflow)
-    if action == "EXCEPTION_APPROVAL":
-        st.warning("선택 후보가 CONDITIONAL입니다. 추가 데이터 재검증 또는 예외 사유 승인이 필요합니다.")
-        reason = st.text_area("CONDITIONAL 예외승인 사유")
-        if st.button("CONDITIONAL 예외승인 기록", type="primary"):
-            result = client.record_exception_approval(
-                request_id=workflow["request_id"], reason=reason, approved_by=actor,
-            )
-            _complete_workflow_action(
-                workflow,
-                "record_exception_approval",
-                result,
-                "예외승인이 기록되었습니다. Production BOM은 변경되지 않았습니다.",
-                on_workflow_update,
-            )
-    elif action == "CREATE_PREVIEW":
+    if action == "CREATE_PREVIEW":
         # Recovery path for a Request that was created successfully but whose
         # Preview preparation was interrupted. Preview is read-only, so retry it
         # automatically instead of exposing a separate Preview button.
@@ -1662,7 +1534,6 @@ def _render_workflow(workflow: dict, client: DisplayBomMcpClient, on_workflow_up
             )
         else:
             st.error(report.get("message") or "완료 보고서를 생성할 수 없습니다.")
-
 
 def render_design_change_workflow(
     workflow: dict,

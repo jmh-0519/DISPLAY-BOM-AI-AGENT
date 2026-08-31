@@ -760,10 +760,6 @@ class DisplayBomMcpClient:
         return self._decode_download(data, "export_design_change_completion_report")
 
 
-
-
-
-
     # =========================================================
     # Design Change workflow
     # =========================================================
@@ -797,34 +793,6 @@ class DisplayBomMcpClient:
         return self._ensure_dict(self.call_tool("compare_design_change_analysis_candidates", arguments),
                                  "compare_design_change_analysis_candidates")
 
-    def create_design_change_request(self, request: dict, actions: list[dict]) -> dict:
-        return self._ensure_dict(self.call_tool(
-            "create_design_change_request", {"request": request, "actions": actions}),
-            "create_design_change_request")
-
-    def evaluate_replacement_candidates(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("evaluate_replacement_candidates", arguments),
-                                 "evaluate_replacement_candidates")
-
-    def select_candidate_and_supplier(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("select_candidate_and_supplier", arguments),
-                                 "select_candidate_and_supplier")
-
-    def confirm_candidate_selection(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("confirm_candidate_selection", arguments),
-                                 "confirm_candidate_selection")
-
-    def approve_candidate_impact(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("approve_candidate_impact", arguments),
-                                 "approve_candidate_impact")
-
-    def submit_candidate_additional_data(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("submit_candidate_additional_data", arguments),
-                                 "submit_candidate_additional_data")
-
-    def record_exception_approval(self, **arguments) -> dict:
-        return self._ensure_dict(self.call_tool("record_exception_approval", arguments),
-                                 "record_exception_approval")
 
     def get_change_request_result(self, request_id: str) -> dict:
         return self._ensure_dict(self.call_tool(

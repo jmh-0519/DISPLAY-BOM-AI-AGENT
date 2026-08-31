@@ -1,7 +1,6 @@
 from pathlib import Path
 import sys
 
-
 PROJECT_ROOT = (
     Path(__file__)
     .resolve()
@@ -14,7 +13,6 @@ if str(PROJECT_ROOT) not in sys.path:
         0,
         str(PROJECT_ROOT),
     )
-
 
 from mcp.server import MCPServer
 
@@ -35,7 +33,6 @@ from mcp_server.capabilities.download import (
 )
 from mcp_server.capabilities.design_change_workflow import (
     apply_approved_change_request_data,
-    create_design_change_request_data,
     analyze_design_change_candidates_data,
     scan_product_cost_reduction_candidates_data,
     revalidate_design_change_analysis_data,
@@ -45,17 +42,11 @@ from mcp_server.capabilities.design_change_workflow import (
     explain_design_change_analysis_candidate_data,
     compare_design_change_analysis_candidates_data,
     create_design_change_preview_data,
-    evaluate_replacement_candidates_data,
     get_change_request_result_data,
     get_design_change_analysis_data,
     get_candidate_evaluation_detail_data,
     compare_design_change_candidates_data,
-    record_exception_approval_data,
     record_final_apply_approval_data,
-    select_candidate_and_supplier_data,
-    approve_candidate_impact_data,
-    confirm_candidate_selection_data,
-    submit_candidate_additional_data_data,
 )
 from mcp_server.capabilities.management import (
     create_rule_data, deactivate_rule_data, export_training_dataset_data,
@@ -67,11 +58,9 @@ from mcp_server.schemas import (
     DesignChangeRequestInput,
 )
 
-
 mcp = MCPServer(
     "Display BOM MCP Server"
 )
-
 
 @mcp.tool()
 def get_bom(
@@ -118,7 +107,6 @@ def get_bom_where_used(
         item_code=item_code, plant_code=plant_code, as_of_date=as_of_date
     )
 
-
 @mcp.tool()
 def get_product_detail(
     product_id: str,
@@ -126,7 +114,6 @@ def get_product_detail(
 ) -> dict:
     """모델 코드의 Master 및 상세 속성정보를 조회합니다."""
     return get_product_detail_data(product_id, as_of_date)
-
 
 @mcp.tool()
 def get_item_detail(
@@ -136,7 +123,6 @@ def get_item_detail(
     """MATERIAL/ASSY 코드의 Master 및 상세 속성정보를 조회합니다."""
     return get_item_detail_data(item_code, as_of_date)
 
-
 @mcp.tool()
 def list_products() -> list[dict]:
     """
@@ -144,7 +130,6 @@ def list_products() -> list[dict]:
     """
 
     return list_products_data()
-
 
 @mcp.tool()
 def search_product(
@@ -159,7 +144,6 @@ def search_product(
         keyword
     )
 
-
 @mcp.tool()
 def list_materials() -> list[dict]:
     """
@@ -167,7 +151,6 @@ def list_materials() -> list[dict]:
     """
 
     return list_materials_data()
-
 
 @mcp.tool()
 def search_material(
@@ -182,7 +165,6 @@ def search_material(
         keyword
     )
 
-
 @mcp.tool()
 def list_plants(
     reference_code: str | None = None,
@@ -195,14 +177,12 @@ def list_plants(
     """
     return list_plants_data(reference_code, as_of_date)
 
-
 @mcp.tool()
 def export_bom_excel(plant_code: str, product_id: str, as_of_date: str | None = None) -> dict:
     """BOM 조회 결과를 읽기 전용 Excel 파일로 생성합니다."""
     return export_bom_excel_data(
         plant_code=plant_code, product_id=product_id, as_of_date=as_of_date
     )
-
 
 @mcp.tool()
 def export_design_change_completion_report(request_id: str) -> dict:
@@ -211,7 +191,6 @@ def export_design_change_completion_report(request_id: str) -> dict:
     현재 Design Change 활성 프로세스는 별도 품평회 단계를 사용하지 않습니다.
     """
     return export_design_change_completion_report_data(request_id=request_id)
-
 
 @mcp.tool()
 def analyze_design_change_candidates(
@@ -232,7 +211,6 @@ def analyze_design_change_candidates(
     resolve한 뒤 같은 Tool 호출에서 분석까지 계속합니다.
     """
     return analyze_design_change_candidates_data(request, actions)
-
 
 @mcp.tool()
 def scan_product_cost_reduction_candidates(
@@ -260,7 +238,6 @@ def scan_product_cost_reduction_candidates(
         candidates_per_item=candidates_per_item,
     )
 
-
 @mcp.tool()
 def revalidate_design_change_analysis(
     analysis: dict, action_id: str, candidate_item_code: str,
@@ -271,12 +248,10 @@ def revalidate_design_change_analysis(
         analysis, action_id, candidate_item_code, demand_quantity, attributes
     )
 
-
 @mcp.tool()
 def preview_design_change_analysis_impact(analysis: dict, selections: list[dict]) -> dict:
     """선택 후보의 공용 BOM 영향과 Before/After Spec을 Request 생성 전에 읽기 전용으로 분석합니다."""
     return preview_design_change_analysis_impact_data(analysis, selections)
-
 
 @mcp.tool()
 def create_design_change_request_from_analysis(
@@ -288,120 +263,30 @@ def create_design_change_request_from_analysis(
         analysis, selections, approved_by, exception_reason, impact_confirmed
     )
 
-
 @mcp.tool()
 def explain_design_change_analysis_session(analysis: dict) -> dict:
     """Request 생성 전 Analysis Session의 후보 수와 PASS/CONDITIONAL/FAIL 근거를 설명합니다."""
     return explain_design_change_analysis_session_data(analysis)
-
 
 @mcp.tool()
 def explain_design_change_analysis_candidate(analysis: dict, candidate_item_code: str, action_id: str | None = None) -> dict:
     """Request 생성 전 특정 후보의 Rule/Spec/재고/공급사 근거를 설명합니다."""
     return explain_design_change_analysis_candidate_data(analysis, candidate_item_code, action_id)
 
-
 @mcp.tool()
 def compare_design_change_analysis_candidates(analysis: dict, candidate_item_codes: list[str] | None = None, action_id: str | None = None, criterion: str = "SPEC_SIMILARITY") -> dict:
     """Request 생성 전 Analysis Session 후보를 비교합니다."""
     return compare_design_change_analysis_candidates_data(analysis, candidate_item_codes, action_id, criterion)
-
-
-@mcp.tool()
-def create_design_change_request(
-    request: DesignChangeRequestInput,
-    actions: list[DesignChangeActionInput],
-) -> dict:
-    """단일 Action 설계변경 요청을 등록합니다.
-
-    actions에는 정확히 하나의 Action만 허용합니다. 이 함수는 내부 호환 경로이며
-    활성 UI Workflow에서는 Analysis 확인 후 create_design_change_request_from_analysis를 사용합니다.
-    Action의 action_type은 REPLACE, ADD, DELETE, QUANTITY_CHANGE 중 하나입니다.
-    REPLACE/DELETE/QUANTITY_CHANGE는 old_item_code와 version_code/plant_code를
-    기준으로 Service가 target_type, 직접 parent_item_code, location_code를 실제
-    BOM에서 결정합니다. 날짜가 없으면 as_of_date/effective_date는 현재 기준일,
-    수량 평가는 생산계획을 사용하지 않고 실제 BOM의 QUANTITY를 기준으로 합니다.
-    REPLACE 후보 추천에서는 new_item_code를 미리 지정하지 않습니다. 기존 품목을 기준으로
-    Service가 후보를 동적으로 탐색합니다. 변경사유는 original_request의 자연어와 Reason
-    Metadata로 확정하며, 복수 사유는 Primary 1개 + Secondary Reasons로 모두 보존하여 평가합니다.
-    확실하지 않은 reason_code를 임의 생성하지 마세요. ADD 후보 탐색에서 신규 코드가 없으면
-    사용자가 말한 추가 품목명/품목군을 target_item_name에 보존해 관련 Rule/후보만 탐색합니다.
-    Production BOM은 변경하지 않습니다.
-    """
-    return create_design_change_request_data(request, actions)
-
-
-@mcp.tool()
-def evaluate_replacement_candidates(action_id: str) -> dict:
-    """요청에 저장된 사유·기준일·Rule로 전체 대체 후보를 평가하고 순위를 생성합니다."""
-    return evaluate_replacement_candidates_data(action_id)
-
-
-@mcp.tool()
-def select_candidate_and_supplier(request_id: str, selections: list[dict],
-                                  approved_by: str) -> dict:
-    """사용자가 후보와 주 공급사를 선택합니다.
-
-    공용 ASSY 내부 BOM 변경이면 영향 모델/Spec 검토 단계에서 멈추며,
-    영향범위 추가 승인 전에는 설계변경 Workflow를 시작하지 않습니다.
-    단독 BOM 변경은 선택과 함께 Candidate 승인이 완료됩니다.
-    """
-    return select_candidate_and_supplier_data(request_id, selections, approved_by)
-
-
-@mcp.tool()
-def confirm_candidate_selection(
-    request_id: str, selections: list[dict], confirmed_by: str,
-    exception_reason: str | None = None,
-) -> dict:
-    """재확인된 후보 선택을 최종 저장합니다.
-
-    Dropdown에서 후보를 고르는 것만으로는 DB에 선택을 저장하지 않습니다.
-    PASS는 명시적 확정 시 저장하며, CONDITIONAL은 추가정보 재검증 후에도
-    조건부인 경우 예외승인 사유가 있어야 확정할 수 있습니다.
-    """
-    return confirm_candidate_selection_data(
-        request_id, selections, confirmed_by, exception_reason
-    )
-
-
-@mcp.tool()
-def approve_candidate_impact(request_id: str, approved_by: str) -> dict:
-    """공용 BOM의 영향 모델과 변경 Spec을 확인한 사용자의 추가 승인을 기록합니다.
-
-    이 승인이 완료된 뒤에만 설계변경 Workflow가 시작됩니다.
-    """
-    return approve_candidate_impact_data(request_id, approved_by)
-
-
-@mcp.tool()
-def submit_candidate_additional_data(
-    action_id: str, candidate_item_code: str, attributes: dict | None = None,
-    demand_quantity: float | None = None,
-) -> dict:
-    """조건부 후보의 추가 속성/요청수량을 반영하고 평가를 자동 재실행합니다."""
-    return submit_candidate_additional_data_data(
-        action_id, candidate_item_code, attributes, demand_quantity
-    )
-
-
-@mcp.tool()
-def record_exception_approval(request_id: str, reason: str, approved_by: str) -> dict:
-    """CONDITIONAL 건의 근거 있는 예외승인을 기록합니다. FAIL에는 사용할 수 없습니다."""
-    return record_exception_approval_data(request_id, reason, approved_by)
-
 
 @mcp.tool()
 def create_design_change_preview(request_id: str, created_by: str) -> dict:
     """승인 후보와 전체 공용 ASSY 영향을 포함한 최종 Preview를 생성합니다."""
     return create_design_change_preview_data(request_id, created_by)
 
-
 @mcp.tool()
 def record_final_apply_approval(request_id: str, approved_by: str) -> dict:
     """최종 Preview에 대한 2차 Apply 승인을 기록합니다."""
     return record_final_apply_approval_data(request_id, approved_by)
-
 
 @mcp.tool()
 def apply_approved_change_request(request_id: str, final_approval_id: str,
@@ -409,12 +294,10 @@ def apply_approved_change_request(request_id: str, final_approval_id: str,
     """두 승인과 Preview가 유효한 요청의 모든 Action을 한 Transaction으로 적용합니다."""
     return apply_approved_change_request_data(request_id, final_approval_id, applied_by)
 
-
 @mcp.tool()
 def get_change_request_result(request_id: str) -> dict:
     """설계변경 요청과 Action 상태를 읽기 전용으로 조회합니다."""
     return get_change_request_result_data(request_id)
-
 
 @mcp.tool()
 def get_design_change_analysis(request_id: str) -> dict:
@@ -424,7 +307,6 @@ def get_design_change_analysis(request_id: str) -> dict:
     이전 분석을 다시 실행하거나 후보 상태를 변경하지 않습니다.
     """
     return get_design_change_analysis_data(request_id)
-
 
 @mcp.tool()
 def get_candidate_evaluation_detail(
@@ -439,7 +321,6 @@ def get_candidate_evaluation_detail(
     return get_candidate_evaluation_detail_data(
         request_id, candidate_item_code, action_id
     )
-
 
 @mcp.tool()
 def compare_design_change_candidates(
@@ -457,33 +338,25 @@ def compare_design_change_candidates(
         request_id, candidate_item_codes, action_id, criterion
     )
 
-
-
-
 @mcp.tool()
 def list_rules(as_of_date: str | None = None) -> list[dict]:
     return list_rules_data(as_of_date)
-
 
 @mcp.tool()
 def create_rule(rule: dict, conditions: list[dict]) -> dict:
     return create_rule_data(rule, conditions)
 
-
 @mcp.tool()
 def update_rule(rule: dict, conditions: list[dict]) -> dict:
     return update_rule_data(rule, conditions)
-
 
 @mcp.tool()
 def deactivate_rule(rule_id: str, revision_no: int) -> dict:
     return deactivate_rule_data(rule_id, revision_no)
 
-
 @mcp.tool()
 def list_design_change_history() -> list[dict]:
     return list_design_change_history_data()
-
 
 @mcp.tool()
 def record_performance_outcome(request_id: str, measurement_day: int,
@@ -493,13 +366,11 @@ def record_performance_outcome(request_id: str, measurement_day: int,
         request_id, measurement_day, outcome, user_rating, measured_at,
     )
 
-
 @mcp.tool()
 def export_training_dataset(date_from: str | None = None,
                             date_to: str | None = None,
                             created_by: str = "system") -> dict:
     return export_training_dataset_data(date_from, date_to, created_by)
-
 
 if __name__ == "__main__":
     mcp.run()

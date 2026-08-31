@@ -203,7 +203,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "search_product"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
-        {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
     client.create_agent_completion.return_value = make_assistant_message(
         content="요청을 확인했습니다.",
@@ -223,7 +222,6 @@ def test_design_change_recommendation_exposes_analysis_without_request_creation(
     assert "get_bom" in names
     assert "search_product" in names
     assert "analyze_design_change_candidates" in names
-    assert "evaluate_replacement_candidates" not in names
     context = client.create_agent_completion.call_args.kwargs["skill_context"]
     assert "현재 단계: NOT_STARTED" in context
     assert "analyze_design_change_candidates를 호출" in context
@@ -236,7 +234,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
-        {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
     client.create_agent_completion.return_value = make_assistant_message(
         content="요청을 생성합니다.",
@@ -271,7 +268,6 @@ def test_design_change_recommendation_exposes_analysis_after_bom_result():
     tools = client.create_agent_completion.call_args.kwargs["tools"]
     names = {tool["function"]["name"] for tool in tools}
     assert "analyze_design_change_candidates" in names
-    assert "evaluate_replacement_candidates" not in names
 
 
 def test_design_change_explicit_product_and_item_uses_deterministic_analysis_macro():
@@ -280,7 +276,6 @@ def test_design_change_explicit_product_and_item_uses_deterministic_analysis_mac
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "get_bom"}},
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
-        {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
     ]
     node = BomAgentNode(client, mcp_client, "Design Change workflow")
 
@@ -305,7 +300,6 @@ def test_explicit_old_to_new_analysis_uses_current_analysis_tool():
     mcp_client = Mock()
     mcp_client.get_tool_definitions.return_value = [
         {"type": "function", "function": {"name": "analyze_design_change_candidates"}},
-        {"type": "function", "function": {"name": "create_design_change_request"}},
     ]
     client.create_agent_completion.return_value = make_assistant_message(
         content="교체 적합성을 분석합니다.",
@@ -325,43 +319,6 @@ def test_explicit_old_to_new_analysis_uses_current_analysis_tool():
     names = {tool["function"]["name"] for tool in kwargs["tools"]}
     assert names == {"analyze_design_change_candidates"}
     assert kwargs["tool_choice"] == "analyze_design_change_candidates"
-
-def test_design_change_requested_keeps_legacy_candidate_evaluation_available_without_forcing_it():
-    """REQUESTED is a legacy/backward-compatible state after STEP34.
-
-    In the active Design Change path, candidate discovery/evaluation is completed in the
-    Analysis Session before a real Design Change Request is created. Therefore an
-    existing legacy REQUESTED request may still expose the evaluation tool, but the
-    agent must not force candidate evaluation automatically.
-    """
-    client = Mock()
-    mcp_client = Mock()
-    mcp_client.get_tool_definitions.return_value = [
-        {"type": "function", "function": {"name": "create_design_change_request"}},
-        {"type": "function", "function": {"name": "evaluate_replacement_candidates"}},
-        {"type": "function", "function": {"name": "record_final_apply_approval"}},
-    ]
-    client.create_agent_completion.return_value = make_assistant_message(
-        content="요청 상태를 확인합니다.",
-        tool_calls=None,
-    )
-    node = BomAgentNode(client, mcp_client, "Design Change workflow")
-
-    node(
-        {
-            "messages": [HumanMessage(content="후보를 추천해줘")],
-            "design_change": {"current_step": "REQUESTED", "request_id": "REQ-1"},
-        }
-    )
-
-    tools = client.create_agent_completion.call_args.kwargs["tools"]
-    names = {tool["function"]["name"] for tool in tools}
-
-    # Legacy REQUESTED requests may still expose this read/evaluation capability
-    # for backward compatibility, but STEP34 must not force it because the active
-    # path evaluates candidates before Request creation.
-    assert names == {"evaluate_replacement_candidates"}
-    assert client.create_agent_completion.call_args.kwargs["tool_choice"] == "auto"
 
 
 def test_design_change_multi_reason_change_request_uses_macro_without_new_item():

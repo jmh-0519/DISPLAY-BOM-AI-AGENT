@@ -42,7 +42,6 @@ class LlmContextCompactor:
         "analyze_design_change_candidates",
         "revalidate_design_change_analysis",
         "scan_product_cost_reduction_candidates",
-        "evaluate_replacement_candidates",
         "get_design_change_analysis",
         "get_candidate_evaluation_detail",
         "compare_design_change_candidates",
@@ -210,8 +209,7 @@ class LlmContextCompactor:
         elif tool_name in {
             "analyze_design_change_candidates",
             "revalidate_design_change_analysis",
-            "evaluate_replacement_candidates",
-        }:
+            }:
             summary = self._analysis_summary(tool_name, payload)
         elif tool_name == "scan_product_cost_reduction_candidates":
             summary = self._scan_summary(payload)

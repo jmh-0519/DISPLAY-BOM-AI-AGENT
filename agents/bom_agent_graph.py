@@ -379,8 +379,6 @@ class BomAgentGraph:
         candidate_panel_tools = {
             "analyze_design_change_candidates",
             "revalidate_design_change_analysis",
-            "evaluate_replacement_candidates",
-            "submit_candidate_additional_data",
         }
         terminal_error = bool(str(after.values.get("error") or "").strip())
         # STEP40-N2: a failed candidate-analysis Tool still leaves a ToolMessage

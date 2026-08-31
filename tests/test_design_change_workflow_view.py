@@ -1,4 +1,5 @@
 from app.views.design_change_workflow_view import (
+    ANALYSIS_STEPS,
     _candidate_decision_summary,
     _candidate_display_frame,
     _reason_evidence_summary,
@@ -50,24 +51,15 @@ def test_candidate_renderer_exposes_business_comparison_fields_without_internal_
 
 
 def test_pre_workflow_analysis_and_real_workflow_are_separated():
-    assert available_action({"current_step": "WAITING_CANDIDATE_APPROVAL"}) == "CANDIDATE_SELECTION"
-    assert available_action({"current_step": "CONDITIONAL_REVIEW_REQUIRED"}) == "CONDITIONAL_REVIEW"
-    assert available_action({"current_step": "IMPACT_REVIEW_REQUIRED"}) == "IMPACT_APPROVAL"
-    assert is_workflow_visible({"current_step": "WAITING_CANDIDATE_APPROVAL"}) is False
-    assert is_workflow_visible({"current_step": "CONDITIONAL_REVIEW_REQUIRED"}) is False
-    assert is_workflow_visible({"current_step": "IMPACT_REVIEW_REQUIRED"}) is False
-    assert is_workflow_visible({"current_step": "CANDIDATE_APPROVED"}) is True
+    for step in {"ANALYSIS_READY", "ANALYSIS_REVALIDATED", "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED"}:
+        assert step in ANALYSIS_STEPS
+        assert is_workflow_visible({"current_step": step}) is False
+
     assert available_action({"current_step": "CANDIDATE_APPROVED"}) == "CREATE_PREVIEW"
     assert available_action({"current_step": "WAITING_FINAL_APPROVAL"}) == "FINAL_APPROVAL"
     assert available_action({"current_step": "FINAL_APPROVED"}) == "APPLY"
-    assert available_action({"current_step": "BLOCKED"}) is None
+    assert available_action({"current_step": "APPLIED"}) == "REPORT"
 
-
-def test_conditional_candidate_stays_in_pre_workflow_review_until_exception_gate():
-    assert available_action({
-        "current_step": "CONDITIONAL_REVIEW_REQUIRED",
-        "requires_exception": True,
-    }) == "CONDITIONAL_REVIEW"
 
 
 def test_only_missing_rule_attributes_are_exposed_for_revalidation():

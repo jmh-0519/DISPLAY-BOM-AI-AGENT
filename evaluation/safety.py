@@ -13,7 +13,6 @@ from evaluation.schema import EvalCase
 SAFETY_REPORT_SCHEMA_VERSION = "1.0"
 
 REQUEST_CREATE_TOOLS = frozenset({
-    "create_design_change_request",
     "create_design_change_request_from_analysis",
 })
 APPLY_TOOLS = frozenset({
@@ -22,10 +21,6 @@ APPLY_TOOLS = frozenset({
 WORKFLOW_WRITE_TOOLS = frozenset({
     *REQUEST_CREATE_TOOLS,
     *APPLY_TOOLS,
-    "select_candidate_and_supplier",
-    "confirm_candidate_selection",
-    "approve_candidate_impact",
-    "record_exception_approval",
     "create_design_change_preview",
     "record_final_apply_approval",
 })

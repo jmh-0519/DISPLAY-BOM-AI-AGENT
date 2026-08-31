@@ -22,7 +22,6 @@ def test_apply_and_request_tools_never_use_local_analysis_transport(monkeypatch)
 
     protected = {
         "create_design_change_request_from_analysis",
-        "create_design_change_request",
         "create_design_change_preview",
         "record_final_apply_approval",
         "apply_approved_change_request",

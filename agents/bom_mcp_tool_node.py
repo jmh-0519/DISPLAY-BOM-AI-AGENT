@@ -20,7 +20,6 @@ from core.observability import (
     summarize_value,
 )
 
-
 class BomMcpToolNode:
     """
     AIMessage의 Tool Call을 읽고
@@ -93,9 +92,6 @@ class BomMcpToolNode:
                 "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
                 "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
                 "compare_design_change_analysis_candidates",
-                "create_design_change_request", "evaluate_replacement_candidates",
-                "submit_candidate_additional_data", "select_candidate_and_supplier",
-                "approve_candidate_impact", "record_exception_approval",
                 "create_design_change_preview", "record_final_apply_approval",
                 "apply_approved_change_request", "get_change_request_result",
                 "get_design_change_analysis", "get_candidate_evaluation_detail",
@@ -206,9 +202,6 @@ class BomMcpToolNode:
                 "preview_design_change_analysis_impact", "create_design_change_request_from_analysis",
                 "explain_design_change_analysis_session", "explain_design_change_analysis_candidate",
                 "compare_design_change_analysis_candidates",
-                "create_design_change_request", "evaluate_replacement_candidates",
-                "submit_candidate_additional_data", "select_candidate_and_supplier",
-                "approve_candidate_impact", "record_exception_approval",
                 "create_design_change_preview", "record_final_apply_approval",
                 "apply_approved_change_request", "get_change_request_result",
                 "get_design_change_analysis", "get_candidate_evaluation_detail",
@@ -269,9 +262,7 @@ class BomMcpToolNode:
         allowed = {
             "scan_product_cost_reduction_candidates": {
                 "NOT_STARTED", "ANALYSIS_READY", "ANALYSIS_REVALIDATED",
-                "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED", "REQUESTED",
-                "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-                "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED",
+                "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED",
                 "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL", "FINAL_APPROVED",
                 "APPLIED", "REPORT_COMPLETED", "BLOCKED",
             },
@@ -285,35 +276,23 @@ class BomMcpToolNode:
             "explain_design_change_analysis_session": {"ANALYSIS_READY", "ANALYSIS_REVALIDATED", "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED"},
             "explain_design_change_analysis_candidate": {"ANALYSIS_READY", "ANALYSIS_REVALIDATED", "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED"},
             "compare_design_change_analysis_candidates": {"ANALYSIS_READY", "ANALYSIS_REVALIDATED", "ANALYSIS_IMPACT_REVIEW", "ANALYSIS_CONFIRMED"},
-            "create_design_change_request": {"NOT_STARTED", "APPLIED", "BLOCKED"},
-            "evaluate_replacement_candidates": {
-                "REQUESTED", "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-            },
-            "submit_candidate_additional_data": {"WAITING_CANDIDATE_APPROVAL", "CONDITIONAL_REVIEW_REQUIRED"},
-            "select_candidate_and_supplier": {"WAITING_CANDIDATE_APPROVAL", "IMPACT_REVIEW_REQUIRED"},
-            "approve_candidate_impact": {"IMPACT_REVIEW_REQUIRED"},
-            "record_exception_approval": {"CONDITIONAL_REVIEW_REQUIRED", "CANDIDATE_APPROVED"},
             "create_design_change_preview": {"CANDIDATE_APPROVED"},
             "record_final_apply_approval": {"WAITING_FINAL_APPROVAL"},
             "apply_approved_change_request": {"FINAL_APPROVED"},
             "get_change_request_result": {
-                "REQUESTED", "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-                "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED", "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL", "FINAL_APPROVED",
+                "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL", "FINAL_APPROVED",
                 "APPLIED", "BLOCKED",
             },
             "get_design_change_analysis": {
-                "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-                "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED", "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
+                "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
                 "FINAL_APPROVED", "APPLIED", "BLOCKED",
             },
             "get_candidate_evaluation_detail": {
-                "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-                "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED", "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
+                "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
                 "FINAL_APPROVED", "APPLIED", "BLOCKED",
             },
             "compare_design_change_candidates": {
-                "CANDIDATES_EVALUATED", "WAITING_CANDIDATE_APPROVAL",
-                "CONDITIONAL_REVIEW_REQUIRED", "IMPACT_REVIEW_REQUIRED", "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
+                "CANDIDATE_APPROVED", "WAITING_FINAL_APPROVAL",
                 "FINAL_APPROVED", "APPLIED", "BLOCKED",
             },
         }
@@ -342,38 +321,11 @@ class BomMcpToolNode:
             "ANALYSIS_REVALIDATED": ["analyze_design_change_candidates", "revalidate_design_change_analysis", "explain_design_change_analysis_session", "explain_design_change_analysis_candidate", "compare_design_change_analysis_candidates"],
             "ANALYSIS_IMPACT_REVIEW": ["analyze_design_change_candidates", "explain_design_change_analysis_session", "explain_design_change_analysis_candidate", "compare_design_change_analysis_candidates"],
             "ANALYSIS_CONFIRMED": ["analyze_design_change_candidates", "create_design_change_request_from_analysis", "explain_design_change_analysis_session", "explain_design_change_analysis_candidate", "compare_design_change_analysis_candidates"],
-            "REQUESTED": ["evaluate_replacement_candidates"],
-            "CANDIDATES_EVALUATED": ["evaluate_replacement_candidates"],
-            "WAITING_CANDIDATE_APPROVAL": [
-                "evaluate_replacement_candidates",
-                "submit_candidate_additional_data",
-                "select_candidate_and_supplier",
-                "get_design_change_analysis",
-                "get_candidate_evaluation_detail",
-                "compare_design_change_candidates",
-            ],
-            "CONDITIONAL_REVIEW_REQUIRED": [
-                "submit_candidate_additional_data",
-                "record_exception_approval",
-                "get_design_change_analysis",
-                "get_candidate_evaluation_detail",
-                "compare_design_change_candidates",
-            ],
-            "IMPACT_REVIEW_REQUIRED": [
-                "select_candidate_and_supplier",
-                "approve_candidate_impact",
-                "get_design_change_analysis",
-                "get_candidate_evaluation_detail",
-                "compare_design_change_candidates",
-            ],
-            "CANDIDATE_APPROVED": [
-                "record_exception_approval",
-                "create_design_change_preview",
-            ],
+            "CANDIDATE_APPROVED": ["create_design_change_preview"],
             "WAITING_FINAL_APPROVAL": ["record_final_apply_approval"],
             "FINAL_APPROVED": ["apply_approved_change_request"],
-            "APPLIED": ["create_design_change_request"],
-            "BLOCKED": ["create_design_change_request"],
+            "APPLIED": ["analyze_design_change_candidates"],
+            "BLOCKED": ["analyze_design_change_candidates"],
         }.get(step, [])
         return {
             "success": False,

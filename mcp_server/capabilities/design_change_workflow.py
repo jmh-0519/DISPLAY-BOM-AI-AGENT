@@ -3,74 +3,24 @@ from database import SQLiteDatabase
 from services.design_change_workflow_service import DesignChangeWorkflowService
 from core.performance_profiler import performance_span
 
-
 def _service() -> DesignChangeWorkflowService:
     return DesignChangeWorkflowService(SQLiteDatabase(sqlite_database_path()))
-
-
-def create_design_change_request_data(request: dict, actions: list[dict]) -> dict:
-    return _service().create_request(request, actions)
-
-
-def evaluate_replacement_candidates_data(action_id: str) -> dict:
-    return _service().evaluate_action(action_id)
-
-
-def select_candidate_and_supplier_data(request_id: str, selections: list[dict],
-                                       approved_by: str) -> dict:
-    # STEP29: selection may stop at shared-BOM impact review before Workflow starts.
-    return _service().prepare_candidate_selection(request_id, selections, approved_by)
-
-
-
-
-def confirm_candidate_selection_data(
-    request_id: str, selections: list[dict], confirmed_by: str,
-    exception_reason: str | None = None,
-) -> dict:
-    return _service().confirm_candidate_selection(
-        request_id=request_id, selections=selections, confirmed_by=confirmed_by,
-        exception_reason=exception_reason,
-    )
-
-def approve_candidate_impact_data(request_id: str, approved_by: str) -> dict:
-    return _service().approve_candidate_impact(request_id, approved_by)
-
-
-def submit_candidate_additional_data_data(
-    action_id: str, candidate_item_code: str, attributes: dict | None = None,
-    demand_quantity: float | None = None,
-) -> dict:
-    return _service().submit_additional_data(
-        action_id=action_id, candidate_item_code=candidate_item_code,
-        attributes=attributes, demand_quantity=demand_quantity,
-    )
-
-
-def record_exception_approval_data(request_id: str, reason: str, approved_by: str) -> dict:
-    return _service().approve_exception(request_id, reason, approved_by)
-
 
 def create_design_change_preview_data(request_id: str, created_by: str) -> dict:
     return _service().create_preview(request_id, created_by)
 
-
 def record_final_apply_approval_data(request_id: str, approved_by: str) -> dict:
     return _service().approve_final(request_id, approved_by)
-
 
 def apply_approved_change_request_data(request_id: str, final_approval_id: str,
                                        applied_by: str) -> dict:
     return _service().apply(request_id, final_approval_id, applied_by)
 
-
 def get_change_request_result_data(request_id: str) -> dict:
     return _service().get_result(request_id)
 
-
 def get_design_change_analysis_data(request_id: str) -> dict:
     return _service().get_analysis_explanation(request_id)
-
 
 def get_candidate_evaluation_detail_data(
     request_id: str,
@@ -82,7 +32,6 @@ def get_candidate_evaluation_detail_data(
         candidate_item_code=candidate_item_code,
         action_id=action_id,
     )
-
 
 def compare_design_change_candidates_data(
     request_id: str,
@@ -97,7 +46,6 @@ def compare_design_change_candidates_data(
         criterion=criterion,
     )
 
-
 def analyze_design_change_candidates_data(request: dict, actions: list[dict]) -> dict:
     with performance_span(
         "service",
@@ -109,7 +57,6 @@ def analyze_design_change_candidates_data(request: dict, actions: list[dict]) ->
         },
     ):
         return _service().analyze_candidates(request, actions)
-
 
 def scan_product_cost_reduction_candidates_data(
     version_code: str,
@@ -130,7 +77,6 @@ def scan_product_cost_reduction_candidates_data(
         candidates_per_item=candidates_per_item,
     )
 
-
 def revalidate_design_change_analysis_data(
     analysis: dict, action_id: str, candidate_item_code: str,
     demand_quantity: float | None = None, attributes: dict | None = None,
@@ -140,10 +86,8 @@ def revalidate_design_change_analysis_data(
         demand_quantity=demand_quantity, attributes=attributes,
     )
 
-
 def preview_design_change_analysis_impact_data(analysis: dict, selections: list[dict]) -> dict:
     return _service().preview_analysis_impact(analysis, selections)
-
 
 def create_design_change_request_from_analysis_data(
     analysis: dict, selections: list[dict], approved_by: str,
@@ -154,14 +98,11 @@ def create_design_change_request_from_analysis_data(
         exception_reason=exception_reason, impact_confirmed=impact_confirmed,
     )
 
-
 def explain_design_change_analysis_session_data(analysis: dict) -> dict:
     return _service().explain_analysis_session(analysis)
 
-
 def explain_design_change_analysis_candidate_data(analysis: dict, candidate_item_code: str, action_id: str | None = None) -> dict:
     return _service().explain_analysis_candidate(analysis, candidate_item_code, action_id)
-
 
 def compare_design_change_analysis_candidates_data(analysis: dict, candidate_item_codes: list[str] | None = None, action_id: str | None = None, criterion: str = "SPEC_SIMILARITY") -> dict:
     return _service().compare_analysis_candidates(analysis, candidate_item_codes, action_id, criterion)

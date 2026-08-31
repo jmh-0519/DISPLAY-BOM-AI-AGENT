@@ -26,27 +26,8 @@ DesignChangeStep = Literal[
     "ANALYSIS_CONFIRMED",
     "ANALYSIS_COMPLETED",
     "ANALYSIS_BLOCKED",
-    "WAITING_PREVIEW",
-    "WAITING_REVIEW",
-    "REVIEW_CONDITIONAL",
-    "REVIEW_REJECTED",
     "WAITING_FINAL_APPROVAL",
-    "READY_TO_APPLY",
-    "CHANGE_REJECTED",
-    "APPLY_COMPLETED",
     "REPORT_COMPLETED",
-    "CHANGE_REQUESTED",
-    "REVIEW_BOM_CREATED",
-    "AI_REVIEW_COMPLETED",
-    "REVIEW_NEEDS_CONFIRMATION",
-    "REVIEW_FAILED",
-    "WAITING_FINAL_APPLY",
-    "CHANGE_COMPLETED",
-    "REQUESTED",
-    "CANDIDATES_EVALUATED",
-    "WAITING_CANDIDATE_APPROVAL",
-    "CONDITIONAL_REVIEW_REQUIRED",
-    "IMPACT_REVIEW_REQUIRED",
     "CANDIDATE_APPROVED",
     "PREVIEW_CREATED",
     "VALIDATED",
@@ -253,60 +234,6 @@ def apply_design_change_tool_result(
             "requires_exception": False,
             "current_step": "CANDIDATE_APPROVED",
         })
-    elif tool_name == "create_design_change_request":
-        updated.update({
-            "request_id": tool_result.get("request_id"),
-            "plant_code": tool_result.get("plant_code"),
-            "actions": tool_result.get("actions", []),
-            "candidates": [],
-            "analysis_context": None,
-            "analysis_memory": None,
-            "last_explanation": None,
-            "last_followup_tool": None,
-            "candidate_selection": [],
-            "impact_review": None,
-            "candidate_approval_id": None,
-            "final_approval_id": None,
-            "impacts": [],
-            "requires_exception": False,
-            "current_step": "REQUESTED",
-        })
-    elif tool_name in {
-        "evaluate_replacement_candidates",
-        "submit_candidate_additional_data",
-    }:
-        action_id = tool_result.get("action_id")
-        existing = [
-            value
-            for value in updated.get("candidates", [])
-            if value.get("action_id") != action_id
-        ]
-        candidates = [
-            {**value, "action_id": action_id}
-            for value in tool_result.get("candidates", [])
-        ]
-        merged_candidates = existing + candidates
-        counts = {
-            status: sum(value.get("status") == status for value in merged_candidates)
-            for status in ("PASS", "CONDITIONAL", "FAIL")
-        }
-        analysis_context = tool_result.get("analysis_context") or updated.get("analysis_context")
-        updated.update({
-            "candidates": merged_candidates,
-            "analysis_context": analysis_context,
-            "analysis_memory": {
-                "request_id": updated.get("request_id"),
-                "analysis_context": analysis_context,
-                "candidate_count": len(merged_candidates),
-                "status_counts": counts,
-                "action_ids": list(dict.fromkeys(
-                    value.get("action_id") for value in merged_candidates if value.get("action_id")
-                )),
-            },
-            "last_explanation": None,
-            "last_followup_tool": None,
-            "current_step": "WAITING_CANDIDATE_APPROVAL",
-        })
     elif tool_name in {
         "explain_design_change_analysis_session",
         "explain_design_change_analysis_candidate",
@@ -318,46 +245,6 @@ def apply_design_change_tool_result(
         updated.update({
             "last_explanation": tool_result,
             "last_followup_tool": tool_name,
-        })
-    elif tool_name in {"select_candidate_and_supplier", "confirm_candidate_selection"}:
-        workflow_status = tool_result.get("workflow_status")
-        next_step = (
-            "CONDITIONAL_REVIEW_REQUIRED"
-            if workflow_status == "CONDITIONAL_REVIEW_REQUIRED"
-            else "IMPACT_REVIEW_REQUIRED"
-            if workflow_status == "IMPACT_REVIEW_REQUIRED"
-            else "CANDIDATE_APPROVED"
-        )
-        updated.update({
-            "candidate_selection": tool_result.get("selections", []),
-            "impact_review": tool_result.get("impact_review"),
-            "candidate_approval_id": tool_result.get("approval_id"),
-            "requires_exception": tool_result.get("requires_exception", False),
-            "current_step": next_step,
-        })
-    elif tool_name == "approve_candidate_impact":
-        updated.update({
-            "candidate_approval_id": tool_result.get("approval_id"),
-            "impact_review": tool_result.get("impact_review") or updated.get("impact_review"),
-            "requires_exception": tool_result.get("requires_exception", False),
-            "current_step": "CANDIDATE_APPROVED",
-        })
-    elif tool_name == "record_exception_approval":
-        workflow_status = tool_result.get("workflow_status")
-        updated.update({
-            "candidate_selection": tool_result.get("selections", updated.get("candidate_selection", [])),
-            "impact_review": tool_result.get("impact_review") or updated.get("impact_review"),
-            "candidate_approval_id": (
-                tool_result.get("approval_id")
-                if tool_result.get("stage") == "CANDIDATE"
-                else updated.get("candidate_approval_id")
-            ),
-            "requires_exception": False,
-            "current_step": (
-                "IMPACT_REVIEW_REQUIRED"
-                if workflow_status == "IMPACT_REVIEW_REQUIRED"
-                else "CANDIDATE_APPROVED"
-            ),
         })
     elif tool_name == "create_design_change_preview":
         status = tool_result.get("validation_status")
