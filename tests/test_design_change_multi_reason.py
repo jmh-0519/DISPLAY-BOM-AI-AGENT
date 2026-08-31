@@ -49,56 +49,34 @@ def test_resolver_preserves_primary_and_secondary_reasons_in_natural_language_or
     assert resolved[0].evidence["all_detected_reason_codes"] == ["EOL", "COST"]
 
 
-def test_create_request_persists_all_reasons_and_primary_secondary_roles(tmp_path):
+def test_analysis_preserves_all_reasons_and_primary_secondary_roles(tmp_path):
     service = DesignChangeWorkflowService(make_database(tmp_path))
-    created = service.create_request(
+    analysis = service.analyze_candidates(
         {
-            "request_id": "REQ-MULTI-1",
             "plant_code": "P01",
             "version_code": "MODEL-1",
             "original_request": "MAT-1이 단종됐고 원가도 너무 높아서 변경하고 싶어",
             "reasons": [],
             "as_of_date": "2026-08-18",
             "effective_date": "2026-08-18",
-            "demand_source": "UNAVAILABLE",
             "requested_by": "tester",
         },
         [{
-            "action_id": "ACT-MULTI-1",
             "action_type": "REPLACE",
             "old_item_code": "MAT-1",
         }],
     )
 
-    assert created["reasons"] == ["EOL", "COST"]
-    stored = service.repository.get_request("REQ-MULTI-1")
-    action = stored["actions"][0]
+    assert analysis["request"]["reasons"] == ["EOL", "COST"]
+    action = analysis["actions"][0]
     assert action["primary_reason"]["reason_code"] == "EOL"
     assert [row["reason_code"] for row in action["secondary_reasons"]] == ["COST"]
     assert [row["reason_code"] for row in action["reasons"]] == ["EOL", "COST"]
+    assert analysis["request_created"] is False
 
 
-def test_candidate_evaluation_uses_all_persisted_reason_codes(tmp_path):
+def test_candidate_analysis_uses_all_resolved_reason_codes(tmp_path):
     service = DesignChangeWorkflowService(make_database(tmp_path))
-    service.create_request(
-        {
-            "request_id": "REQ-MULTI-2",
-            "plant_code": "P01",
-            "version_code": "MODEL-1",
-            "original_request": "MAT-1이 단종됐고 원가도 높아서 변경하고 싶어",
-            "reasons": [],
-            "as_of_date": "2026-08-18",
-            "effective_date": "2026-08-18",
-            "demand_source": "UNAVAILABLE",
-            "requested_by": "tester",
-        },
-        [{
-            "action_id": "ACT-MULTI-2",
-            "action_type": "REPLACE",
-            "old_item_code": "MAT-1",
-        }],
-    )
-
     service.recommendation.evaluate_candidates = Mock(return_value=[{
         "candidate_item_code": "MAT-2",
         "status": "PASS",
@@ -132,14 +110,24 @@ def test_candidate_evaluation_uses_all_persisted_reason_codes(tmp_path):
         "missing_data": ["demand_quantity"],
     })
 
-    result = service.evaluate_action("ACT-MULTI-2")
+    result = service.analyze_candidates(
+        {
+            "plant_code": "P01",
+            "version_code": "MODEL-1",
+            "original_request": "MAT-1이 단종됐고 원가도 높아서 변경하고 싶어",
+            "reasons": [],
+            "as_of_date": "2026-08-18",
+            "effective_date": "2026-08-18",
+            "requested_by": "tester",
+        },
+        [{"action_type": "REPLACE", "old_item_code": "MAT-1"}],
+    )
 
-    assert result["evaluation_context"]["reasons"] == ["EOL", "COST"]
+    assert result["analysis_context"]["reason_codes"] == ["EOL", "COST"]
     assert result["analysis_context"]["primary_reason_code"] == "EOL"
     assert result["analysis_context"]["secondary_reason_codes"] == ["COST"]
     assert service.recommendation.evaluate_candidates.call_args.kwargs["reasons"] == ["EOL", "COST"]
     assert service.supply.recommend_supplier.call_args.args[2] == ["EOL", "COST"]
-
 
 def test_supplier_weights_blend_multiple_reason_profiles():
     weights, applied = SupplyEvaluationService._weights_for_reasons({"COST", "QUALITY"})

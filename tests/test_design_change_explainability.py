@@ -66,10 +66,10 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
     raise AssertionError("No dynamic explainability material case was found")
 
 
-def create_evaluated_request(database: SQLiteDatabase) -> tuple[DesignChangeWorkflowService, dict, dict]:
+def create_committed_analysis(database: SQLiteDatabase) -> tuple[DesignChangeWorkflowService, dict, dict]:
     case = find_dynamic_material_case(database)
     service = DesignChangeWorkflowService(database)
-    created = service.create_request(
+    analysis = service.analyze_candidates(
         {
             "plant_code": case["plant_code"],
             "version_code": case["version_code"],
@@ -78,10 +78,28 @@ def create_evaluated_request(database: SQLiteDatabase) -> tuple[DesignChangeWork
         },
         [{"action_type": "REPLACE", "old_item_code": case["source_item_code"]}],
     )
-    evaluated = service.evaluate_action(created["actions"][0]["action_id"])
-    assert evaluated["candidates"]
-    return service, created, evaluated
-
+    candidate = next(
+        (row for row in analysis["candidates"] if row["status"] in {"PASS", "CONDITIONAL"}),
+        None,
+    )
+    assert candidate is not None
+    selections = [{
+        "action_id": analysis["actions"][0]["action_id"],
+        "candidate_item_code": candidate["candidate_item_code"],
+        "supplier_item_id": candidate.get("recommended_supplier_item_id"),
+    }]
+    impact = service.preview_analysis_impact(analysis, selections)
+    committed = service.commit_analysis_as_request(
+        analysis,
+        selections,
+        approved_by="pytest",
+        exception_reason=(
+            "pytest conditional evidence acceptance"
+            if candidate["status"] == "CONDITIONAL" else None
+        ),
+        impact_confirmed=bool(impact.get("requires_impact_approval")),
+    )
+    return service, committed, analysis
 
 def test_attribute_evidence_keeps_before_and_candidate_values():
     result = RuleEngine().evaluate_attributes(
@@ -121,7 +139,7 @@ def test_rule_evidence_keeps_actual_expected_and_operator():
 
 def test_analysis_explanation_distinguishes_no_eligible_from_no_candidates(tmp_path):
     database = make_database(tmp_path)
-    service, created, evaluated = create_evaluated_request(database)
+    service, created, evaluated = create_committed_analysis(database)
     analysis = service.get_analysis_explanation(created["request_id"])
 
     assert analysis["candidate_count"] == len(evaluated["candidates"])
@@ -137,10 +155,10 @@ def test_analysis_explanation_distinguishes_no_eligible_from_no_candidates(tmp_p
 
 def test_candidate_detail_exposes_technical_and_inventory_evidence(tmp_path):
     database = make_database(tmp_path)
-    service, created, evaluated = create_evaluated_request(database)
+    service, created, evaluated = create_committed_analysis(database)
     candidate = evaluated["candidates"][0]
     detail = service.get_candidate_evaluation_detail(
-        created["request_id"], candidate["candidate_item_code"], candidate["action_id"]
+        created["request_id"], candidate["candidate_item_code"], created["actions"][0]["action_id"]
     )
 
     assert detail["candidate_item"]["item_code"] == candidate["candidate_item_code"]
@@ -153,10 +171,10 @@ def test_candidate_detail_exposes_technical_and_inventory_evidence(tmp_path):
 
 def test_candidate_detail_persists_step32_supply_and_inventory_evidence(tmp_path):
     database = make_database(tmp_path)
-    service, created, evaluated = create_evaluated_request(database)
+    service, created, evaluated = create_committed_analysis(database)
     candidate = evaluated["candidates"][0]
     detail = service.get_candidate_evaluation_detail(
-        created["request_id"], candidate["candidate_item_code"], candidate["action_id"]
+        created["request_id"], candidate["candidate_item_code"], created["actions"][0]["action_id"]
     )
 
     inventory = detail["inventory_evaluation"]
@@ -172,11 +190,11 @@ def test_candidate_detail_persists_step32_supply_and_inventory_evidence(tmp_path
 
 def test_candidate_comparison_includes_before_after_technical_differences(tmp_path):
     database = make_database(tmp_path)
-    service, created, evaluated = create_evaluated_request(database)
+    service, created, evaluated = create_committed_analysis(database)
     compared = service.compare_candidates(
         created["request_id"],
         candidate_item_codes=[row["candidate_item_code"] for row in evaluated["candidates"][:3]],
-        action_id=evaluated["action_id"],
+        action_id=created["actions"][0]["action_id"],
         criterion="SPEC_SIMILARITY",
     )
 

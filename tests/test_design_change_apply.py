@@ -280,40 +280,6 @@ def test_add_rejects_existing_active_relation(tmp_path):
     assert active_children(database) == {"OLD": 1, "QTY": 1}
 
 
-def test_candidate_from_another_request_cannot_be_approved(tmp_path):
-    database = SQLiteDatabase(tmp_path / "ownership.db")
-    SchemaManager(database).initialize()
-    with database.transaction() as con:
-        for code, item_type in (("FA", "VERSION"), ("OLD", "MATERIAL"), ("NEW", "MATERIAL")):
-            con.execute("INSERT INTO item_master(item_code,item_type,item_name) VALUES(?,?,?)", (code, item_type, code))
-            if item_type == "VERSION":
-                con.execute("INSERT INTO version_master(version_code) VALUES(?)", (code,))
-            else:
-                con.execute("INSERT INTO material_master(material_code,material_name) VALUES(?,?)", (code, code))
-    repository = SQLiteDesignChangeRepository(database)
-    base = {
-        "version_code": "FA", "as_of_date": "2026-08-14",
-        "effective_date": "2026-08-20", "demand_source": "UNAVAILABLE",
-        "requested_by": "tester", "reasons": ["EOL"],
-    }
-    repository.create_request({**base, "request_id": "REQ-A"}, [{
-        "action_id": "ACT-A", "action_type": "REPLACE", "target_type": "MATERIAL",
-        "parent_item_code": "FA", "old_item_code": "OLD", "location_code": "N/A",
-    }])
-    repository.create_request({**base, "request_id": "REQ-B"}, [{
-        "action_id": "ACT-B", "action_type": "REPLACE", "target_type": "MATERIAL",
-        "parent_item_code": "FA", "old_item_code": "OLD", "location_code": "N/A",
-    }])
-    repository.save_candidate_evaluations("ACT-A", [{
-        "candidate_item_code": "NEW", "status": "PASS", "total_score": 100,
-        "grade": "S", "rank": 1,
-    }])
-    with pytest.raises(ValueError, match="every REPLACE/ADD"):
-        DesignChangeWorkflowService(database).select_and_approve_candidates(
-            "REQ-B", [{"action_id": "ACT-A", "candidate_id": "ACT-A-C1"}], "tester",
-        )
-
-
 def test_production_bom_change_after_preview_blocks_apply(tmp_path):
     database = setup_request(tmp_path)
     with database.transaction() as con:

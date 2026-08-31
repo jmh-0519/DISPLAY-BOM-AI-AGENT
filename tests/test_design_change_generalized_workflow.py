@@ -75,7 +75,7 @@ def test_minimal_natural_language_request_derives_metadata_and_bom_context(tmp_p
     case = find_dynamic_material_case(database)
     service = DesignChangeWorkflowService(database)
 
-    created = service.create_request(
+    analysis = service.analyze_candidates(
         {
             "plant_code": case["plant_code"],
             "version_code": case["version_code"],
@@ -90,16 +90,15 @@ def test_minimal_natural_language_request_derives_metadata_and_bom_context(tmp_p
         }],
     )
 
-    action = created["actions"][0]
-    assert created["reasons"] == ["EOL"]
+    action = analysis["actions"][0]
+    assert analysis["request"]["reasons"] == ["EOL"]
     assert action["target_type"] == "MATERIAL"
     assert action["parent_item_code"] == case["relation"]["parent_item_code"]
     assert action["location_code"] == case["relation"]["location_code"]
     assert action["old_quantity"] == float(case["relation"]["quantity"])
-    assert created["request_defaults"]["as_of_date"] == date.today().isoformat()
-    assert created["request_defaults"]["effective_date"] == date.today().isoformat()
-    assert "demand_source" not in created["request_defaults"]
-    assert "demand_quantity" not in created["request_defaults"]
+    assert analysis["request"]["as_of_date"] == date.today().isoformat()
+    assert analysis["request"]["effective_date"] == date.today().isoformat()
+    assert analysis["request_created"] is False
 
 
 def test_unregistered_material_uses_dynamic_candidate_discovery_and_attribute_evaluation(tmp_path):
@@ -112,7 +111,7 @@ def test_unregistered_material_uses_dynamic_candidate_discovery_and_attribute_ev
         case["source_item_code"], date.today().isoformat()
     ) == []
 
-    created = service.create_request(
+    analysis = service.analyze_candidates(
         {
             "plant_code": case["plant_code"],
             "version_code": case["version_code"],
@@ -120,26 +119,25 @@ def test_unregistered_material_uses_dynamic_candidate_discovery_and_attribute_ev
         },
         [{"action_type": "REPLACE", "old_item_code": case["source_item_code"]}],
     )
-    evaluated = service.evaluate_action(created["actions"][0]["action_id"])
 
-    assert evaluated["candidates"]
+    assert analysis["candidates"]
     assert all(
         row["candidate_item_code"] != case["source_item_code"]
-        for row in evaluated["candidates"]
+        for row in analysis["candidates"]
     )
     assert all(row["discovery_mode"] == "ATTRIBUTE_DISCOVERY"
-               for row in evaluated["candidates"])
+               for row in analysis["candidates"])
     assert all(row["evaluation_mode"] == "ATTRIBUTE"
-               for row in evaluated["candidates"])
-    assert all(row.get("rule_results") == [] for row in evaluated["candidates"])
+               for row in analysis["candidates"])
+    assert all(row.get("rule_results") == [] for row in analysis["candidates"])
     assert any(row["status"] in {"PASS", "CONDITIONAL"}
-               for row in evaluated["candidates"])
+               for row in analysis["candidates"])
 
     source_profile = repository.get_item_profile(
         case["source_item_code"], date.today().isoformat()
     )
     top_profile = repository.get_item_profile(
-        evaluated["candidates"][0]["candidate_item_code"], date.today().isoformat()
+        analysis["candidates"][0]["candidate_item_code"], date.today().isoformat()
     )
     assert top_profile.get("material_name") == source_profile.get("material_name")
     assert top_profile.get("material_group") == source_profile.get("material_group")

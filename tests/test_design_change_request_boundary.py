@@ -7,7 +7,7 @@ from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
 from services.design_change_completion_report_service import DesignChangeCompletionReportService
 from services.design_change_workflow_service import DesignChangeWorkflowService
-from tests.test_design_change_e2e import iter_dynamic_replace_contexts
+from tests.design_change_test_support import iter_dynamic_replace_contexts
 
 
 def _service(tmp_path, name: str):

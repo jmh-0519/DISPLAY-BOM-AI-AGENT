@@ -6,7 +6,7 @@ from agents.design_change_workflow_state import apply_design_change_tool_result
 from database import SQLiteDatabase
 from scripts.database_lifecycle import rebuild_latest_database
 from services.design_change_workflow_service import DesignChangeWorkflowService
-from tests.test_design_change_e2e import iter_dynamic_replace_contexts
+from tests.design_change_test_support import iter_dynamic_replace_contexts
 
 
 ROOT = Path(__file__).resolve().parents[1]
