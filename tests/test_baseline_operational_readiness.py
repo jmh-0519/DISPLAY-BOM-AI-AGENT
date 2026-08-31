@@ -9,12 +9,12 @@ from services.design_change_workflow_service import DesignChangeWorkflowService
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BASELINE_DB = PROJECT_ROOT / "data" / "display_bom_step27_seed.db"
+SEED_DB = PROJECT_ROOT / "data" / "display_bom_seed.db"
 
 
 def _seeded_service(tmp_path) -> DesignChangeWorkflowService:
     target = tmp_path / "step38.db"
-    shutil.copy2(BASELINE_DB, target)
+    shutil.copy2(SEED_DB, target)
     database = SQLiteDatabase(target)
     seed_phase3_business_sample(database)
     return DesignChangeWorkflowService(database)

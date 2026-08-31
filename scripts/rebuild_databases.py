@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from scripts.database_lifecycle import (
-    DEFAULT_BASELINE_DATABASE,
+    DEFAULT_SEED_DATABASE,
     DEFAULT_RUNTIME_DATABASE,
     DEFAULT_TEST_DATABASE,
     rebuild_latest_database,
@@ -28,7 +28,7 @@ def main() -> None:
         choices=("runtime", "test", "all"),
         default="all",
     )
-    parser.add_argument("--baseline", default=str(DEFAULT_BASELINE_DATABASE))
+    parser.add_argument("--seed-database", default=str(DEFAULT_SEED_DATABASE))
     parser.add_argument("--runtime-database", default=str(DEFAULT_RUNTIME_DATABASE))
     parser.add_argument("--test-database", default=str(DEFAULT_TEST_DATABASE))
     args = parser.parse_args()
@@ -38,7 +38,7 @@ def main() -> None:
         Path(args.runtime_database),
         Path(args.test_database),
     ):
-        result = rebuild_latest_database(target, baseline_path=args.baseline)
+        result = rebuild_latest_database(target, seed_path=args.seed_database)
         print(f"Latest-design database rebuilt: {target}")
         for name, value in result.items():
             print(f"- {name}: {value}")
