@@ -486,6 +486,44 @@ class AzureOpenAIClient:
             raise ValueError("Azure OpenAI에서 Analysis 최종 답변을 반환하지 않았습니다.")
         return str(content).strip()
 
+    def create_knowledge_final_answer(
+        self,
+        *,
+        user_message: str,
+        knowledge_evidence: str,
+    ) -> str:
+        """Explain retrieved Knowledge Evidence without business re-judgement."""
+        if not isinstance(user_message, str) or not user_message.strip():
+            raise ValueError("user_message는 비어 있지 않은 문자열이어야 합니다.")
+        if not isinstance(knowledge_evidence, str) or not knowledge_evidence.strip():
+            raise ValueError("knowledge_evidence는 비어 있지 않은 문자열이어야 합니다.")
+        system_content = (
+            "당신은 Display BOM Knowledge Evidence 설명자입니다. "
+            "반드시 제공된 Knowledge Evidence만 근거로 한국어로 간결하게 답하세요. "
+            "이 Evidence는 정책·가이드·사양·기술문서 참고 근거이며 현재 Production BOM, "
+            "재고, 공급사 상태의 사실 조회 결과가 아닙니다. "
+            "특정 후보의 PASS/CONDITIONAL/FAIL, 승인 또는 Apply 가능 여부를 새로 판단하거나 "
+            "기존 RuleEngine/SQLite 결과를 변경하지 마세요. "
+            "Evidence에 없는 내용은 추측하지 말고 근거가 부족하다고 명확히 말하세요."
+        )
+        user_content = (
+            f"사용자 질문:\n{user_message.strip()}\n\n"
+            "Knowledge Evidence(JSON):\n"
+            f"{knowledge_evidence.strip()}"
+        )
+        response = self._create_completion(
+            model=self.settings.azure_openai_deployment,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0,
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("Azure OpenAI에서 Knowledge 최종 답변을 반환하지 않았습니다.")
+        return str(content).strip()
+
     # =========================================================
     # 기존 Final Answer
     # =========================================================

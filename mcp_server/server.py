@@ -27,6 +27,7 @@ from mcp_server.capabilities.query import (
     get_product_detail_data,
     get_item_detail_data,
 )
+from mcp_server.capabilities.knowledge import search_knowledge_data
 from mcp_server.capabilities.download import (
     export_bom_excel_data,
     export_design_change_completion_report_data,
@@ -176,6 +177,31 @@ def list_plants(
     Plant만 반환합니다. 대상이 없을 때만 전체 활성 Plant 조회가 가능합니다.
     """
     return list_plants_data(reference_code, as_of_date)
+
+@mcp.tool()
+def search_knowledge(
+    query: str,
+    top_k: int = 5,
+    document_type: str | None = None,
+    language: str | None = None,
+    product_family: str | None = None,
+    material_type: str | None = None,
+    tag: str | None = None,
+) -> dict:
+    """Read-only policy/technical Knowledge Evidence search.
+
+    This Tool cannot determine current BOM facts, inventory/supplier state,
+    candidate PASS/CONDITIONAL/FAIL, approval, or Apply eligibility.
+    """
+    return search_knowledge_data(
+        query=query,
+        top_k=top_k,
+        document_type=document_type,
+        language=language,
+        product_family=product_family,
+        material_type=material_type,
+        tag=tag,
+    )
 
 @mcp.tool()
 def export_bom_excel(plant_code: str, product_id: str, as_of_date: str | None = None) -> dict:

@@ -29,8 +29,14 @@ from agents.bom_graph_gateway import (
     FAST_BOM_READ,
     FAST_CHAT,
     FAST_CURRENT_BOM_QUANTITY,
+    FAST_KNOWLEDGE,
     FAST_WHERE_USED,
     BomGraphGateway,
+)
+from agents.bom_knowledge_nodes import (
+    KNOWLEDGE_FINALIZE,
+    BomKnowledgePathNodes,
+    is_knowledge_tool_result,
 )
 from agents.bom_fast_path_nodes import (
     FAST_READ_FINALIZE,
@@ -107,6 +113,7 @@ class BomAgentGraph:
             design_change_active_steps=self.agent_node.DESIGN_CHANGE_ACTIVE_STEPS,
         )
         self.fast_path_nodes = BomFastPathNodes()
+        self.knowledge_path_nodes = BomKnowledgePathNodes(client=client)
         self.macro_dispatch_node = BomMacroDispatchNode(
             self.gateway.analysis_macro_dispatch
         )
@@ -148,6 +155,16 @@ class BomAgentGraph:
             ),
         )
         workflow.add_node(
+            FAST_KNOWLEDGE,
+            self._observed_node(FAST_KNOWLEDGE, self.knowledge_path_nodes.query),
+        )
+        workflow.add_node(
+            KNOWLEDGE_FINALIZE,
+            self._observed_node(
+                KNOWLEDGE_FINALIZE, self.knowledge_path_nodes.finalize
+            ),
+        )
+        workflow.add_node(
             FAST_READ_FINALIZE,
             self._observed_node(
                 FAST_READ_FINALIZE,
@@ -185,17 +202,20 @@ class BomAgentGraph:
                 FAST_BOM_READ: FAST_BOM_READ,
                 FAST_WHERE_USED: FAST_WHERE_USED,
                 FAST_CURRENT_BOM_QUANTITY: FAST_CURRENT_BOM_QUANTITY,
+                FAST_KNOWLEDGE: FAST_KNOWLEDGE,
                 MACRO_ANALYZE: MACRO_ANALYZE,
                 AGENT_PATH: AGENT,
             },
         )
 
         workflow.add_edge(FAST_CHAT, END)
+        workflow.add_edge(FAST_KNOWLEDGE, MCP_TOOLS)
         workflow.add_edge(FAST_BOM_READ, MCP_TOOLS)
         workflow.add_edge(FAST_WHERE_USED, MCP_TOOLS)
         workflow.add_edge(FAST_CURRENT_BOM_QUANTITY, MCP_TOOLS)
         workflow.add_edge(MACRO_ANALYZE, MCP_TOOLS)
         workflow.add_edge(FAST_READ_FINALIZE, END)
+        workflow.add_edge(KNOWLEDGE_FINALIZE, END)
         workflow.add_edge(ANALYSIS_FINALIZE, END)
 
         workflow.add_conditional_edges(
@@ -213,6 +233,7 @@ class BomAgentGraph:
             {
                 AGENT: AGENT,
                 ANALYSIS_FINALIZE: ANALYSIS_FINALIZE,
+                KNOWLEDGE_FINALIZE: KNOWLEDGE_FINALIZE,
                 FAST_READ_FINALIZE: FAST_READ_FINALIZE,
                 END: END,
             },
@@ -248,6 +269,8 @@ class BomAgentGraph:
         normal_route = route_mcp_tool_result(state)
         if normal_route == END:
             return END
+        if is_knowledge_tool_result(state):
+            return KNOWLEDGE_FINALIZE
         if is_graph_fast_tool_result(state):
             return FAST_READ_FINALIZE
         if is_macro_analysis_tool_result(state):

@@ -7,6 +7,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+# Load the project .env once when the RAG configuration module is imported.
+# RagSettings.from_env() must only read the current process environment so
+# tests and callers can explicitly override or remove individual variables.
+load_dotenv()
+
+
 @dataclass(frozen=True)
 class RagSettings:
     """Runtime settings for knowledge embedding and local vector retrieval."""
@@ -21,8 +27,6 @@ class RagSettings:
 
     @classmethod
     def from_env(cls) -> "RagSettings":
-        # Standalone RAG scripts must load the same project .env as the main app.
-        load_dotenv()
         values = {
             "azure_openai_api_key": os.getenv("AZURE_OPENAI_API_KEY", "").strip(),
             "azure_openai_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT", "").strip(),

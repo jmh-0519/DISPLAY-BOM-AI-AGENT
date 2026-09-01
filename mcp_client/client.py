@@ -44,6 +44,7 @@ class DisplayBomMcpClient:
         "list_materials",
         "search_material",
         "list_plants",
+        "search_knowledge",
     }
 
     # only the Analysis Macro receives a local transport fast path.
@@ -416,6 +417,7 @@ class DisplayBomMcpClient:
         approval/apply mutations continue through the MCP stdio boundary.
         """
 
+        from mcp_server.capabilities.knowledge import search_knowledge_data
         from mcp_server.capabilities.query import (
             get_bom_data,
             get_item_detail_data,
@@ -451,6 +453,15 @@ class DisplayBomMcpClient:
             "search_material": lambda: search_material_data(arguments["keyword"]),
             "list_plants": lambda: list_plants_data(
                 arguments.get("reference_code"), arguments.get("as_of_date")
+            ),
+            "search_knowledge": lambda: search_knowledge_data(
+                query=arguments["query"],
+                top_k=arguments.get("top_k", 5),
+                document_type=arguments.get("document_type"),
+                language=arguments.get("language"),
+                product_family=arguments.get("product_family"),
+                material_type=arguments.get("material_type"),
+                tag=arguments.get("tag"),
             ),
         }
 

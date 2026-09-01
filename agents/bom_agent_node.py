@@ -642,6 +642,8 @@ class BomAgentNode:
             "다만 사용자가 '다시 처음부터', '새로 분석', '다시 조회'처럼 명시적으로 재시작을 요청하면 "
             "현재 Analysis Memory만 새 Analysis Session으로 교체하고 실제 Design Change Request는 생성/취소하지 마세요. "
             "후속질문에서는 기존 후보평가를 다시 실행하지 말고 Explain Tool의 저장된 Evidence를 사용하세요. "
+            "Explain Tool에 knowledge_evidence가 포함되면 정책/기술 참고 근거로만 사용하고 "
+            "저장된 final_status/RuleEngine 판정을 변경하거나 재판정하지 마세요. "
             "후보가 0건인지, 후보는 있지만 PASS/CONDITIONAL이 0건인지 반드시 구분하세요. "
             "기술 FAIL은 공급사 PASS로 뒤집지 말고, 근거 데이터가 없으면 추측하지 마세요. "
             "사용자가 특정 한 품목이 아니라 대상 모델/BOM 전체에서 원가를 낮출 대체 자재를 찾는 경우에는 "
@@ -1128,6 +1130,10 @@ class BomAgentNode:
         filtered = []
         for definition in definitions:
             name = str(definition.get("function", {}).get("name") or "")
+            # RAG is invoked only by the deterministic Graph Knowledge Path.
+            # Do not increase the general Agent Tool-selection surface.
+            if name == "search_knowledge":
+                continue
             if product_cost_scan_intent:
                 if name not in {"list_plants", "scan_product_cost_reduction_candidates"}:
                     continue

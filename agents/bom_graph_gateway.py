@@ -20,12 +20,17 @@ from agents.domain_intent_router import (
     DEFAULT_DOMAIN_INTENT_ROUTER,
     DomainIntentRouter,
 )
+from rag.query_router import (
+    DEFAULT_KNOWLEDGE_QUERY_ROUTER,
+    KnowledgeQueryRouter,
+)
 
 
 FAST_CHAT = "fast_chat"
 FAST_BOM_READ = "fast_bom_read"
 FAST_WHERE_USED = "fast_where_used"
 FAST_CURRENT_BOM_QUANTITY = "fast_current_bom_quantity"
+FAST_KNOWLEDGE = "fast_knowledge"
 AGENT_PATH = "agent"
 
 
@@ -50,9 +55,11 @@ class BomGraphGateway:
         self,
         *,
         router: DomainIntentRouter | None = None,
+        knowledge_router: KnowledgeQueryRouter | None = None,
         design_change_active_steps: Iterable[str] = (),
     ) -> None:
         self.router = router or DEFAULT_DOMAIN_INTENT_ROUTER
+        self.knowledge_router = knowledge_router or DEFAULT_KNOWLEDGE_QUERY_ROUTER
         self.design_change_active_steps = frozenset(design_change_active_steps)
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
             self.router
@@ -135,6 +142,14 @@ class BomGraphGateway:
             # reply belongs to the pending ADD transaction, not a fresh query.
             return AGENT_PATH
 
+        # A fresh, high-confidence policy/guide/spec question is read-only and
+        # should beat Design Change macro parsing. Action directives are rejected
+        # by KnowledgeQueryRouter and therefore remain in the workflow path.
+        if current_step == "NOT_STARTED":
+            knowledge = self.knowledge_router.route(user_query)
+            if knowledge.eligible:
+                return FAST_KNOWLEDGE
+
         # High-confidence fresh design-change analysis can bypass the first LLM
         # entirely. This creates only an Analysis Session Tool Call; Request/HITL/
         # Apply authority remains in the existing Design Change workflow.
@@ -174,6 +189,12 @@ class BomGraphGateway:
         )
         if follow_up_intent:
             return AGENT_PATH
+
+        # Terminal historical workflows may start a fresh read-only knowledge
+        # question after the workflow-specific follow-up guard has declined it.
+        knowledge = self.knowledge_router.route(user_query)
+        if knowledge.eligible:
+            return FAST_KNOWLEDGE
 
         # Gateway Fast Path is intentionally current-turn only. Do not inherit a
         # product/item from a completed historical workflow when routing a fresh

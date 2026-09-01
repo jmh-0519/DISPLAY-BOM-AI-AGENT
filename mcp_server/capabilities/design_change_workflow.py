@@ -2,6 +2,7 @@ from core.database_config import sqlite_database_path
 from database import SQLiteDatabase
 from services.design_change_workflow_service import DesignChangeWorkflowService
 from core.performance_profiler import performance_span
+from rag.evidence_enricher import enrich_design_change_evidence
 
 def _service() -> DesignChangeWorkflowService:
     return DesignChangeWorkflowService(SQLiteDatabase(sqlite_database_path()))
@@ -20,17 +21,21 @@ def get_change_request_result_data(request_id: str) -> dict:
     return _service().get_result(request_id)
 
 def get_design_change_analysis_data(request_id: str) -> dict:
-    return _service().get_analysis_explanation(request_id)
+    return enrich_design_change_evidence(
+        _service().get_analysis_explanation(request_id)
+    )
 
 def get_candidate_evaluation_detail_data(
     request_id: str,
     candidate_item_code: str,
     action_id: str | None = None,
 ) -> dict:
-    return _service().get_candidate_evaluation_detail(
-        request_id=request_id,
-        candidate_item_code=candidate_item_code,
-        action_id=action_id,
+    return enrich_design_change_evidence(
+        _service().get_candidate_evaluation_detail(
+            request_id=request_id,
+            candidate_item_code=candidate_item_code,
+            action_id=action_id,
+        )
     )
 
 def compare_design_change_candidates_data(
@@ -39,11 +44,13 @@ def compare_design_change_candidates_data(
     action_id: str | None = None,
     criterion: str = "SPEC_SIMILARITY",
 ) -> dict:
-    return _service().compare_candidates(
-        request_id=request_id,
-        candidate_item_codes=candidate_item_codes,
-        action_id=action_id,
-        criterion=criterion,
+    return enrich_design_change_evidence(
+        _service().compare_candidates(
+            request_id=request_id,
+            candidate_item_codes=candidate_item_codes,
+            action_id=action_id,
+            criterion=criterion,
+        )
     )
 
 def analyze_design_change_candidates_data(request: dict, actions: list[dict]) -> dict:
@@ -99,10 +106,18 @@ def create_design_change_request_from_analysis_data(
     )
 
 def explain_design_change_analysis_session_data(analysis: dict) -> dict:
-    return _service().explain_analysis_session(analysis)
+    return enrich_design_change_evidence(
+        _service().explain_analysis_session(analysis)
+    )
 
 def explain_design_change_analysis_candidate_data(analysis: dict, candidate_item_code: str, action_id: str | None = None) -> dict:
-    return _service().explain_analysis_candidate(analysis, candidate_item_code, action_id)
+    return enrich_design_change_evidence(
+        _service().explain_analysis_candidate(analysis, candidate_item_code, action_id)
+    )
 
 def compare_design_change_analysis_candidates_data(analysis: dict, candidate_item_codes: list[str] | None = None, action_id: str | None = None, criterion: str = "SPEC_SIMILARITY") -> dict:
-    return _service().compare_analysis_candidates(analysis, candidate_item_codes, action_id, criterion)
+    return enrich_design_change_evidence(
+        _service().compare_analysis_candidates(
+            analysis, candidate_item_codes, action_id, criterion
+        )
+    )
