@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .runtime import get_retrieval_service
-from .vector_store import KnowledgeSearchFilter
+from .runtime import get_retrieval_service, search_knowledge
 
 
 _EVIDENCE_KEYS = frozenset({
@@ -43,29 +42,31 @@ def enrich_design_change_evidence(
         return payload
     try:
         service = retrieval_service or get_retrieval_service()
-        response = service.search(
+        response = search_knowledge(
             query,
             top_k=max(1, min(int(top_k), 5)),
-            filters=KnowledgeSearchFilter(status="ACTIVE"),
+            retrieval_service=service,
         )
     except Exception:
         return payload
-    if not response.hits:
+    hits = response.get("hits") if isinstance(response, dict) else []
+    if not hits:
         return payload
 
     enriched = dict(payload)
     enriched["knowledge_evidence"] = [
         {
-            "rank": hit.rank,
-            "distance": hit.distance,
-            "document_id": hit.document_id,
-            "document_title": hit.document_title,
-            "document_type": hit.document_type,
-            "section_path": hit.section_path,
-            "source_file": hit.source_file,
-            "content": str(hit.content or "")[:1000],
+            "rank": hit.get("rank"),
+            "distance": hit.get("distance"),
+            "document_id": hit.get("document_id"),
+            "document_title": hit.get("document_title"),
+            "document_type": hit.get("document_type"),
+            "section_path": hit.get("section_path"),
+            "source_file": hit.get("source_file"),
+            "content": str(hit.get("content") or "")[:1000],
         }
-        for hit in response.hits
+        for hit in hits
+        if isinstance(hit, dict)
     ]
     enriched["knowledge_authority"] = {
         "informational_only": True,

@@ -8,6 +8,7 @@ import uuid
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agents.bom_agent_state import BomAgentState
+from rag.evidence_selector import DEFAULT_KNOWLEDGE_EVIDENCE_SELECTOR
 from rag.query_router import DEFAULT_KNOWLEDGE_QUERY_ROUTER, KnowledgeQueryRouter
 
 
@@ -25,7 +26,7 @@ class BomKnowledgePathNodes:
         decision = self.router.route(user_query)
         if not decision.eligible:
             raise ValueError("Knowledge Path received a non-knowledge request.")
-        args: dict[str, object] = {"query": user_query, "top_k": 5}
+        args: dict[str, object] = {"query": user_query, "top_k": 8}
         if decision.document_type:
             args["document_type"] = decision.document_type
         return {
@@ -53,6 +54,9 @@ class BomKnowledgePathNodes:
         if not isinstance(payload, dict):
             payload = {}
         hits = payload.get("hits") if isinstance(payload.get("hits"), list) else []
+        hits = DEFAULT_KNOWLEDGE_EVIDENCE_SELECTOR.select(
+            self._last_user_query(state), hits, max_hits=3
+        )
         if not payload.get("success") or not hits:
             answer = (
                 "관련 Knowledge 근거를 찾지 못했습니다. "
@@ -69,10 +73,9 @@ class BomKnowledgePathNodes:
                         "document_title": hit.get("document_title"),
                         "document_type": hit.get("document_type"),
                         "section_path": hit.get("section_path"),
-                        "source_file": hit.get("source_file"),
                         "content": str(hit.get("content") or "")[:1200],
                     }
-                    for hit in hits[:5]
+                    for hit in hits[:3]
                     if isinstance(hit, dict)
                 ],
             }
@@ -87,22 +90,43 @@ class BomKnowledgePathNodes:
 
     @staticmethod
     def _reference_lines(hits: list[dict]) -> list[str]:
+        """Render business-facing references without internal file paths."""
+        type_labels = {
+            "CHANGE_REASON": "설계변경 사유",
+            "CHANGE_RULE": "설계변경 규칙",
+            "PROCESS_GUIDE": "업무 절차",
+            "CHANGE_POLICY": "설계변경 정책",
+            "DESIGN_GUIDE": "설계 가이드",
+            "MATERIAL_SPEC": "자재 사양",
+            "SUPPLIER_TECHNICAL": "공급사 기술문서",
+            "FAQ": "FAQ",
+        }
+
         lines: list[str] = []
         seen: set[tuple[str, str]] = set()
         for hit in hits:
             if not isinstance(hit, dict):
                 continue
-            source = str(hit.get("source_file") or "").strip()
+
+            document_id = str(hit.get("document_id") or "").strip()
             title = str(hit.get("document_title") or "").strip()
-            key = (str(hit.get("document_id") or ""), source)
-            if not source or key in seen:
+            if not title:
+                continue
+
+            key = (document_id, title)
+            if key in seen:
                 continue
             seen.add(key)
-            doc_type = str(hit.get("document_type") or "KNOWLEDGE").strip()
+
+            doc_type = str(hit.get("document_type") or "KNOWLEDGE").strip().upper()
+            label = type_labels.get(doc_type, "Knowledge 근거")
             section = str(hit.get("section_path") or "").strip()
-            suffix = f" / {section}" if section else ""
-            lines.append(f"- [{doc_type}] {title}{suffix} — {source}")
-            if len(lines) >= 5:
+            suffix = ""
+            if section and section != title:
+                suffix = f" / {section}"
+
+            lines.append(f"- [{label}] {title}{suffix}")
+            if len(lines) >= 3:
                 break
         return lines
 

@@ -42,11 +42,13 @@ class DeterministicAnalysisMacroDispatch:
         user_query: str,
         active_bom_context: dict[str, Any] | None = None,
         workflow_state: dict[str, Any] | None = None,
+        previous_user_query: str | None = None,
     ) -> AIMessage | None:
         spec = self.build_spec(
             user_query=user_query,
             active_bom_context=active_bom_context,
             workflow_state=workflow_state,
+            previous_user_query=previous_user_query,
         )
         if spec is None:
             return None
@@ -67,9 +69,21 @@ class DeterministicAnalysisMacroDispatch:
         user_query: str,
         active_bom_context: dict[str, Any] | None = None,
         workflow_state: dict[str, Any] | None = None,
+        previous_user_query: str | None = None,
     ) -> dict[str, Any] | None:
         """Return Tool args when the request is safe for deterministic dispatch."""
         workflow_state = workflow_state or {}
+        if previous_user_query and not workflow_state.get("request_id"):
+            correction = self.router.extract_target_correction(user_query)
+            if correction:
+                corrected = self._build_target_correction_spec(
+                    corrected_target=correction,
+                    correction_query=user_query,
+                    previous_user_query=previous_user_query,
+                    active_bom_context=active_bom_context,
+                )
+                if corrected is not None:
+                    return corrected
         current_step = str(
             workflow_state.get("current_step") or "NOT_STARTED"
         ).strip().upper()
@@ -155,6 +169,39 @@ class DeterministicAnalysisMacroDispatch:
             "request": request,
             "actions": [action],
         }
+
+    def _build_target_correction_spec(
+        self,
+        *,
+        corrected_target: str,
+        correction_query: str,
+        previous_user_query: str,
+        active_bom_context: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        previous = self.build_spec(
+            user_query=previous_user_query,
+            active_bom_context=active_bom_context,
+            workflow_state={"current_step": "NOT_STARTED"},
+            previous_user_query=None,
+        )
+        if not previous or len(previous.get("actions") or []) != 1:
+            return None
+        previous_action = dict(previous["actions"][0])
+        action_type = str(previous_action.get("action_type") or "").upper()
+        if action_type not in {"REPLACE", "DELETE", "QUANTITY_CHANGE"}:
+            return None
+        action: dict[str, Any] = {
+            "action_type": action_type,
+            "target_item_name": corrected_target,
+        }
+        if action_type == "QUANTITY_CHANGE" and previous_action.get("new_quantity") is not None:
+            action["new_quantity"] = previous_action["new_quantity"]
+        request = dict(previous.get("request") or {})
+        original = str(request.get("original_request") or previous_user_query).strip()
+        request["original_request"] = (
+            f"{original}\n사용자 대상 정정: {str(correction_query).strip()}"
+        )
+        return {"request": request, "actions": [action]}
 
     def _scope(
         self,

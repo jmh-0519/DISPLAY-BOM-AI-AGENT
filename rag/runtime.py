@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from .config import RagSettings
 from .embedding_client import AzureOpenAIEmbeddingClient
+from .evidence_selector import is_runtime_source_file
 from .retrieval_service import RagRetrievalService
 from .vector_store import ChromaVectorStore, KnowledgeSearchFilter
 
@@ -47,9 +48,13 @@ def search_knowledge(
         material_type=material_type,
         tag=tag,
     )
-    response = service.search(query, top_k=top_k, filters=filters)
+    requested_k = max(1, int(top_k))
+    candidate_k = max(requested_k, min(20, requested_k * 2))
+    response = service.search(query, top_k=candidate_k, filters=filters)
     hits = []
     for hit in response.hits:
+        if not is_runtime_source_file(hit.source_file):
+            continue
         hits.append({
             "rank": hit.rank,
             "distance": hit.distance,
@@ -62,6 +67,10 @@ def search_knowledge(
             "source_page": hit.source_page,
             "content": hit.content,
         })
+        if len(hits) >= requested_k:
+            break
+    for index, hit in enumerate(hits, 1):
+        hit["rank"] = index
     return {
         "success": True,
         "query": response.query,

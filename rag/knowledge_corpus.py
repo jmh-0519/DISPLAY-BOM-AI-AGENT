@@ -86,7 +86,12 @@ class KnowledgeCorpus:
             raise KnowledgeCorpusError(f"duplicate document_id values: {duplicates}")
 
     @classmethod
-    def from_knowledge_root(cls, root: str | Path = "knowledge") -> "KnowledgeCorpus":
+    def from_knowledge_root(
+        cls,
+        root: str | Path = "knowledge",
+        *,
+        include_evaluation: bool = True,
+    ) -> "KnowledgeCorpus":
         knowledge_root = Path(root)
         documents: list[KnowledgeDocument] = []
 
@@ -104,9 +109,20 @@ class KnowledgeCorpus:
                 for rule in RuleCatalog.from_directory(rule_dir).rules
             )
 
-        documents.extend(
+        loaded_documents = list(
             KnowledgeDocumentLoader().load_directory(knowledge_root / "documents")
         )
+        if not include_evaluation:
+            loaded_documents = [
+                document
+                for document in loaded_documents
+                if "/documents/evaluation/" not in (
+                    "/"
+                    + str(document.metadata.source_path).replace("\\", "/").lower().strip("/")
+                    + "/"
+                )
+            ]
+        documents.extend(loaded_documents)
         return cls(tuple(sorted(documents, key=lambda value: value.metadata.document_id)))
 
     def by_type(self, document_type: str) -> tuple[KnowledgeDocument, ...]:

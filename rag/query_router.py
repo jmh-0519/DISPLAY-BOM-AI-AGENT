@@ -14,6 +14,7 @@ from dataclasses import dataclass
 class KnowledgeRouteDecision:
     eligible: bool
     document_type: str | None = None
+    intent: str = "GENERIC"
     reason: str = ""
 
 
@@ -56,8 +57,29 @@ class KnowledgeQueryRouter:
         return KnowledgeRouteDecision(
             True,
             document_type=self._document_type(upper),
+            intent=self._intent(upper),
             reason="HIGH_CONFIDENCE_KNOWLEDGE",
         )
+
+    @staticmethod
+    def _intent(upper_query: str) -> str:
+        if any(marker in upper_query for marker in (
+            "절차", "단계", "프로세스", "PROCESS", "승인 절차", "진행 절차",
+        )):
+            return "PROCESS"
+        if any(marker in upper_query for marker in (
+            "정책", "규정", "원칙", "POLICY",
+        )):
+            return "POLICY"
+        if any(marker in upper_query for marker in (
+            "사양", "SPEC", "기술", "호환", "인터페이스", "조건",
+        )):
+            return "TECHNICAL"
+        if any(marker in upper_query for marker in (
+            "기준", "규칙", "요건", "적합", "RULE",
+        )):
+            return "CRITERIA"
+        return "GENERIC"
 
     @staticmethod
     def _document_type(upper_query: str) -> str | None:

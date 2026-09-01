@@ -696,6 +696,38 @@ class DomainIntentRouter:
         unique = list(dict.fromkeys(codes))
         return unique[0] if len(unique) == 1 else None
 
+    def extract_target_correction(self, user_query: str) -> str | None:
+        """Extract a corrected source target from a short follow-up.
+
+        Example: ``DRIVE-IC가 아니라 GATE-IC 자재였어`` -> ``GATE-IC``.
+        This returns only the corrected name. Reusing MODEL/PLANT/action/reason is
+        handled by DeterministicAnalysisMacroDispatch from the previous user turn.
+        """
+        raw = " ".join(str(user_query or "").strip().split())
+        if not raw:
+            return None
+        parts = re.split(
+            r"\s*(?:(?:이|가)\s*)?(?:아니라|말고)\s*",
+            raw,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )
+        if len(parts) != 2:
+            return None
+        target = parts[1].strip()
+        target = re.sub(
+            r"\s*(?:자재|품목|부품|MATERIAL|ASSY)?\s*"
+            r"(?:였어|이었어|였어요|이었어요|이야|야|이에요|예요|입니다|맞아|맞아요)?"
+            r"[.!?。]*$",
+            "",
+            target,
+            flags=re.IGNORECASE,
+        ).strip()
+        target = re.sub(r"(?:을|를|은|는|이|가|의)$", "", target).strip()
+        if not target or self.item_codes(target):
+            return None
+        return target
+
     def extract_named_change_target(self, user_query: str) -> str | None:
         """Extract a business target name when no explicit source item code exists.
 
@@ -722,6 +754,16 @@ class DomainIntentRouter:
             r"\b(?:모델|제품|VERSION|MODEL)\s*(?:에서|의)?",
             " ",
             candidate,
+            flags=re.IGNORECASE,
+        )
+
+        # Removing a PLANT token from expressions such as ``P01에서`` leaves
+        # the Korean scope particle at the front.  It is grammar, not part of
+        # the target name.
+        candidate = re.sub(
+            r"^(?:에서|에서는|에서의|내에서|내의|내|의|에)\s*",
+            "",
+            candidate.strip(),
             flags=re.IGNORECASE,
         )
 

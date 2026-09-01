@@ -332,22 +332,38 @@ def render_agent_chat() -> None:
     _process_pending_plant_selection()
     render_chat_history()
 
-    user_input = st.chat_input(
-        "BOM, 자재 또는 제품에 대해 질문해 주세요."
-    )
+    # Submission is handled in two Streamlit runs.
+    #
+    # Run 1:
+    #   chat_input -> store the user message + pending request -> rerun
+    #
+    # Run 2:
+    #   history already contains the user message -> process the pending
+    #   request without rendering another chat input -> append Agent response
+    #
+    # This keeps the visible order stable even while Azure OpenAI is working:
+    #   previous Agent output -> user question -> spinner -> Agent response
+    #   -> next chat input.
+    user_input = str(st.session_state.pop("_pending_agent_user_input", "") or "").strip()
 
     if not user_input:
-        return
+        with st.container():
+            submitted = st.chat_input(
+                "BOM, 자재 또는 제품에 대해 질문해 주세요."
+            )
 
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": user_input,
-        }
-    )
+        if not submitted:
+            return
 
-    with st.chat_message("user"):
-        st.markdown(user_input)
+        user_input = str(submitted).strip()
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": user_input,
+            }
+        )
+        st.session_state["_pending_agent_user_input"] = user_input
+        st.rerun()
 
     # The UI PLANT gate runs before LangGraph, so it must honor the same
     # active-BOM inheritance rule as the Graph Gateway. Otherwise a valid
@@ -380,10 +396,9 @@ def render_agent_chat() -> None:
                 "id": str(uuid.uuid4()),
             }
             st.session_state.messages.append(plant_message)
-            with st.chat_message("assistant"):
-                st.markdown(plant_message["content"])
-                _render_plant_choice_block(plant_message)
-            return
+            # Re-render from Session State so the inline chat input is placed
+            # below the newly appended PLANT selection response.
+            st.rerun()
         if plant_error is not None:
             # MCP 조회 자체가 실패한 경우에만 기존 Agent fallback으로 넘긴다.
             pass
@@ -461,6 +476,11 @@ def render_agent_chat() -> None:
             "id": str(uuid.uuid4()),
         }
     )
+
+    # The input was rendered before the just-generated response on this run.
+    # Re-render once from Session State so the final stable order is always:
+    # user -> Agent output/panel -> chat input.
+    st.rerun()
 
 
 def main() -> None:

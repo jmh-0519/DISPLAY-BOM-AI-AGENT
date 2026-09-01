@@ -12,7 +12,9 @@ from rag.vector_store import ChromaVectorStore
 
 def build_index(*, knowledge_root: str = "knowledge"):
     settings = RagSettings.from_env()
-    corpus = KnowledgeCorpus.from_knowledge_root(knowledge_root)
+    corpus = KnowledgeCorpus.from_knowledge_root(
+        knowledge_root, include_evaluation=False
+    )
     service = RagIndexService(
         embedding_provider=AzureOpenAIEmbeddingClient(settings),
         vector_store=ChromaVectorStore(

@@ -157,6 +157,7 @@ class BomGraphGateway:
             user_query=user_query,
             active_bom_context=state.get("active_bom_context"),
             workflow_state=workflow_state,
+            previous_user_query=self.previous_user_query(state),
         ) is not None:
             return MACRO_ANALYZE
 
@@ -262,6 +263,19 @@ class BomGraphGateway:
         if product_id and plant_code:
             return {"product_id": product_id, "plant_code": plant_code}
         return {}
+
+    @staticmethod
+    def previous_user_query(state: BomAgentState) -> str | None:
+        seen_latest = False
+        for message in reversed(state.get("messages", [])):
+            if not isinstance(message, HumanMessage):
+                continue
+            if not seen_latest:
+                seen_latest = True
+                continue
+            value = str(message.content or "").strip()
+            return value or None
+        return None
 
     @staticmethod
     def last_user_query(state: BomAgentState) -> str:

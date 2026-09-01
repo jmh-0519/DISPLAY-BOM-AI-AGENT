@@ -46,12 +46,18 @@ def main() -> None:
     args = parser.parse_args()
 
     dataset = RagEvaluationDataset.load(args.dataset)
-    corpus = KnowledgeCorpus.from_knowledge_root(args.knowledge_root)
+    corpus = KnowledgeCorpus.from_knowledge_root(
+        args.knowledge_root, include_evaluation=True
+    )
     validate_dataset_against_corpus(dataset, corpus)
 
     settings = RagSettings.from_env()
     embedding_provider = AzureOpenAIEmbeddingClient(settings)
-    vector_store = ChromaVectorStore(settings.vector_store_path, settings.collection_name)
+    evaluation_store_path = settings.vector_store_path.parent / "evaluation" / "chroma"
+    evaluation_collection_name = f"{settings.collection_name}_evaluation"
+    vector_store = ChromaVectorStore(
+        evaluation_store_path, evaluation_collection_name
+    )
 
     chunker = StructureAwareChunker()
     expected_chunk_count = len(chunker.chunk_documents(corpus.active_documents))
@@ -66,6 +72,8 @@ def main() -> None:
         print(f"- documents: {build_result.document_count}")
         print(f"- chunks: {build_result.chunk_count}")
         print(f"- embedding_dimension: {build_result.embedding_dimension}")
+        print(f"- evaluation_store_path: {evaluation_store_path}")
+        print(f"- evaluation_collection: {evaluation_collection_name}")
     elif vector_store.count() != expected_chunk_count:
         raise RuntimeError(
             "RAG vector index is stale: "

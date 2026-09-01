@@ -22,6 +22,7 @@ class BomMacroDispatchNode:
             user_query=user_query,
             active_bom_context=state.get("active_bom_context"),
             workflow_state=state.get("design_change") or {},
+            previous_user_query=BomGraphGateway.previous_user_query(state),
         )
         if message is None:
             raise ValueError(

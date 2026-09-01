@@ -70,4 +70,6 @@ def test_knowledge_nodes_create_deterministic_tool_and_grounded_answer():
     final = nodes.finalize(final_state)
     answer = final["messages"][-1].content
     assert "참고 근거" in answer
-    assert "knowledge/reasons/EOL.md" in answer
+    assert "[설계변경 사유] 단종 대응" in answer
+    assert "knowledge/reasons/EOL.md" not in answer
+    assert ".md" not in answer
