@@ -1,0 +1,620 @@
+{
+  "dataset_id": "DISPLAY-BOM-RAG-RETRIEVAL-V1",
+  "version": "1.0",
+  "created_date": "2026-09-01",
+  "description": "Controlled semantic retrieval evaluation for managed Display BOM design-change knowledge.",
+  "gates": {
+    "hit_rate_at_5_min": 0.9,
+    "mean_recall_at_5_min": 0.9,
+    "mrr_min": 0.7,
+    "filter_accuracy_min": 0.95
+  },
+  "cases": [
+    {
+      "case_id": "GEN-01A",
+      "query": "DRIVE-IC 교체할 때 LVDS 인터페이스와 전압 같은 전기 호환은 뭘 확인해야 해?",
+      "expected_document_ids": [
+        "DG-001"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-01B",
+      "query": "드라이브 IC 대체품의 신호 레벨과 타이밍 조건 검토 기준",
+      "expected_document_ids": [
+        "DG-001"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "DESIGN_GUIDE",
+        "material_type": "DRIVE-IC"
+      }
+    },
+    {
+      "case_id": "GEN-02A",
+      "query": "편광판을 다른 자재로 바꿀 때 투과율과 색좌표 영향은 어떻게 검토해?",
+      "expected_document_ids": [
+        "DG-002"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-02B",
+      "query": "원가 절감용 POLARIZER 대체 시 광학 성능 확인 항목",
+      "expected_document_ids": [
+        "DG-002"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "DESIGN_GUIDE",
+        "material_type": "POLARIZER"
+      }
+    },
+    {
+      "case_id": "GEN-03A",
+      "query": "OLB FPCB 대체품의 핀 구성과 기구 간섭을 같이 확인하는 기준이 필요해",
+      "expected_document_ids": [
+        "DG-003"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-03B",
+      "query": "FPCB 공급중단 대체 시 피치와 굽힘 영역 검토",
+      "expected_document_ids": [
+        "DG-003"
+      ],
+      "category": "DESIGN_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "DESIGN_GUIDE",
+        "material_type": "OLB_FPCB"
+      }
+    },
+    {
+      "case_id": "GEN-04A",
+      "query": "EMI 차폐 테이프의 접촉저항, 접착력, 난연 같은 주요 사양을 알려줘",
+      "expected_document_ids": [
+        "MS-001"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-04B",
+      "query": "고객 요구로 EMI SHIELD TAPE 추가할 때 확인할 기술 스펙",
+      "expected_document_ids": [
+        "MS-001"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5,
+      "filters": {
+        "document_type": "MATERIAL_SPEC",
+        "material_type": "EMI_SHIELD_TAPE"
+      }
+    },
+    {
+      "case_id": "GEN-05A",
+      "query": "광학 접착제의 굴절률, 황변, 경화 조건과 규제 항목을 확인하고 싶어",
+      "expected_document_ids": [
+        "MS-002"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-05B",
+      "query": "규제 대응용 OPTICAL ADHESIVE 대체 시 확인할 사양",
+      "expected_document_ids": [
+        "MS-002"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5,
+      "filters": {
+        "document_type": "MATERIAL_SPEC",
+        "material_type": "OPTICAL_ADHESIVE"
+      }
+    },
+    {
+      "case_id": "GEN-06A",
+      "query": "실런트의 점도, 경화시간, 유효기간 같은 자재 사양이 뭐야?",
+      "expected_document_ids": [
+        "MS-003"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-06B",
+      "query": "장기재고 SEALANT를 쓰려면 보관과 유효기간을 어떻게 봐야 해?",
+      "expected_document_ids": [
+        "MS-003"
+      ],
+      "category": "MATERIAL_SPEC",
+      "top_k": 5,
+      "filters": {
+        "document_type": "MATERIAL_SPEC",
+        "material_type": "SEALANT"
+      }
+    },
+    {
+      "case_id": "GEN-07A",
+      "query": "설계변경 분석에서 후보 재검증하고 Request 만들기 전까지 절차를 설명해줘",
+      "expected_document_ids": [
+        "PG-001"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-07B",
+      "query": "Analysis Session에서 후보를 다시 검증하는 업무 순서",
+      "expected_document_ids": [
+        "PG-001"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "PROCESS_GUIDE",
+        "tag": "REVALIDATION"
+      }
+    },
+    {
+      "case_id": "GEN-08A",
+      "query": "공용 ASSY를 변경할 때 다른 모델 영향은 어떻게 확인해야 하지?",
+      "expected_document_ids": [
+        "PG-002"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-08B",
+      "query": "shared assembly 변경 전에 where-used와 영향 모델 확인 절차",
+      "expected_document_ids": [
+        "PG-002"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "PROCESS_GUIDE",
+        "tag": "COMMON_ASSY"
+      }
+    },
+    {
+      "case_id": "GEN-09A",
+      "query": "Production BOM 적용 중 실패하면 부분 반영하지 않고 되돌리는 절차가 뭐야?",
+      "expected_document_ids": [
+        "PG-003"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-09B",
+      "query": "최종 설계변경 적용의 transaction rollback 절차",
+      "expected_document_ids": [
+        "PG-003"
+      ],
+      "category": "PROCESS_GUIDE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "PROCESS_GUIDE",
+        "tag": "ROLLBACK"
+      }
+    },
+    {
+      "case_id": "GEN-10A",
+      "query": "분석안 확정부터 Request, Preview, 최종 BOM 반영까지 승인 단계가 어떻게 나뉘어?",
+      "expected_document_ids": [
+        "CP-001"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-10B",
+      "query": "Analysis 승인만으로 Production Apply를 하면 안 되는 정책",
+      "expected_document_ids": [
+        "CP-001"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_POLICY",
+        "tag": "APPROVAL"
+      }
+    },
+    {
+      "case_id": "GEN-11A",
+      "query": "CONDITIONAL이나 FAIL 후보에 점수와 순위를 공개하지 않는 정책 근거는?",
+      "expected_document_ids": [
+        "CP-002"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-11B",
+      "query": "FAIL 후보 적용 제한과 CONDITIONAL 추가 확인 정책",
+      "expected_document_ids": [
+        "CP-002"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_POLICY",
+        "tag": "CONDITIONAL"
+      }
+    },
+    {
+      "case_id": "GEN-12A",
+      "query": "공용화 변경에서 요청하지 않은 다른 모델까지 자동으로 범위를 넓혀도 돼?",
+      "expected_document_ids": [
+        "CP-003"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-12B",
+      "query": "COMMONIZATION 시 모델 범위와 공용 ASSY 동기화 정책",
+      "expected_document_ids": [
+        "CP-003"
+      ],
+      "category": "CHANGE_POLICY",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_POLICY",
+        "tag": "COMMONIZATION"
+      }
+    },
+    {
+      "case_id": "GEN-13A",
+      "query": "공급사가 생산 종료 통보했을 때 마지막 주문 시점과 대체품 자료는 뭘 받아야 해?",
+      "expected_document_ids": [
+        "ST-001"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-13B",
+      "query": "OLB FPCB 납품 중단 시 공급사 대응 자료",
+      "expected_document_ids": [
+        "ST-001"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5,
+      "filters": {
+        "document_type": "SUPPLIER_TECHNICAL",
+        "material_type": "OLB_FPCB"
+      }
+    },
+    {
+      "case_id": "GEN-14A",
+      "query": "납기가 계속 늦어질 때 리드타임 위험과 대체 공급 대응을 어떻게 검토해?",
+      "expected_document_ids": [
+        "ST-002"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-14B",
+      "query": "OLB ASSY 공급 리드타임 증가 대응 가이드",
+      "expected_document_ids": [
+        "ST-002"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5,
+      "filters": {
+        "document_type": "SUPPLIER_TECHNICAL",
+        "material_type": "OLB_ASSY"
+      }
+    },
+    {
+      "case_id": "GEN-15A",
+      "query": "대체 공급사를 승인하기 전에 공정능력과 품질자료를 어떻게 검증해?",
+      "expected_document_ids": [
+        "ST-003"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-15B",
+      "query": "alternate source qualification에서 신뢰성 자료와 품질 이력 확인",
+      "expected_document_ids": [
+        "ST-003"
+      ],
+      "category": "SUPPLIER_TECHNICAL",
+      "top_k": 5,
+      "filters": {
+        "document_type": "SUPPLIER_TECHNICAL",
+        "tag": "QUALIFICATION"
+      }
+    },
+    {
+      "case_id": "GEN-16A",
+      "query": "왜 조건부 후보에는 숫자 점수나 랭킹이 안 보여?",
+      "expected_document_ids": [
+        "FAQ-001"
+      ],
+      "category": "FAQ",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-16B",
+      "query": "FAIL 후보에 score와 rank를 표시하지 않는 이유",
+      "expected_document_ids": [
+        "FAQ-001"
+      ],
+      "category": "FAQ",
+      "top_k": 5,
+      "filters": {
+        "document_type": "FAQ",
+        "tag": "SCORE"
+      }
+    },
+    {
+      "case_id": "GEN-17A",
+      "query": "설계변경 분석을 시작하면 바로 Request 번호가 생성되는 거야?",
+      "expected_document_ids": [
+        "FAQ-002"
+      ],
+      "category": "FAQ",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-17B",
+      "query": "Analysis와 Design Change Request 차이가 뭐야?",
+      "expected_document_ids": [
+        "FAQ-002"
+      ],
+      "category": "FAQ",
+      "top_k": 5,
+      "filters": {
+        "document_type": "FAQ",
+        "tag": "ANALYSIS"
+      }
+    },
+    {
+      "case_id": "GEN-18A",
+      "query": "ADD 해달라고만 하고 추가할 자재를 안 말하면 전체 후보를 검색해야 해?",
+      "expected_document_ids": [
+        "FAQ-003"
+      ],
+      "category": "FAQ",
+      "top_k": 5
+    },
+    {
+      "case_id": "GEN-18B",
+      "query": "추가 대상 자재나 ASSY가 불명확한 ADD 요청 처리 방법",
+      "expected_document_ids": [
+        "FAQ-003"
+      ],
+      "category": "FAQ",
+      "top_k": 5,
+      "filters": {
+        "document_type": "FAQ",
+        "tag": "ADD"
+      }
+    },
+    {
+      "case_id": "REASON-01",
+      "query": "생산 종료나 단종 때문에 부품을 바꾸려는 사유는 어떤 코드로 관리해?",
+      "expected_document_ids": [
+        "REASON:EOL"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5
+    },
+    {
+      "case_id": "REASON-02",
+      "query": "공급사가 더 이상 납품하지 않는 상황의 설계변경 사유를 찾고 있어",
+      "expected_document_ids": [
+        "REASON:SUPPLIER_STOP"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_REASON"
+      }
+    },
+    {
+      "case_id": "REASON-03",
+      "query": "조달 기간이 너무 길어서 납기를 개선하려는 변경 사유는 뭐야?",
+      "expected_document_ids": [
+        "REASON:LEAD_TIME"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5
+    },
+    {
+      "case_id": "REASON-04",
+      "query": "원가를 낮추기 위해 대체 자재를 검토하는 변경 사유",
+      "expected_document_ids": [
+        "REASON:COST"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_REASON"
+      }
+    },
+    {
+      "case_id": "REASON-05",
+      "query": "과잉재고나 장기재고 문제를 해결하려는 설계변경 사유",
+      "expected_document_ids": [
+        "REASON:INVENTORY"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5
+    },
+    {
+      "case_id": "REASON-06",
+      "query": "불량과 품질 문제 때문에 개선하려는 변경 사유를 알려줘",
+      "expected_document_ids": [
+        "REASON:QUALITY"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_REASON"
+      }
+    },
+    {
+      "case_id": "REASON-07",
+      "query": "고객 요구 사양 때문에 자재를 추가하거나 변경하는 사유",
+      "expected_document_ids": [
+        "REASON:CUSTOMER_SPEC"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5
+    },
+    {
+      "case_id": "REASON-08",
+      "query": "환경 규제나 제한물질 대응 때문에 바꾸는 사유는?",
+      "expected_document_ids": [
+        "REASON:REGULATION"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_REASON"
+      }
+    },
+    {
+      "case_id": "REASON-09",
+      "query": "여러 모델에서 같은 부품을 쓰도록 공용화하는 변경 사유",
+      "expected_document_ids": [
+        "REASON:COMMONIZATION"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5
+    },
+    {
+      "case_id": "REASON-10",
+      "query": "특정 표준 사유가 없고 사용자가 직접 요청한 일반 변경은 어떻게 분류해?",
+      "expected_document_ids": [
+        "REASON:USER_REQUEST"
+      ],
+      "category": "CHANGE_REASON",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_REASON"
+      }
+    },
+    {
+      "case_id": "RULE-01",
+      "query": "단종된 DRIVE-IC를 교체할 때 후보 적합성을 보는 Rule 근거를 찾아줘",
+      "expected_document_ids": [
+        "RULE:DC-R-001:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_RULE"
+      }
+    },
+    {
+      "case_id": "RULE-02",
+      "query": "공급 중단된 OLB FPCB 대체 후보 평가 기준 Rule",
+      "expected_document_ids": [
+        "RULE:DC-R-002:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5
+    },
+    {
+      "case_id": "RULE-03",
+      "query": "납기 개선을 위한 OLB ASSY 후보 적합성 규칙이 필요해",
+      "expected_document_ids": [
+        "RULE:DC-R-003:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_RULE"
+      }
+    },
+    {
+      "case_id": "RULE-04",
+      "query": "원가 절감을 위해 POLARIZER를 바꿀 때 적용되는 평가 Rule",
+      "expected_document_ids": [
+        "RULE:DC-R-004:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5
+    },
+    {
+      "case_id": "RULE-05",
+      "query": "재고 문제 때문에 SEALANT 대체를 검토할 때 후보 평가 기준",
+      "expected_document_ids": [
+        "RULE:DC-R-005:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_RULE"
+      }
+    },
+    {
+      "case_id": "RULE-06",
+      "query": "품질 개선 목적으로 CF ASSY를 바꿀 때 적용되는 Rule",
+      "expected_document_ids": [
+        "RULE:DC-R-006:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5
+    },
+    {
+      "case_id": "RULE-07",
+      "query": "고객 사양 대응으로 EMI SHIELD TAPE를 추가할 때 적합성 Rule",
+      "expected_document_ids": [
+        "RULE:DC-R-007:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_RULE"
+      }
+    },
+    {
+      "case_id": "RULE-08",
+      "query": "규제 대응용 OPTICAL ADHESIVE 변경 후보의 평가 규칙",
+      "expected_document_ids": [
+        "RULE:DC-R-008:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5
+    },
+    {
+      "case_id": "RULE-09",
+      "query": "BRACKET 자재 공용화를 위한 후보 적합성 기준 Rule",
+      "expected_document_ids": [
+        "RULE:DC-R-009:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5,
+      "filters": {
+        "document_type": "CHANGE_RULE"
+      }
+    },
+    {
+      "case_id": "RULE-10",
+      "query": "OLB ASSY 공용화를 검토할 때 적용하는 적합성 규칙",
+      "expected_document_ids": [
+        "RULE:DC-R-010:R1"
+      ],
+      "category": "CHANGE_RULE",
+      "top_k": 5
+    }
+  ]
+}
