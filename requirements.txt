@@ -10,3 +10,4 @@ python-docx
 openpyxl
 langfuse>=4,<5
 pypdf
+chromadb>=1,<2
