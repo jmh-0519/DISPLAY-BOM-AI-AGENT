@@ -93,13 +93,16 @@ class BomTextToSqlPathNodes:
         lines = [
             f"조회 결과입니다. 총 {result.row_count}건입니다.",
             "",
-            "| " + " | ".join(cls._escape(column) for column in columns) + " |",
+            "| " + " | ".join(cls._escape_text(column) for column in columns) + " |",
             "| " + " | ".join("---" for _ in columns) + " |",
         ]
         for row in visible_rows:
             lines.append(
                 "| "
-                + " | ".join(cls._escape(row.get(column)) for column in columns)
+                + " | ".join(
+                    cls._format_value(column, row.get(column))
+                    for column in columns
+                )
                 + " |"
             )
 
@@ -116,10 +119,39 @@ class BomTextToSqlPathNodes:
             ])
         return "\n".join(lines)
 
-    @staticmethod
-    def _escape(value: Any) -> str:
+    @classmethod
+    def _format_value(cls, column: str, value: Any) -> str:
+        """Format result values for UI only; never alter SQL or DB values."""
         if value is None:
             return "-"
+
+        column_name = str(column or "").strip().lower()
+
+        if isinstance(value, bool):
+            return str(value)
+
+        if isinstance(value, int):
+            return f"{value:,}"
+
+        if isinstance(value, float):
+            if value.is_integer():
+                return f"{int(value):,}"
+
+            # Monetary/cost metrics are displayed to two decimal places.
+            if any(
+                marker in column_name
+                for marker in ("price", "cost", "amount", "단가", "금액", "원가")
+            ):
+                return f"{value:,.2f}"
+
+            # Other analytical decimals keep useful precision without exposing
+            # floating-point noise in the UI.
+            return f"{value:,.4f}".rstrip("0").rstrip(".")
+
+        return cls._escape_text(value)
+
+    @staticmethod
+    def _escape_text(value: Any) -> str:
         return (
             str(value)
             .replace("|", "\\|")

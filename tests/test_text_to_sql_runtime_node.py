@@ -24,7 +24,7 @@ def test_runtime_node_formats_sql_result_without_second_llm():
             columns=("supplier_code", "avg_unit_price"),
             rows=(
                 {"supplier_code": "SUP-101", "avg_unit_price": 120.5},
-                {"supplier_code": "SUP-102", "avg_unit_price": 130.0},
+                {"supplier_code": "SUP-102", "avg_unit_price": 1844.9691011235955},
             ),
             row_count=2,
             truncated=False,
@@ -43,6 +43,9 @@ def test_runtime_node_formats_sql_result_without_second_llm():
     assert "총 2건" in answer
     assert "SUP-101" in answer
     assert "avg_unit_price" in answer
+    assert "120.50" in answer
+    assert "1,844.97" in answer
+    assert "1844.9691011235955" not in answer
     assert "SELECT" not in answer
 
 
@@ -62,3 +65,9 @@ def test_runtime_node_returns_user_safe_message_for_unsupported_result():
         "user_query": "공급사별 평균 자재 단가를 알려줘",
     })
     assert "지원하지 않습니다" in state["messages"][-1].content
+
+
+def test_runtime_formatter_keeps_non_money_decimal_precision_without_float_noise():
+    assert BomTextToSqlPathNodes._format_value("quality_score", 97.6600000001) == "97.66"
+    assert BomTextToSqlPathNodes._format_value("bom_row_count", 118.0) == "118"
+    assert BomTextToSqlPathNodes._format_value("total_plan_qty", 12500) == "12,500"
