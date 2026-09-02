@@ -24,6 +24,10 @@ from rag.query_router import (
     DEFAULT_KNOWLEDGE_QUERY_ROUTER,
     KnowledgeQueryRouter,
 )
+from text_to_sql.query_router import (
+    DEFAULT_TEXT_TO_SQL_QUERY_ROUTER,
+    TextToSqlQueryRouter,
+)
 
 
 FAST_CHAT = "fast_chat"
@@ -31,6 +35,7 @@ FAST_BOM_READ = "fast_bom_read"
 FAST_WHERE_USED = "fast_where_used"
 FAST_CURRENT_BOM_QUANTITY = "fast_current_bom_quantity"
 FAST_KNOWLEDGE = "fast_knowledge"
+FAST_TEXT_TO_SQL = "fast_text_to_sql"
 AGENT_PATH = "agent"
 
 
@@ -56,10 +61,14 @@ class BomGraphGateway:
         *,
         router: DomainIntentRouter | None = None,
         knowledge_router: KnowledgeQueryRouter | None = None,
+        text_to_sql_router: TextToSqlQueryRouter | None = None,
         design_change_active_steps: Iterable[str] = (),
     ) -> None:
         self.router = router or DEFAULT_DOMAIN_INTENT_ROUTER
         self.knowledge_router = knowledge_router or DEFAULT_KNOWLEDGE_QUERY_ROUTER
+        self.text_to_sql_router = (
+            text_to_sql_router or DEFAULT_TEXT_TO_SQL_QUERY_ROUTER
+        )
         self.design_change_active_steps = frozenset(design_change_active_steps)
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
             self.router
@@ -212,6 +221,13 @@ class BomGraphGateway:
             "DESIGN_CHANGE_RECOMMENDATION",
         }:
             return AGENT_PATH
+
+        # Text-to-SQL may only claim a request that the existing deterministic
+        # domain router has already left as LLM_FALLBACK.
+        if decision.intent == "LLM_FALLBACK":
+            analytics = self.text_to_sql_router.route(user_query)
+            if analytics.eligible:
+                return FAST_TEXT_TO_SQL
 
         if decision.intent == "CHAT" and decision.chat_response:
             return FAST_CHAT

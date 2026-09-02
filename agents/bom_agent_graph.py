@@ -30,6 +30,7 @@ from agents.bom_graph_gateway import (
     FAST_CHAT,
     FAST_CURRENT_BOM_QUANTITY,
     FAST_KNOWLEDGE,
+    FAST_TEXT_TO_SQL,
     FAST_WHERE_USED,
     BomGraphGateway,
 )
@@ -38,6 +39,7 @@ from agents.bom_knowledge_nodes import (
     BomKnowledgePathNodes,
     is_knowledge_tool_result,
 )
+from agents.bom_text_to_sql_nodes import BomTextToSqlPathNodes
 from agents.bom_fast_path_nodes import (
     FAST_READ_FINALIZE,
     BomFastPathNodes,
@@ -114,6 +116,7 @@ class BomAgentGraph:
         )
         self.fast_path_nodes = BomFastPathNodes()
         self.knowledge_path_nodes = BomKnowledgePathNodes(client=client)
+        self.text_to_sql_path_nodes = BomTextToSqlPathNodes(client=client)
         self.macro_dispatch_node = BomMacroDispatchNode(
             self.gateway.analysis_macro_dispatch
         )
@@ -157,6 +160,13 @@ class BomAgentGraph:
         workflow.add_node(
             FAST_KNOWLEDGE,
             self._observed_node(FAST_KNOWLEDGE, self.knowledge_path_nodes.query),
+        )
+        workflow.add_node(
+            FAST_TEXT_TO_SQL,
+            self._observed_node(
+                FAST_TEXT_TO_SQL,
+                self.text_to_sql_path_nodes.query,
+            ),
         )
         workflow.add_node(
             KNOWLEDGE_FINALIZE,
@@ -203,12 +213,14 @@ class BomAgentGraph:
                 FAST_WHERE_USED: FAST_WHERE_USED,
                 FAST_CURRENT_BOM_QUANTITY: FAST_CURRENT_BOM_QUANTITY,
                 FAST_KNOWLEDGE: FAST_KNOWLEDGE,
+                FAST_TEXT_TO_SQL: FAST_TEXT_TO_SQL,
                 MACRO_ANALYZE: MACRO_ANALYZE,
                 AGENT_PATH: AGENT,
             },
         )
 
         workflow.add_edge(FAST_CHAT, END)
+        workflow.add_edge(FAST_TEXT_TO_SQL, END)
         workflow.add_edge(FAST_KNOWLEDGE, MCP_TOOLS)
         workflow.add_edge(FAST_BOM_READ, MCP_TOOLS)
         workflow.add_edge(FAST_WHERE_USED, MCP_TOOLS)
