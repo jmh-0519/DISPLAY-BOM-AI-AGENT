@@ -33,7 +33,7 @@ def verify(database_path: Path) -> dict[str, int]:
         actual = {
             "business_versions": connection.execute(
                 "SELECT COUNT(*) FROM version_master "
-                "WHERE specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'"
+                "WHERE dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'"
             ).fetchone()[0],
             "business_candidates": connection.execute(
                 f"SELECT COUNT(*) FROM item_master WHERE {CANDIDATE_FILTER}"
@@ -70,7 +70,7 @@ def verify(database_path: Path) -> dict[str, int]:
                      SELECT b.bom_id,b.plant_code,b.parent_item_code,b.child_item_code
                      FROM bom_master b
                      JOIN version_master v ON v.version_code=b.parent_item_code
-                     WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
+                     WHERE v.dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'
                      UNION ALL
                      SELECT b.bom_id,b.plant_code,b.parent_item_code,b.child_item_code
                      FROM production_tree t
@@ -162,7 +162,7 @@ def verify(database_path: Path) -> dict[str, int]:
             """SELECT v.version_code, GROUP_CONCAT(DISTINCT b.plant_code) AS plants
                FROM version_master v
                JOIN bom_master b ON b.parent_item_code=v.version_code
-               WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
+               WHERE v.dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'
                  AND v.version_code <> 'LTA750HR12-002'
                GROUP BY v.version_code
                ORDER BY v.version_code"""

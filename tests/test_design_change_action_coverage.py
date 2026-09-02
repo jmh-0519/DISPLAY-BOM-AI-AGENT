@@ -56,7 +56,8 @@ def _add_rule_context(database: SQLiteDatabase) -> dict:
 def _action_context(database: SQLiteDatabase, action_type: str, target_type: str = "MATERIAL") -> dict:
     """Find a reachable active BOM edge with production demand and allowed reason."""
     repository = SQLiteDesignChangeRepository(database)
-    today = date.today().isoformat()
+    from scripts.seed_design_change_business_sample import AS_OF_DATE
+    today = AS_OF_DATE
     item_type = "ASSEMBLY" if target_type == "ASSY" else "MATERIAL"
     with database.connection() as connection:
         reason = connection.execute(

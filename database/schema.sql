@@ -34,6 +34,12 @@ INSERT OR IGNORE INTO schema_versions(version, description)
 VALUES (8, 'Clean Core schema semantics and metadata cleanup');
 UPDATE schema_versions SET description='Clean Core schema semantics and metadata cleanup' WHERE version=8;
 
+INSERT OR IGNORE INTO schema_versions(version, description)
+VALUES (9, 'Normalized item subtype authority and typed version metadata');
+UPDATE schema_versions
+SET description='Normalized item subtype authority and typed version metadata'
+WHERE version=9;
+
 CREATE TABLE IF NOT EXISTS plants (
   plant_code TEXT PRIMARY KEY,
   plant_name TEXT NOT NULL UNIQUE,
@@ -77,11 +83,15 @@ CREATE TABLE IF NOT EXISTS item_master (
 CREATE TABLE IF NOT EXISTS version_master (
   version_code TEXT PRIMARY KEY,
   version_no TEXT,
-  route_code TEXT,
-  specification TEXT,
-  active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  product_name TEXT,
+  product_type TEXT,
+  screen_size_inch REAL CHECK(screen_size_inch IS NULL OR screen_size_inch > 0),
+  resolution TEXT,
+  refresh_hz REAL CHECK(refresh_hz IS NULL OR refresh_hz > 0),
+  market TEXT,
+  legacy_product_id TEXT,
+  material_specification TEXT,
+  dataset_tag TEXT,
   FOREIGN KEY(version_code) REFERENCES item_master(item_code)
 );
 
@@ -92,24 +102,17 @@ CREATE TABLE IF NOT EXISTS assembly_master (
   usage_type TEXT NOT NULL DEFAULT 'DEDICATED'
     CHECK(usage_type IN ('COMMON','DEDICATED')),
   specification TEXT,
-  active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(assembly_code) REFERENCES item_master(item_code)
 );
 
 CREATE TABLE IF NOT EXISTS material_master (
   material_code TEXT PRIMARY KEY,
+  -- v9 compatibility mirror. item_master.item_name is the semantic authority.
   material_name TEXT NOT NULL,
   material_group TEXT,
   unit TEXT,
-  supplier_code TEXT,
   specification TEXT,
-  active_yn TEXT NOT NULL DEFAULT 'Y' CHECK(active_yn IN ('Y','N')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(material_code) REFERENCES item_master(item_code),
-  FOREIGN KEY(supplier_code) REFERENCES supplier_master(supplier_code)
+  FOREIGN KEY(material_code) REFERENCES item_master(item_code)
 );
 
 CREATE TABLE IF NOT EXISTS location_master (
@@ -197,6 +200,12 @@ CREATE INDEX IF NOT EXISTS ix_item_name_type
   ON item_master(item_name, item_type);
 CREATE INDEX IF NOT EXISTS ix_material_name
   ON material_master(material_name);
+CREATE INDEX IF NOT EXISTS ix_material_group
+  ON material_master(material_group);
+CREATE INDEX IF NOT EXISTS ix_version_profile
+  ON version_master(screen_size_inch,resolution,refresh_hz,market);
+CREATE INDEX IF NOT EXISTS ix_version_legacy_product_id
+  ON version_master(legacy_product_id);
 CREATE INDEX IF NOT EXISTS ix_bom_parent_dates
   ON bom_master(plant_code, parent_item_code, status, valid_from, valid_to);
 CREATE INDEX IF NOT EXISTS ix_bom_child_dates
@@ -261,6 +270,38 @@ FOR EACH ROW
 WHEN COALESCE((SELECT item_type FROM item_master WHERE item_code = NEW.material_code), '') <> 'MATERIAL'
 BEGIN
   SELECT RAISE(ABORT, 'material_master requires MATERIAL item');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_material_name_matches_item_insert
+BEFORE INSERT ON material_master
+FOR EACH ROW
+WHEN COALESCE(
+       (SELECT item_name FROM item_master WHERE item_code=NEW.material_code),
+       ''
+     ) <> NEW.material_name
+BEGIN
+  SELECT RAISE(ABORT, 'material_master.material_name must match item_master.item_name');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_material_name_matches_item_update
+BEFORE UPDATE OF material_name ON material_master
+FOR EACH ROW
+WHEN COALESCE(
+       (SELECT item_name FROM item_master WHERE item_code=NEW.material_code),
+       ''
+     ) <> NEW.material_name
+BEGIN
+  SELECT RAISE(ABORT, 'material_master.material_name must match item_master.item_name');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_item_material_name_sync_update
+AFTER UPDATE OF item_name ON item_master
+FOR EACH ROW
+WHEN NEW.item_type='MATERIAL'
+BEGIN
+  UPDATE material_master
+     SET material_name=NEW.item_name
+   WHERE material_code=NEW.item_code;
 END;
 
 -- Item properties and registered substitution relations

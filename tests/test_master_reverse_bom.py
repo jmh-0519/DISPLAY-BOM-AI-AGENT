@@ -59,7 +59,7 @@ def test_reverse_bom_unused_material_returns_business_message(monkeypatch, tmp_p
             (material_code, "MATERIAL", "UNUSED MATERIAL", "TEST ONLY"),
         )
         con.execute(
-            "INSERT INTO material_master(material_code,material_name,material_group,unit,active_yn) VALUES(?,?,?,?, 'Y')",
+            "INSERT INTO material_master(material_code,material_name,material_group,unit) VALUES(?,?,?,?)",
             (material_code, "UNUSED MATERIAL", "TEST", "EA"),
         )
         con.commit()

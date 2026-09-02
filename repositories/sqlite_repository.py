@@ -126,7 +126,7 @@ class SQLiteBomRepository:
                 SELECT v.version_code
                 FROM version_master v
                 WHERE UPPER(v.version_code)=UPPER(?)
-                   OR UPPER(COALESCE(json_extract(v.specification,'$.legacy_product_id'),''))=UPPER(?)
+                   OR UPPER(COALESCE(v.legacy_product_id,''))=UPPER(?)
                 LIMIT 1
                 """,
                 (value, value),
@@ -350,7 +350,13 @@ class SQLiteBomRepository:
         with self.database.connection() as con:
             row = con.execute(
                 """SELECT i.item_code,i.item_type,i.item_name,i.description,i.active_yn,
-                          v.version_no,v.route_code,v.specification,v.active_yn AS version_active_yn
+                          v.version_no,
+                          NULL AS route_code,
+                          COALESCE(v.material_specification,i.description) AS specification,
+                          v.product_name,v.product_type,v.screen_size_inch,
+                          v.resolution,v.refresh_hz,v.market,v.legacy_product_id,
+                          v.material_specification,v.dataset_tag,
+                          i.active_yn AS version_active_yn
                    FROM item_master i
                    JOIN version_master v ON v.version_code=i.item_code
                    WHERE UPPER(i.item_code)=UPPER(?)""",
@@ -362,8 +368,20 @@ class SQLiteBomRepository:
         with self.database.connection() as con:
             row = con.execute(
                 """SELECT i.item_code,i.item_type,i.item_name,i.description,i.active_yn,
-                          m.material_name,m.material_group,m.unit,m.supplier_code,m.specification,
-                          m.active_yn AS material_active_yn
+                          i.item_name AS material_name,m.material_group,m.unit,m.specification,
+                          (
+                            SELECT si.supplier_code
+                            FROM supplier_items si
+                            JOIN supplier_master s ON s.supplier_code=si.supplier_code
+                            WHERE si.item_code=i.item_code
+                              AND s.active_yn='Y'
+                              AND si.valid_from<=date('now')
+                              AND (si.valid_to IS NULL OR si.valid_to>=date('now'))
+                            ORDER BY si.primary_yn DESC,si.stability_score DESC,
+                                     si.supplier_item_id
+                            LIMIT 1
+                          ) AS supplier_code,
+                          i.active_yn AS material_active_yn
                    FROM item_master i
                    JOIN material_master m ON m.material_code=i.item_code
                    WHERE UPPER(i.item_code)=UPPER(?)""",
@@ -374,7 +392,8 @@ class SQLiteBomRepository:
         with self.database.connection() as con:
             row = con.execute(
                 """SELECT i.item_code,i.item_type,i.item_name,i.description,i.active_yn,
-                          a.process_name,a.usage_type,a.specification,a.active_yn AS assembly_active_yn
+                          a.process_name,a.usage_type,a.specification,
+                          i.active_yn AS assembly_active_yn
                    FROM item_master i
                    JOIN assembly_master a ON a.assembly_code=i.item_code
                    WHERE UPPER(i.item_code)=UPPER(?)""",

@@ -227,15 +227,32 @@ def _upsert_item(connection, code: str, item_type: str, name: str, description: 
 
 def _upsert_version(connection, scenario: dict, version_code: str, suffix: str = "001") -> None:
     spec = dict(scenario["spec"])
-    spec.update({"product_name": scenario["model_name"], "product_type": "LCD MODULE", "test_dataset": "DESIGN_CHANGE_BUSINESS_SAMPLE"})
     _upsert_item(connection, version_code, "VERSION", "FA", scenario["model_name"])
     connection.execute(
-        """INSERT INTO version_master(version_code,version_no,specification,active_yn)
-           VALUES(?,?,?,'Y')
+        """INSERT INTO version_master(
+             version_code,version_no,product_name,product_type,
+             screen_size_inch,resolution,refresh_hz,market,dataset_tag)
+           VALUES(?,?,?,?,?,?,?,?,?)
            ON CONFLICT(version_code) DO UPDATE SET
-             version_no=excluded.version_no,specification=excluded.specification,
-             active_yn='Y',updated_at=CURRENT_TIMESTAMP""",
-        (version_code, f"T{scenario['no']:02d}.{suffix}", json.dumps(spec, ensure_ascii=False)),
+             version_no=excluded.version_no,
+             product_name=excluded.product_name,
+             product_type=excluded.product_type,
+             screen_size_inch=excluded.screen_size_inch,
+             resolution=excluded.resolution,
+             refresh_hz=excluded.refresh_hz,
+             market=excluded.market,
+             dataset_tag=excluded.dataset_tag""",
+        (
+            version_code,
+            f"T{scenario['no']:02d}.{suffix}",
+            scenario["model_name"],
+            "LCD MODULE",
+            spec.get("screen_size_inch"),
+            spec.get("resolution"),
+            spec.get("refresh_hz"),
+            spec.get("market"),
+            "DESIGN_CHANGE_BUSINESS_SAMPLE",
+        ),
     )
 
 
@@ -255,11 +272,11 @@ def _upsert_assembly(
     description = description or process_name
     _upsert_item(connection, code, "ASSEMBLY", process_name, description)
     connection.execute(
-        """INSERT INTO assembly_master(assembly_code,process_name,usage_type,specification,active_yn)
-           VALUES(?,?,?,?, 'Y')
+        """INSERT INTO assembly_master(assembly_code,process_name,usage_type,specification)
+           VALUES(?,?,?,?)
            ON CONFLICT(assembly_code) DO UPDATE SET
              process_name=excluded.process_name,usage_type=excluded.usage_type,
-             specification=excluded.specification,active_yn='Y',updated_at=CURRENT_TIMESTAMP""",
+             specification=excluded.specification""",
         (code, process_name, usage_type, description),
     )
 
@@ -281,11 +298,11 @@ def _upsert_material(connection, code: str, name: str, group_name: str) -> None:
     description = f"{group_name}/{name}/DESIGN CHANGE BUSINESS SAMPLE"
     _upsert_item(connection, code, "MATERIAL", name, description)
     connection.execute(
-        """INSERT INTO material_master(material_code,material_name,material_group,unit,specification,active_yn)
-           VALUES(?,?,?,'EA',?,'Y')
+        """INSERT INTO material_master(material_code,material_name,material_group,unit,specification)
+           VALUES(?,?,?,'EA',?)
            ON CONFLICT(material_code) DO UPDATE SET
              material_name=excluded.material_name,material_group=excluded.material_group,
-             unit='EA',specification=excluded.specification,active_yn='Y',updated_at=CURRENT_TIMESTAMP""",
+             unit='EA',specification=excluded.specification""",
         (code, name, group_name, description),
     )
 
@@ -354,7 +371,7 @@ def _remove_existing_business_sample(connection) -> None:
         row[0]
         for row in connection.execute(
             "SELECT version_code FROM version_master "
-            "WHERE specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'"
+            "WHERE dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'"
         ).fetchall()
     ]
     if not business_versions:
@@ -630,7 +647,7 @@ def _seed_baseline_operational_readiness(
         """SELECT i.item_code,i.item_name,COALESCE(i.description,'') AS description
            FROM item_master i
            JOIN material_master m ON m.material_code=i.item_code
-           WHERE i.item_type='MATERIAL' AND i.active_yn='Y' AND m.active_yn='Y'
+           WHERE i.item_type='MATERIAL' AND i.active_yn='Y'
            ORDER BY i.item_name,COALESCE(i.description,''),i.item_code"""
     ).fetchall()
     grouped: dict[tuple[str, str], list] = {}

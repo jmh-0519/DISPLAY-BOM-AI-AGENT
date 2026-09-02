@@ -64,10 +64,10 @@ DEFAULT_ALLOWED_FUNCTIONS = frozenset(
 TABLE_DESCRIPTIONS = {
     "plants": "PLANT master: plant code, name, country and active status.",
     "supplier_master": "Supplier master including specialty, grade and quality score.",
-    "item_master": "Unified VERSION/ASSEMBLY/MATERIAL item master.",
-    "version_master": "Display product/version master keyed by version_code.",
+    "item_master": "Global VERSION/ASSEMBLY/MATERIAL item identity and lifecycle registry; active_yn lives here.",
+    "version_master": "Display VERSION/FA business attributes: product name/type, screen size, resolution, refresh rate, market and legacy product id.",
     "assembly_master": "ASSY master with process_name and COMMON/DEDICATED usage type.",
-    "material_master": "Material master with material group, unit, specification and primary supplier code.",
+    "material_master": "MATERIAL subtype attributes: material group, unit and specification. Lifecycle comes from item_master; suppliers come from supplier_items.",
     "location_master": "BOM location master such as TOP/BOTTOM/LEFT/RIGHT.",
     "bom_master": "Plant-scoped effective-dated E-BOM parent-child rows and quantities.",
     "item_attribute_values": "Effective-dated technical/specification attributes for items.",

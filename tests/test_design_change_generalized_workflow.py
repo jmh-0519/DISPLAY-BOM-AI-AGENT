@@ -29,8 +29,7 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
             JOIN material_master m ON m.material_code=b.child_item_code
             WHERE i.item_type='MATERIAL'
               AND i.active_yn='Y'
-              AND m.active_yn='Y'
-              AND b.status='ACTIVE'
+                            AND b.status='ACTIVE'
               AND NOT EXISTS (
                 SELECT 1 FROM substitution_relations r
                 WHERE r.source_item_code=b.child_item_code AND r.active_yn='Y'
@@ -42,7 +41,7 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
                   AND m2.material_name=m.material_name
                   AND COALESCE(m2.material_group,'')=COALESCE(m.material_group,'')
                   AND COALESCE(m2.specification,'')=COALESCE(m.specification,'')
-                  AND m2.active_yn='Y' AND i2.active_yn='Y'
+                  AND i2.active_yn='Y'
               )
             ORDER BY b.plant_code,b.child_item_code
             """
@@ -156,7 +155,7 @@ def test_candidate_pool_is_derived_from_each_selected_source_not_a_scenario_mapp
             SELECT m.material_code
             FROM material_master m
             JOIN item_master i ON i.item_code=m.material_code
-            WHERE m.active_yn='Y' AND i.active_yn='Y'
+            WHERE i.active_yn='Y'
               AND EXISTS (
                 SELECT 1 FROM material_master m2
                 JOIN item_master i2 ON i2.item_code=m2.material_code
@@ -164,7 +163,7 @@ def test_candidate_pool_is_derived_from_each_selected_source_not_a_scenario_mapp
                   AND m2.material_name=m.material_name
                   AND COALESCE(m2.material_group,'')=COALESCE(m.material_group,'')
                   AND COALESCE(m2.specification,'')=COALESCE(m.specification,'')
-                  AND m2.active_yn='Y' AND i2.active_yn='Y'
+                  AND i2.active_yn='Y'
               )
             GROUP BY m.material_code
             ORDER BY m.material_name,m.material_code

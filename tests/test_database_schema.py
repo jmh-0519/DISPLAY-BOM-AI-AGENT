@@ -65,9 +65,9 @@ def test_transaction_commits_fa_version(database):
     with database.transaction() as connection:
         _insert_item(connection, "FA10000001", "VERSION", "FA")
         connection.execute(
-            "INSERT INTO version_master(version_code,version_no,route_code) "
+            "INSERT INTO version_master(version_code,version_no,legacy_product_id) "
             "VALUES(?,?,?)",
-            ("FA10000001", "01", "ROUTE-A"),
+            ("FA10000001", "01", "LEGACY-FA10000001"),
         )
 
     with database.connection() as connection:

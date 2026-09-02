@@ -27,8 +27,7 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
             FROM bom_master b
             JOIN item_master i ON i.item_code=b.child_item_code
             JOIN material_master m ON m.material_code=b.child_item_code
-            WHERE i.item_type='MATERIAL' AND i.active_yn='Y' AND m.active_yn='Y'
-              AND b.status='ACTIVE'
+            WHERE i.item_type='MATERIAL' AND i.active_yn='Y'               AND b.status='ACTIVE'
               AND NOT EXISTS (
                 SELECT 1 FROM substitution_relations r
                 WHERE r.source_item_code=b.child_item_code AND r.active_yn='Y'
@@ -40,7 +39,7 @@ def find_dynamic_material_case(database: SQLiteDatabase) -> dict:
                   AND m2.material_name=m.material_name
                   AND COALESCE(m2.material_group,'')=COALESCE(m.material_group,'')
                   AND COALESCE(m2.specification,'')=COALESCE(m.specification,'')
-                  AND m2.active_yn='Y' AND i2.active_yn='Y'
+                  AND i2.active_yn='Y'
               )
             ORDER BY b.plant_code,b.child_item_code
             """

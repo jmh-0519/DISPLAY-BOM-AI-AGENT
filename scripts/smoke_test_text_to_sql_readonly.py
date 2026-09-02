@@ -8,11 +8,12 @@ def main() -> None:
     executor = ReadOnlySqlExecutor(sqlite_database_path())
     sql = """
     SELECT
-        COALESCE(material_group, '(UNSPECIFIED)') AS material_group,
+        COALESCE(m.material_group, '(UNSPECIFIED)') AS material_group,
         COUNT(*) AS material_count
-    FROM material_master
-    WHERE active_yn = 'Y'
-    GROUP BY COALESCE(material_group, '(UNSPECIFIED)')
+    FROM material_master m
+    JOIN item_master i ON i.item_code=m.material_code
+    WHERE i.item_type='MATERIAL' AND i.active_yn='Y'
+    GROUP BY COALESCE(m.material_group, '(UNSPECIFIED)')
     ORDER BY material_count DESC, material_group
     LIMIT 10
     """.strip()

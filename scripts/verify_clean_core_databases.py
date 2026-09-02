@@ -87,7 +87,7 @@ def verify_seed_baseline(path: str | Path) -> dict[str, object]:
 
         sample_versions = connection.execute(
             "SELECT COUNT(*) FROM version_master "
-            "WHERE specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'"
+            "WHERE dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'"
         ).fetchone()[0]
         if sample_versions:
             raise RuntimeError(

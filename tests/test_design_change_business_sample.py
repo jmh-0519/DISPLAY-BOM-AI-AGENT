@@ -183,7 +183,7 @@ def test_business_verify_allows_effective_dated_runtime_bom_history_growth(tmp_p
             SELECT v.version_code,p.plant_code
             FROM version_master v
             JOIN production_plans p ON p.version_code=v.version_code
-            WHERE v.specification LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
+            WHERE v.dataset_tag='DESIGN_CHANGE_BUSINESS_SAMPLE'
             ORDER BY v.version_code,p.plant_code
             LIMIT 1
             """

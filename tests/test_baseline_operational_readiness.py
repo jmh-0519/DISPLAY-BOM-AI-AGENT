@@ -28,7 +28,7 @@ def test_baseline_product_plant_pairs_receive_default_production_plan(tmp_path):
                FROM bom_master b
                JOIN version_master v ON v.version_code=b.parent_item_code
                WHERE b.status='ACTIVE'
-                 AND COALESCE(v.specification,'') NOT LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
+                 AND COALESCE(v.dataset_tag,'') <> 'DESIGN_CHANGE_BUSINESS_SAMPLE'
                  AND NOT EXISTS (
                    SELECT 1 FROM production_plans p
                    WHERE p.version_code=b.parent_item_code
@@ -48,7 +48,7 @@ def test_baseline_cost_candidate_uses_bom_quantity_even_when_production_plan_exi
                FROM bom_master b
                JOIN version_master v ON v.version_code=b.parent_item_code
                WHERE b.status='ACTIVE'
-                 AND COALESCE(v.specification,'') NOT LIKE '%DESIGN_CHANGE_BUSINESS_SAMPLE%'
+                 AND COALESCE(v.dataset_tag,'') <> 'DESIGN_CHANGE_BUSINESS_SAMPLE'
                ORDER BY b.plant_code,b.parent_item_code"""
         ).fetchall()
 

@@ -46,9 +46,10 @@ class SQLiteDesignChangeRepository:
         }
         with self.database.connection() as connection:
             if item["item_type"] == "MATERIAL":
+                profile["material_name"] = item.get("item_name")
                 row = connection.execute(
-                    """SELECT material_name,material_group,unit,specification
-                       FROM material_master WHERE material_code=? AND active_yn='Y'""",
+                    """SELECT material_group,unit,specification
+                       FROM material_master WHERE material_code=?""",
                     (item_code,),
                 ).fetchone()
                 if row:
@@ -56,7 +57,7 @@ class SQLiteDesignChangeRepository:
             elif item["item_type"] == "ASSEMBLY":
                 row = connection.execute(
                     """SELECT process_name,usage_type,specification
-                       FROM assembly_master WHERE assembly_code=? AND active_yn='Y'""",
+                       FROM assembly_master WHERE assembly_code=?""",
                     (item_code,),
                 ).fetchone()
                 if row:
@@ -118,7 +119,7 @@ class SQLiteDesignChangeRepository:
             ).fetchall()
 
         weights = {
-            "item_name": 4.0, "material_name": 4.0, "material_group": 3.0,
+            "item_name": 4.0, "material_group": 3.0,
             "process_name": 4.0, "specification": 4.0, "description": 1.0,
             "unit": 1.0, "usage_type": 1.0,
         }
@@ -142,7 +143,7 @@ class SQLiteDesignChangeRepository:
             matched_weight = sum(weights.get(key, 2.0) for key in matched)
             total_weight = sum(weights.get(key, 2.0) for key in comparable)
             strong_identity_fields = {
-                "item_name", "material_name", "process_name",
+                "item_name", "process_name",
                 "specification", "material_family",
             }
             if (
