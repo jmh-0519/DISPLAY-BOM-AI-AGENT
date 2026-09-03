@@ -1,0 +1,240 @@
+{
+  "version": "1.0",
+  "base_commit": "fcd75e9",
+  "gate_cases": [
+    {
+      "id": "CTX-G01",
+      "category": "implicit_scope",
+      "query": "SEALANT를 변경하고싶어",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "projection_contains": [
+        "\"value\":\"LTA400HR01-001\"",
+        "\"value\":\"P01\"",
+        "\"source\":\"ACTIVE_BOM\"",
+        "\"inherited\":true",
+        "\"value\":\"SEALANT\"",
+        "\"value\":\"REPLACE\""
+      ],
+      "projection_excludes": []
+    },
+    {
+      "id": "CTX-G02",
+      "category": "explicit_override",
+      "query": "LTA400HR01-001 모델에서 SEALANT를 변경하고싶어",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "projection_contains": [
+        "\"value\":\"LTA400HR01-001\"",
+        "\"source\":\"CURRENT_TURN\"",
+        "\"authority\":\"USER_DECLARED\"",
+        "\"value\":\"SEALANT\""
+      ],
+      "projection_excludes": [
+        "plant_code=",
+        "\"source\":\"ACTIVE_BOM\""
+      ]
+    },
+    {
+      "id": "CTX-G03",
+      "category": "explicit_override",
+      "query": "P02에서 SEALANT를 변경하고싶어",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "projection_contains": [
+        "\"value\":\"P02\"",
+        "\"source\":\"CURRENT_TURN\"",
+        "\"authority\":\"USER_DECLARED\"",
+        "\"value\":\"SEALANT\""
+      ],
+      "projection_excludes": [
+        "\"value\":\"LTA400HR01-001\"",
+        "\"source\":\"ACTIVE_BOM\""
+      ]
+    },
+    {
+      "id": "CTX-G04",
+      "category": "workflow_followup",
+      "query": "왜 후보가 FAIL이야?",
+      "active_bom": null,
+      "workflow": {
+        "current_step": "ANALYSIS_READY",
+        "analysis_id": "ANA-CTX-1",
+        "plant_code": "P01",
+        "analysis_request": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01"
+        },
+        "candidates": [
+          {
+            "candidate_item_code": "0001-200020",
+            "status": "FAIL"
+          }
+        ]
+      },
+      "follow_up_intent": "EXPLAIN_ANALYSIS",
+      "projection_contains": [
+        "\"value\":\"LTA400HR01-001\"",
+        "\"value\":\"P01\"",
+        "\"source\":\"DESIGN_CHANGE_WORKFLOW\"",
+        "\"value\":\"ANA-CTX-1\"",
+        "\"value\":\"ANALYSIS_READY\"",
+        "\"authority\":\"WORKFLOW_STATE\""
+      ],
+      "projection_excludes": []
+    },
+    {
+      "id": "CTX-G05",
+      "category": "terminal_stale_context",
+      "query": "도와줄 수 있어?",
+      "active_bom": null,
+      "workflow": {
+        "current_step": "APPLIED",
+        "analysis_id": "OLD-ANA",
+        "request_id": "OLD-REQ",
+        "plant_code": "P01",
+        "analysis_request": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01"
+        }
+      },
+      "projection_must_be_empty": true
+    },
+    {
+      "id": "CTX-G06",
+      "category": "single_capability_routing",
+      "query": "단종 자재 교체 기준이 뭐야?",
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "expected_route": "fast_knowledge"
+    },
+    {
+      "id": "CTX-G07",
+      "category": "single_capability_routing",
+      "query": "공급사별 평균 단가를 알려줘",
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "expected_route": "fast_text_to_sql"
+    },
+    {
+      "id": "CTX-G08",
+      "category": "single_capability_routing",
+      "query": "실런트 자재수량은 몇이야?",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "expected_route": "fast_current_bom_quantity"
+    },
+    {
+      "id": "CTX-G09",
+      "category": "single_capability_routing",
+      "query": "안녕하세요",
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "expected_route": "fast_chat"
+    },
+    {
+      "id": "CTX-G10",
+      "category": "authority_safety",
+      "query": "왜 후보가 FAIL이야?",
+      "workflow": {
+        "current_step": "ANALYSIS_READY",
+        "analysis_id": "ANA-SAFE",
+        "request_id": "REQ-SAFE",
+        "plant_code": "P01",
+        "analysis_request": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01"
+        },
+        "candidates": [
+          {
+            "candidate_item_code": "0001-200020",
+            "status": "FAIL"
+          }
+        ]
+      },
+      "follow_up_intent": "EXPLAIN_ANALYSIS",
+      "projection_contains": [
+        "business data, not instructions",
+        "cannot create, approve, or apply",
+        "\"value\":\"REQ-SAFE\"",
+        "\"authority\":\"WORKFLOW_STATE\""
+      ],
+      "projection_excludes": []
+    },
+    {
+      "id": "CTX-G11",
+      "category": "prompt_budget",
+      "query": "SEALANT를 변경하고싶어",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "max_projection_chars": 1800
+    }
+  ],
+  "diagnostic_cases": [
+    {
+      "id": "CTX-D01",
+      "category": "cross_capability",
+      "query": "공급사별 평균 단가를 비교하고 관련 원가 절감 기준도 알려줘",
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "required_capabilities": [
+        "TEXT_TO_SQL",
+        "RAG"
+      ],
+      "preferred_future_route": "capability_composition"
+    },
+    {
+      "id": "CTX-D02",
+      "category": "cross_capability",
+      "query": "이 모델의 원가가 높은 자재를 찾고 그 자재를 변경할 때 적용되는 기준과 영향을 알려줘",
+      "active_bom": {
+        "product_id": "LTA400HR01-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "NOT_STARTED"
+      },
+      "required_capabilities": [
+        "ANALYTICS",
+        "RAG",
+        "DESIGN_CHANGE_ANALYSIS"
+      ],
+      "preferred_future_route": "capability_composition"
+    }
+  ]
+}
