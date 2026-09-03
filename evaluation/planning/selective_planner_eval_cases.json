@@ -1,0 +1,73 @@
+{
+  "base_commit": "2615a12",
+  "cases": [
+    {
+      "id": "PLAN-G01",
+      "query": "공급사별 평균 단가를 비교하고 관련 원가 절감 기준도 알려줘",
+      "caps": [
+        "TEXT_TO_SQL",
+        "RAG"
+      ],
+      "planned": true,
+      "order": [
+        "TEXT_TO_SQL",
+        "RAG"
+      ]
+    },
+    {
+      "id": "PLAN-G02",
+      "query": "이 모델의 원가가 높은 자재를 찾고 그 자재를 변경할 때 적용되는 기준과 영향을 알려줘",
+      "caps": [
+        "TEXT_TO_SQL",
+        "RAG",
+        "DESIGN_CHANGE_ANALYSIS"
+      ],
+      "planned": true,
+      "order": [
+        "TEXT_TO_SQL",
+        "RAG",
+        "DESIGN_CHANGE_ANALYSIS"
+      ]
+    },
+    {
+      "id": "PLAN-G03",
+      "query": "단종 자재 교체 기준을 참고해서 SEALANT를 변경하고싶어",
+      "caps": [
+        "RAG",
+        "DESIGN_CHANGE_ANALYSIS"
+      ],
+      "planned": true,
+      "order": [
+        "RAG",
+        "DESIGN_CHANGE_ANALYSIS"
+      ]
+    },
+    {
+      "id": "PLAN-G04",
+      "query": "단종 자재 교체 기준이 뭐야?",
+      "caps": [
+        "RAG"
+      ],
+      "planned": false,
+      "order": []
+    },
+    {
+      "id": "PLAN-G05",
+      "query": "공급사별 평균 단가를 알려줘",
+      "caps": [
+        "TEXT_TO_SQL"
+      ],
+      "planned": false,
+      "order": []
+    },
+    {
+      "id": "PLAN-G06",
+      "query": "SEALANT를 변경하고싶어",
+      "caps": [
+        "DESIGN_CHANGE_ANALYSIS"
+      ],
+      "planned": false,
+      "order": []
+    }
+  ]
+}
