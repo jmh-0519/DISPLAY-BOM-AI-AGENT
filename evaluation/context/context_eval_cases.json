@@ -230,7 +230,7 @@
         "current_step": "NOT_STARTED"
       },
       "required_capabilities": [
-        "ANALYTICS",
+        "TEXT_TO_SQL",
         "RAG",
         "DESIGN_CHANGE_ANALYSIS"
       ],

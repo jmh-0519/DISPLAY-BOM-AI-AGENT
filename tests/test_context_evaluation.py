@@ -32,3 +32,24 @@ def test_cross_capability_cases_are_diagnostic_not_gate_failures():
     assert len(report["diagnostics"]) >= 2
     assert all(row["diagnostic_only"] is True for row in report["diagnostics"])
     assert all(len(row["required_capabilities"]) >= 2 for row in report["diagnostics"])
+
+
+def test_cross_capability_requirements_are_detected_and_not_claimed_by_fast_path():
+    report = run_evaluation()
+
+    assert all(
+        row["composition_required"] is True
+        for row in report["diagnostics"]
+    )
+    assert all(
+        row["requirements_match"] is True
+        for row in report["diagnostics"]
+    )
+    assert all(
+        row["single_route_claimed"] is False
+        for row in report["diagnostics"]
+    )
+    assert all(
+        row["actual_route"] == "agent"
+        for row in report["diagnostics"]
+    )

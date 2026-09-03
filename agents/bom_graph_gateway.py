@@ -15,6 +15,10 @@ from agents.analysis_macro_dispatch import (
     MACRO_ANALYZE,
     DeterministicAnalysisMacroDispatch,
 )
+from agents.capability_requirement_resolver import (
+    DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER,
+    CapabilityRequirementResolver,
+)
 from agents.bom_agent_state import BomAgentState
 from agents.domain_intent_router import (
     DEFAULT_DOMAIN_INTENT_ROUTER,
@@ -69,6 +73,7 @@ class BomGraphGateway:
         knowledge_router: KnowledgeQueryRouter | None = None,
         text_to_sql_router: TextToSqlQueryRouter | None = None,
         context_resolver: DomainContextResolverFoundation | None = None,
+        capability_resolver: CapabilityRequirementResolver | None = None,
         design_change_active_steps: Iterable[str] = (),
     ) -> None:
         self.router = router or DEFAULT_DOMAIN_INTENT_ROUTER
@@ -78,6 +83,9 @@ class BomGraphGateway:
         )
         self.context_resolver = (
             context_resolver or DEFAULT_DOMAIN_CONTEXT_RESOLVER
+        )
+        self.capability_resolver = (
+            capability_resolver or DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER
         )
         self.design_change_active_steps = frozenset(design_change_active_steps)
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
@@ -169,6 +177,15 @@ class BomGraphGateway:
         if workflow_state.get("pending_add_parent_request"):
             # ASSY ADD requires an explicit Parent.  The next short Parent-code
             # reply belongs to the pending ADD transaction, not a fresh query.
+            return AGENT_PATH
+
+        # CTX-05 capability preflight:
+        # A request that explicitly requires more than one business capability
+        # must never be consumed by the first matching single fast path. Until
+        # PLAN-01 owns execution composition, defer it to the existing Agent
+        # path instead of returning a partial RAG/Analytics answer.
+        capability_requirement = self.capability_resolver.resolve(user_query)
+        if capability_requirement.composition_required:
             return AGENT_PATH
 
         # A fresh, high-confidence policy/guide/spec question is read-only and

@@ -9,6 +9,9 @@ from langchain_core.messages import HumanMessage
 
 from agents.bom_agent_node import BomAgentNode
 from agents.bom_graph_gateway import BomGraphGateway
+from agents.capability_requirement_resolver import (
+    DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER,
+)
 from agents.design_change_workflow_state import create_initial_design_change_state
 from agents.domain_intent_router import DEFAULT_DOMAIN_INTENT_ROUTER
 
@@ -126,11 +129,19 @@ def _diagnose_case(case: dict[str, Any]) -> dict[str, Any]:
         "active_bom_context": case.get("active_bom"),
     }
     actual_route = gateway.route(state)
+    requirement = DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER.resolve(
+        str(case["query"])
+    )
+    required = tuple(case.get("required_capabilities", []))
+    resolved = requirement.capability_names
     return {
         "id": case["id"],
         "category": case["category"],
         "actual_route": actual_route,
-        "required_capabilities": case.get("required_capabilities", []),
+        "required_capabilities": list(required),
+        "resolved_capabilities": list(resolved),
+        "composition_required": requirement.composition_required,
+        "requirements_match": set(required) == set(resolved),
         "preferred_future_route": case.get("preferred_future_route"),
         "single_route_claimed": actual_route != "agent",
         "diagnostic_only": True,
@@ -182,9 +193,13 @@ def print_report(report: dict[str, Any]) -> None:
     print("cross_capability_diagnostics:")
     for row in report["diagnostics"]:
         required = ",".join(row["required_capabilities"])
+        resolved = ",".join(row["resolved_capabilities"])
         print(
             f"- {row['id']} route={row['actual_route']} "
             f"required={required} "
+            f"resolved={resolved} "
+            f"composition_required={row['composition_required']} "
+            f"requirements_match={row['requirements_match']} "
             f"single_route_claimed={row['single_route_claimed']}"
         )
 
