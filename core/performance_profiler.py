@@ -122,6 +122,13 @@ def summarize_performance_events(events: list[dict[str, Any]]) -> dict[str, Any]
         "saved_tool_chars": 0,
         "compacted_tool_messages": 0,
     }
+    context_projection = {
+        "call_count": 0,
+        "chars": 0,
+        "field_count": 0,
+        "evidence_count": 0,
+        "truncated_count": 0,
+    }
     prompt_budget = {
         "call_count": 0,
         "core_system_chars": 0,
@@ -161,6 +168,17 @@ def summarize_performance_events(events: list[dict[str, Any]]) -> dict[str, Any]
                 value = metrics.get(key)
                 if isinstance(value, (int, float)):
                     context_stats[key] += int(value)
+
+        if event.get("name") == "llm.context_projection":
+            context_projection["call_count"] += 1
+            metrics = event.get("metrics") or {}
+            for key in ("chars", "field_count", "evidence_count"):
+                value = metrics.get(key)
+                if isinstance(value, (int, float)):
+                    context_projection[key] += int(value)
+            metadata = event.get("metadata") or {}
+            if metadata.get("truncated") is True:
+                context_projection["truncated_count"] += 1
 
         if event.get("name") == "llm.prompt_budget":
             prompt_budget["call_count"] += 1
@@ -230,6 +248,7 @@ def summarize_performance_events(events: list[dict[str, Any]]) -> dict[str, Any]
         "timings": rows,
         "llm_usage": llm_usage,
         "context_diet": context_stats,
+        "context_projection": context_projection,
         "prompt_budget": {
             "total": prompt_budget,
             "avg_per_call": prompt_budget_avg,

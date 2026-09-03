@@ -1,8 +1,8 @@
-"""Deterministic context-resolution foundation.
+"""Deterministic provenance-aware context resolution.
 
-CTX-01 provides conservative scope composition only.  It is intentionally not
-wired into BomGraphGateway yet; CTX-02 will integrate it after behavior tests
-are frozen.
+The resolver composes current-turn, active-BOM, workflow and verified evidence
+context without LLM inference. Runtime callers remain responsible for deciding
+whether inheritance is allowed for the current turn.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any, Mapping
 
 from .context_contract import (
     ContextAuthority,
+    ContextEvidence,
     ContextPurpose,
     ContextSource,
     ContextValue,
@@ -35,6 +36,7 @@ class ContextResolutionInput:
 
     active_bom_context: Mapping[str, Any] | None = None
     workflow_state: Mapping[str, Any] | None = None
+    evidence: tuple[ContextEvidence, ...] = ()
 
     # Inheritance is opt-in. The existing Gateway remains the authority that
     # decides whether a current turn is eligible for contextual continuation.
@@ -133,22 +135,52 @@ class DomainContextResolverFoundation:
             target_item_code=target_item_code,
             target_item_type=target_item_type,
             target_item_name=target_item_name,
-            business_intent=self._explicit_optional(
+            business_intent=self._derived_optional(
                 self._upper(request.business_intent)
             ),
-            action_type=self._explicit_optional(
+            action_type=self._derived_optional(
                 self._upper(request.action_type)
             ),
             user_goal=self._explicit_optional(
                 self._clean(request.user_goal)
             ),
-            optimization_criterion=self._explicit_optional(
+            optimization_criterion=self._derived_optional(
                 self._upper(request.optimization_criterion)
             ),
             analysis_id=analysis_id,
             request_id=request_id,
             workflow_step=workflow_step,
+            evidence=self._validated_evidence(request.evidence),
         )
+
+    @staticmethod
+    def _validated_evidence(
+        values: tuple[ContextEvidence, ...],
+    ) -> tuple[ContextEvidence, ...]:
+        allowed_sources = {
+            ContextSource.TOOL_RESULT,
+            ContextSource.RAG_EVIDENCE,
+            ContextSource.TEXT_TO_SQL_RESULT,
+        }
+        result: list[ContextEvidence] = []
+        seen: set[tuple[str, str]] = set()
+        for value in values:
+            if not isinstance(value, ContextEvidence):
+                raise TypeError("context evidence must be ContextEvidence")
+            if value.source not in allowed_sources:
+                raise ValueError(
+                    f"context evidence source is not allowed: {value.source.value}"
+                )
+            if value.authority != ContextAuthority.TOOL_EVIDENCE:
+                raise ValueError(
+                    "context evidence authority must be TOOL_EVIDENCE"
+                )
+            key = (value.reference, value.source.value)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(value)
+        return tuple(result)
 
     @classmethod
     def _scope_candidates(
@@ -256,6 +288,17 @@ class DomainContextResolverFoundation:
     @classmethod
     def _explicit_optional(cls, value: Any) -> ContextValue | None:
         return cls._explicit(value) if value not in (None, "") else None
+
+    @staticmethod
+    def _derived_optional(value: Any) -> ContextValue | None:
+        if value in (None, ""):
+            return None
+        return ContextValue(
+            value=value,
+            source=ContextSource.CURRENT_TURN,
+            authority=ContextAuthority.DERIVED,
+            inherited=False,
+        )
 
     @staticmethod
     def _workflow_optional(value: Any) -> ContextValue | None:

@@ -17,10 +17,15 @@ from agents.domain_intent_router import (
     DomainIntentRouter,
 )
 from agents.llm_context_compactor import LlmContextCompactor
+from agents.context_evidence import DEFAULT_CONTEXT_EVIDENCE_COLLECTOR
 from core.azure_openai_client import AzureOpenAIClient
 from mcp_client.client import DisplayBomMcpClient
 from core.performance_profiler import record_performance_event
 from ontology.context_contract import ContextPurpose
+from ontology.context_projection import (
+    ContextProjectionResult,
+    DEFAULT_LLM_CONTEXT_PROJECTOR,
+)
 from ontology.context_resolver import (
     ContextResolutionInput,
     DEFAULT_DOMAIN_CONTEXT_RESOLVER,
@@ -169,6 +174,8 @@ class BomAgentNode:
         self.skill_context = skill_context
         self.domain_intent_router = DEFAULT_DOMAIN_INTENT_ROUTER
         self.context_resolver = DEFAULT_DOMAIN_CONTEXT_RESOLVER
+        self.context_evidence_collector = DEFAULT_CONTEXT_EVIDENCE_COLLECTOR
+        self.context_projector = DEFAULT_LLM_CONTEXT_PROJECTOR
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
             self.domain_intent_router
         )
@@ -191,10 +198,11 @@ class BomAgentNode:
 
         workflow_state = state.get("design_change") or {}
         current_step = workflow_state.get("current_step", "NOT_STARTED")
-        user_query = self._current_user_query(
+        raw_user_query = self._current_user_query(
             messages,
             state.get("user_query"),
         )
+        user_query = raw_user_query
 
         user_query = self._inherit_active_bom_context_for_change(
             user_query=user_query,
@@ -580,6 +588,41 @@ class BomAgentNode:
         )
         analysis_memory = routing_workflow_state.get("analysis_memory") or {}
 
+        context_projection = self._build_llm_context_projection(
+            messages=messages,
+            raw_user_query=raw_user_query,
+            state=state,
+            workflow_state=routing_workflow_state,
+            routing_decision=routing_decision,
+            routing_step=routing_step,
+            follow_up_intent=follow_up_intent,
+            design_change_mode=design_change_mode,
+            product_cost_scan_intent=product_cost_scan_intent,
+        )
+        context_projection_block = (
+            f"\n\n{context_projection.text}"
+            if context_projection.text
+            else ""
+        )
+        if context_projection.text:
+            record_performance_event(
+                category="context",
+                name="llm.context_projection",
+                metadata={
+                    "purpose": (
+                        "DESIGN_CHANGE"
+                        if design_change_mode
+                        else "READ_ONLY"
+                    ),
+                    "truncated": context_projection.truncated,
+                },
+                metrics={
+                    "chars": context_projection.char_count,
+                    "field_count": context_projection.field_count,
+                    "evidence_count": context_projection.evidence_count,
+                },
+            )
+
         design_change_instruction = (
             "현재 요청은 Design Change Analysis/Workflow입니다. "
             "제품과 변경 대상 기존 품목이 현재 또는 직전 대화에 명확하면 "
@@ -663,6 +706,7 @@ class BomAgentNode:
             f"{', '.join(allowed_design_change_tools) if allowed_design_change_tools else '없음'}\n"
             f"{design_change_instruction} "
             "Tool 결과에서 반환된 request_id와 action_id만 다음 단계에 사용하세요."
+            f"{context_projection_block}"
         )
 
         # A concrete design-change Action does not require a separate reason
@@ -888,6 +932,187 @@ class BomAgentNode:
         ):
             result["design_change"] = dict(workflow_state)
         return result
+
+    def _build_llm_context_projection(
+        self,
+        *,
+        messages: list[BaseMessage],
+        raw_user_query: str,
+        state: BomAgentState,
+        workflow_state: dict,
+        routing_decision: Any,
+        routing_step: str,
+        follow_up_intent: str | None,
+        design_change_mode: bool,
+        product_cost_scan_intent: bool,
+    ) -> ContextProjectionResult:
+        """Build the small provenance block used only by the general Agent LLM."""
+        resolver = getattr(
+            self,
+            "context_resolver",
+            DEFAULT_DOMAIN_CONTEXT_RESOLVER,
+        )
+        evidence_collector = getattr(
+            self,
+            "context_evidence_collector",
+            DEFAULT_CONTEXT_EVIDENCE_COLLECTOR,
+        )
+        projector = getattr(
+            self,
+            "context_projector",
+            DEFAULT_LLM_CONTEXT_PROJECTOR,
+        )
+
+        explicit_version = (
+            self.domain_intent_router.explicit_model_scope_code(
+                raw_user_query
+            )
+        )
+        explicit_plant = self.domain_intent_router.extract_plant_code(
+            raw_user_query
+        )
+        target_code = self._context_target_code(
+            raw_user_query,
+            explicit_version=explicit_version,
+        )
+
+        target_name = None
+        target_type = None
+        action_type = None
+        if design_change_mode:
+            target_name = (
+                self.domain_intent_router.extract_named_change_target(
+                    raw_user_query
+                )
+                or self.domain_intent_router.extract_add_target_name(
+                    raw_user_query
+                )
+            )
+            target_type = (
+                self.domain_intent_router.extract_add_target_type(
+                    raw_user_query
+                )
+            )
+            action_type = self._context_action_type(
+                raw_user_query,
+                routing_decision=routing_decision,
+            )
+        elif getattr(
+            routing_decision,
+            "current_bom_quantity",
+            False,
+        ):
+            target_name = getattr(
+                routing_decision,
+                "current_bom_subject",
+                None,
+            )
+
+        optimization_criterion = None
+        if product_cost_scan_intent:
+            optimization_criterion = "COST"
+        elif follow_up_intent in {
+            "COMPARE_CANDIDATES",
+            "RANK_CANDIDATES",
+        }:
+            optimization_criterion = (
+                self.domain_intent_router.comparison_criterion(
+                    raw_user_query
+                )
+            )
+
+        active_workflow_context = (
+            (
+                routing_step in self.DESIGN_CHANGE_ACTIVE_STEPS
+                and routing_step
+                not in {
+                    "APPLIED",
+                    "BLOCKED",
+                    "REPORT_COMPLETED",
+                }
+            )
+            or bool(follow_up_intent)
+        )
+        effective_workflow_state = (
+            workflow_state
+            if active_workflow_context
+            else {}
+        )
+
+        raw_intent = str(
+            getattr(routing_decision, "intent", "") or ""
+        ).strip()
+        business_intent = (
+            follow_up_intent
+            or (
+                raw_intent
+                if raw_intent != "LLM_FALLBACK"
+                else None
+            )
+        )
+
+        snapshot = resolver.resolve(
+            ContextResolutionInput(
+                purpose=(
+                    ContextPurpose.DESIGN_CHANGE
+                    if design_change_mode
+                    else ContextPurpose.READ_ONLY
+                ),
+                explicit_version_code=explicit_version,
+                explicit_plant_code=explicit_plant,
+                explicit_target_item_code=target_code,
+                explicit_target_item_type=target_type,
+                explicit_target_item_name=target_name,
+                business_intent=business_intent,
+                action_type=action_type,
+                optimization_criterion=optimization_criterion,
+                active_bom_context=state.get("active_bom_context"),
+                workflow_state=effective_workflow_state,
+                allow_active_bom_scope=True,
+                allow_workflow_scope=active_workflow_context,
+                evidence=evidence_collector.collect(messages),
+            )
+        )
+        return projector.project(snapshot)
+
+    def _context_target_code(
+        self,
+        user_query: str,
+        *,
+        explicit_version: str | None,
+    ) -> str | None:
+        codes = [
+            code
+            for code in self.domain_intent_router.item_codes(user_query)
+            if not explicit_version or code != explicit_version
+        ]
+        unique = list(dict.fromkeys(codes))
+        return unique[0] if len(unique) == 1 else None
+
+    def _context_action_type(
+        self,
+        user_query: str,
+        *,
+        routing_decision: Any,
+    ) -> str | None:
+        if not getattr(routing_decision, "change", False):
+            return None
+        if getattr(routing_decision, "delete", False):
+            return "DELETE"
+        if getattr(
+            routing_decision,
+            "quantity_change",
+            False,
+        ):
+            return "QUANTITY_CHANGE"
+
+        normalized = self.domain_intent_router.normalize(user_query)
+        if any(
+            marker in normalized
+            for marker in ("추가", "넣어")
+        ):
+            return "ADD"
+        return "REPLACE"
 
     def _record_prompt_budget(
         self,

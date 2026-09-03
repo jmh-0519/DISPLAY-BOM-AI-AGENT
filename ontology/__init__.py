@@ -16,6 +16,11 @@ from .context_resolver import (
     DEFAULT_DOMAIN_CONTEXT_RESOLVER,
     DomainContextResolverFoundation,
 )
+from .context_projection import (
+    ContextProjectionResult,
+    DEFAULT_LLM_CONTEXT_PROJECTOR,
+    LlmContextProjector,
+)
 from .domain_ontology import (
     DEFAULT_DOMAIN_ONTOLOGY,
     DomainEntityType,
@@ -31,9 +36,11 @@ __all__ = [
     "ContextFieldPolicy",
     "ContextInheritanceMode",
     "ContextPurpose",
+    "ContextProjectionResult",
     "ContextResolutionInput",
     "ContextSource",
     "DEFAULT_DOMAIN_CONTEXT_RESOLVER",
+    "DEFAULT_LLM_CONTEXT_PROJECTOR",
     "ContextValue",
     "DEFAULT_DOMAIN_ONTOLOGY",
     "DomainContextResolverFoundation",
@@ -41,5 +48,6 @@ __all__ = [
     "DomainEntityType",
     "DomainOntology",
     "DomainRelationType",
+    "LlmContextProjector",
     "OntologyRelation",
 ]
