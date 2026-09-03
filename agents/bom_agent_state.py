@@ -17,4 +17,5 @@ class BomAgentState(TypedDict, total=False):
     error: str | None
     design_change: DesignChangeWorkflowState
     active_bom_context: dict[str, str] | None
+    composition_runtime: dict | None
     

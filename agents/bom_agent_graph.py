@@ -47,6 +47,15 @@ from agents.bom_fast_path_nodes import (
     is_graph_fast_tool_result,
 )
 from agents.bom_agent_state import BomAgentState
+from agents.bom_composition_nodes import (
+    COMPOSITION_FINALIZE,
+    COMPOSITION_KNOWLEDGE_FINALIZE,
+    COMPOSITION_KNOWLEDGE_QUERY,
+    COMPOSITION_PLAN,
+    COMPOSITION_TEXT_TO_SQL,
+    BomReadOnlyCompositionNodes,
+    is_composition_knowledge_tool_result,
+)
 from agents.design_change_workflow_state import (
     create_initial_design_change_state,
 )
@@ -81,6 +90,7 @@ class BomAgentGraph:
       → Gateway Router
         → Fast Chat → END
         → Fast BOM/Where-used → MCP Tool Node → Fast Finalize → END
+        → Read-only Composition (Text-to-SQL + RAG) → Finalize → END
         → Deterministic Analysis Macro → MCP Tool Node → Analysis Finalizer → END
         → Agent Node → MCP Tool Node → Agent Node → END
     """
@@ -117,6 +127,10 @@ class BomAgentGraph:
         self.fast_path_nodes = BomFastPathNodes()
         self.knowledge_path_nodes = BomKnowledgePathNodes(client=client)
         self.text_to_sql_path_nodes = BomTextToSqlPathNodes(client=client)
+        self.composition_path_nodes = BomReadOnlyCompositionNodes(
+            text_to_sql_nodes=self.text_to_sql_path_nodes,
+            knowledge_nodes=self.knowledge_path_nodes,
+        )
         self.macro_dispatch_node = BomMacroDispatchNode(
             self.gateway.analysis_macro_dispatch
         )
@@ -175,6 +189,41 @@ class BomAgentGraph:
             ),
         )
         workflow.add_node(
+            COMPOSITION_PLAN,
+            self._observed_node(
+                COMPOSITION_PLAN,
+                self.composition_path_nodes.plan,
+            ),
+        )
+        workflow.add_node(
+            COMPOSITION_TEXT_TO_SQL,
+            self._observed_node(
+                COMPOSITION_TEXT_TO_SQL,
+                self.composition_path_nodes.text_to_sql,
+            ),
+        )
+        workflow.add_node(
+            COMPOSITION_KNOWLEDGE_QUERY,
+            self._observed_node(
+                COMPOSITION_KNOWLEDGE_QUERY,
+                self.composition_path_nodes.knowledge_query,
+            ),
+        )
+        workflow.add_node(
+            COMPOSITION_KNOWLEDGE_FINALIZE,
+            self._observed_node(
+                COMPOSITION_KNOWLEDGE_FINALIZE,
+                self.composition_path_nodes.knowledge_finalize,
+            ),
+        )
+        workflow.add_node(
+            COMPOSITION_FINALIZE,
+            self._observed_node(
+                COMPOSITION_FINALIZE,
+                self.composition_path_nodes.finalize,
+            ),
+        )
+        workflow.add_node(
             FAST_READ_FINALIZE,
             self._observed_node(
                 FAST_READ_FINALIZE,
@@ -214,6 +263,7 @@ class BomAgentGraph:
                 FAST_CURRENT_BOM_QUANTITY: FAST_CURRENT_BOM_QUANTITY,
                 FAST_KNOWLEDGE: FAST_KNOWLEDGE,
                 FAST_TEXT_TO_SQL: FAST_TEXT_TO_SQL,
+                COMPOSITION_PLAN: COMPOSITION_PLAN,
                 MACRO_ANALYZE: MACRO_ANALYZE,
                 AGENT_PATH: AGENT,
             },
@@ -221,6 +271,17 @@ class BomAgentGraph:
 
         workflow.add_edge(FAST_CHAT, END)
         workflow.add_edge(FAST_TEXT_TO_SQL, END)
+        workflow.add_edge(COMPOSITION_PLAN, COMPOSITION_TEXT_TO_SQL)
+        workflow.add_edge(
+            COMPOSITION_TEXT_TO_SQL,
+            COMPOSITION_KNOWLEDGE_QUERY,
+        )
+        workflow.add_edge(COMPOSITION_KNOWLEDGE_QUERY, MCP_TOOLS)
+        workflow.add_edge(
+            COMPOSITION_KNOWLEDGE_FINALIZE,
+            COMPOSITION_FINALIZE,
+        )
+        workflow.add_edge(COMPOSITION_FINALIZE, END)
         workflow.add_edge(FAST_KNOWLEDGE, MCP_TOOLS)
         workflow.add_edge(FAST_BOM_READ, MCP_TOOLS)
         workflow.add_edge(FAST_WHERE_USED, MCP_TOOLS)
@@ -246,6 +307,9 @@ class BomAgentGraph:
                 AGENT: AGENT,
                 ANALYSIS_FINALIZE: ANALYSIS_FINALIZE,
                 KNOWLEDGE_FINALIZE: KNOWLEDGE_FINALIZE,
+                COMPOSITION_KNOWLEDGE_FINALIZE: (
+                    COMPOSITION_KNOWLEDGE_FINALIZE
+                ),
                 FAST_READ_FINALIZE: FAST_READ_FINALIZE,
                 END: END,
             },
@@ -266,7 +330,7 @@ class BomAgentGraph:
             },
             metadata={"node": "gateway"},
         ) as span:
-            route = self.gateway.route(state)
+            route = self._runtime_route(state)
             record_performance_event(
                 category="routing",
                 name="graph.gateway.route",
@@ -275,12 +339,30 @@ class BomAgentGraph:
             span.finish(output={"route": route})
             return route
 
+    def _runtime_route(self, state: BomAgentState) -> str:
+        """Promote only safe read-only compositions from Agent fallback.
+
+        BomGraphGateway remains conservative and continues to classify every
+        multi-capability turn as AGENT_PATH. PLAN-02 adds a second, narrower
+        Graph-level admission gate: only TEXT_TO_SQL + RAG with no active
+        Design Change workflow may enter runtime composition.
+        """
+        route = self.gateway.route(state)
+        if (
+            route == AGENT_PATH
+            and self.composition_path_nodes.can_execute(state)
+        ):
+            return COMPOSITION_PLAN
+        return route
+
     @staticmethod
     def _route_mcp_tool_result(state: BomAgentState) -> str:
         """Return Fast Tool results to an LLM-free finalizer when applicable."""
         normal_route = route_mcp_tool_result(state)
         if normal_route == END:
             return END
+        if is_composition_knowledge_tool_result(state):
+            return COMPOSITION_KNOWLEDGE_FINALIZE
         if is_knowledge_tool_result(state):
             return KNOWLEDGE_FINALIZE
         if is_graph_fast_tool_result(state):
