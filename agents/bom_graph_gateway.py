@@ -28,6 +28,12 @@ from text_to_sql.query_router import (
     DEFAULT_TEXT_TO_SQL_QUERY_ROUTER,
     TextToSqlQueryRouter,
 )
+from ontology.context_contract import ContextPurpose, DomainContextSnapshot
+from ontology.context_resolver import (
+    ContextResolutionInput,
+    DEFAULT_DOMAIN_CONTEXT_RESOLVER,
+    DomainContextResolverFoundation,
+)
 
 
 FAST_CHAT = "fast_chat"
@@ -62,12 +68,16 @@ class BomGraphGateway:
         router: DomainIntentRouter | None = None,
         knowledge_router: KnowledgeQueryRouter | None = None,
         text_to_sql_router: TextToSqlQueryRouter | None = None,
+        context_resolver: DomainContextResolverFoundation | None = None,
         design_change_active_steps: Iterable[str] = (),
     ) -> None:
         self.router = router or DEFAULT_DOMAIN_INTENT_ROUTER
         self.knowledge_router = knowledge_router or DEFAULT_KNOWLEDGE_QUERY_ROUTER
         self.text_to_sql_router = (
             text_to_sql_router or DEFAULT_TEXT_TO_SQL_QUERY_ROUTER
+        )
+        self.context_resolver = (
+            context_resolver or DEFAULT_DOMAIN_CONTEXT_RESOLVER
         )
         self.design_change_active_steps = frozenset(design_change_active_steps)
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
@@ -112,22 +122,32 @@ class BomGraphGateway:
             return False
 
         explicit_plant = self.router.extract_plant_code(user_query)
-        if explicit_plant and explicit_plant != plant_code:
-            return False
-
         explicit_model = self.router.explicit_model_scope_code(user_query)
         if explicit_model:
             # Explicit MODEL/PRODUCT in the current turn declares a fresh scope.
             # Even when it equals the currently viewed BOM model, do not silently
             # inherit the old PLANT. Resolve valid Plant options again.
-            #
-            # Active-BOM inheritance remains available for genuine implicit
-            # follow-ups such as:
-            #   "SEALANT를 변경하고싶어"
-            #   "LJ94-100006 수량 바꾸고싶어"
             return False
 
-        return True
+        resolved = self.context_resolver.resolve(
+            ContextResolutionInput(
+                purpose=(
+                    ContextPurpose.DESIGN_CHANGE
+                    if decision.change
+                    else ContextPurpose.READ_ONLY
+                ),
+                explicit_plant_code=explicit_plant,
+                active_bom_context=context,
+                allow_active_bom_scope=True,
+            )
+        )
+        return bool(
+            resolved.version_code
+            and resolved.plant_code
+            and str(resolved.version_code.value).upper() == product_id
+            and str(resolved.plant_code.value).upper()
+            == (explicit_plant or plant_code)
+        )
 
     def route(self, state: BomAgentState) -> str:
         user_query = self.last_user_query(state)
@@ -251,34 +271,28 @@ class BomGraphGateway:
         return AGENT_PATH
 
     @staticmethod
+    def resolve_read_context(state: BomAgentState) -> DomainContextSnapshot:
+        """Resolve read-only MODEL/PLANT scope with ontology provenance."""
+        return DEFAULT_DOMAIN_CONTEXT_RESOLVER.resolve(
+            ContextResolutionInput(
+                purpose=ContextPurpose.READ_ONLY,
+                active_bom_context=state.get("active_bom_context"),
+                workflow_state=state.get("design_change") or {},
+                allow_active_bom_scope=True,
+                allow_workflow_scope=True,
+            )
+        )
+
+    @staticmethod
     def read_scope_context(state: BomAgentState) -> dict[str, str]:
-        """Return read-only MODEL/PLANT scope from active BOM or Analysis.
-
-        A read-only follow-up during an Analysis Session may safely reuse the
-        Analysis request scope without mutating the design-change workflow.
-        Explicit current-turn MODEL/PLANT handling remains in the normal router.
-        """
-        active = state.get("active_bom_context") or {}
-        product_id = str(active.get("product_id") or "").strip().upper()
-        plant_code = str(active.get("plant_code") or "").strip().upper()
-        if product_id and plant_code:
-            return {"product_id": product_id, "plant_code": plant_code}
-
-        workflow = state.get("design_change") or {}
-        request = workflow.get("analysis_request") or workflow.get("analysis_context") or {}
-        product_id = str(
-            request.get("version_code")
-            or request.get("product_id")
-            or ""
-        ).strip().upper()
-        plant_code = str(
-            workflow.get("plant_code")
-            or request.get("plant_code")
-            or ""
-        ).strip().upper()
-        if product_id and plant_code:
-            return {"product_id": product_id, "plant_code": plant_code}
-        return {}
+        """Keep the existing dictionary contract over unified context resolution."""
+        resolved = BomGraphGateway.resolve_read_context(state)
+        if not resolved.version_code or not resolved.plant_code:
+            return {}
+        return {
+            "product_id": str(resolved.version_code.value).strip().upper(),
+            "plant_code": str(resolved.plant_code.value).strip().upper(),
+        }
 
     @staticmethod
     def previous_user_query(state: BomAgentState) -> str | None:

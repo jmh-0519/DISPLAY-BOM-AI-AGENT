@@ -11,7 +11,11 @@ from .context_contract import (
     ContextValue,
     DomainContextSnapshot,
 )
-from .context_resolver import ContextResolutionInput, DomainContextResolverFoundation
+from .context_resolver import (
+    ContextResolutionInput,
+    DEFAULT_DOMAIN_CONTEXT_RESOLVER,
+    DomainContextResolverFoundation,
+)
 from .domain_ontology import (
     DEFAULT_DOMAIN_ONTOLOGY,
     DomainEntityType,
@@ -29,6 +33,7 @@ __all__ = [
     "ContextPurpose",
     "ContextResolutionInput",
     "ContextSource",
+    "DEFAULT_DOMAIN_CONTEXT_RESOLVER",
     "ContextValue",
     "DEFAULT_DOMAIN_ONTOLOGY",
     "DomainContextResolverFoundation",

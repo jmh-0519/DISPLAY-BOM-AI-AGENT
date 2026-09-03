@@ -279,7 +279,11 @@ class DomainContextResolverFoundation:
         return text.upper() if text else None
 
 
+DEFAULT_DOMAIN_CONTEXT_RESOLVER = DomainContextResolverFoundation()
+
+
 __all__ = [
     "ContextResolutionInput",
+    "DEFAULT_DOMAIN_CONTEXT_RESOLVER",
     "DomainContextResolverFoundation",
 ]

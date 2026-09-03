@@ -20,6 +20,11 @@ from agents.llm_context_compactor import LlmContextCompactor
 from core.azure_openai_client import AzureOpenAIClient
 from mcp_client.client import DisplayBomMcpClient
 from core.performance_profiler import record_performance_event
+from ontology.context_contract import ContextPurpose
+from ontology.context_resolver import (
+    ContextResolutionInput,
+    DEFAULT_DOMAIN_CONTEXT_RESOLVER,
+)
 
 
 class BomAgentNode:
@@ -163,6 +168,7 @@ class BomAgentNode:
         self.mcp_client = mcp_client
         self.skill_context = skill_context
         self.domain_intent_router = DEFAULT_DOMAIN_INTENT_ROUTER
+        self.context_resolver = DEFAULT_DOMAIN_CONTEXT_RESOLVER
         self.analysis_macro_dispatch = DeterministicAnalysisMacroDispatch(
             self.domain_intent_router
         )
@@ -1357,28 +1363,42 @@ class BomAgentNode:
             return user_query
 
         explicit_plant = self.domain_intent_router.extract_plant_code(user_query)
-        if explicit_plant and explicit_plant != plant_code:
-            # The user deliberately changed PLANT scope. Do not reuse the old BOM.
-            return user_query
-
         explicit_model = self.domain_intent_router.explicit_model_scope_code(
             user_query
         )
         if explicit_model:
-            # The user explicitly restated MODEL/PRODUCT scope. Treat it as a
-            # fresh scoped request and do not silently carry PLANT from the
-            # previously viewed BOM, even when the model code happens to match.
-            #
-            # Only queries that omit MODEL/PRODUCT may inherit active BOM scope.
+            # Explicit MODEL/PRODUCT declares a fresh scope. Existing PLANT must
+            # be resolved again instead of inherited from the previously viewed BOM.
             return user_query
+
+        context_resolver = getattr(
+            self,
+            "context_resolver",
+            DEFAULT_DOMAIN_CONTEXT_RESOLVER,
+        )
+        resolved = context_resolver.resolve(
+            ContextResolutionInput(
+                purpose=ContextPurpose.DESIGN_CHANGE,
+                explicit_plant_code=explicit_plant,
+                active_bom_context=context,
+                allow_active_bom_scope=True,
+            )
+        )
+        if not resolved.version_code or not resolved.plant_code:
+            # Includes an explicit different-PLANT request: the resolver refuses
+            # to mix that PLANT with the stale active MODEL.
+            return user_query
+
+        resolved_product = str(resolved.version_code.value).strip().upper()
+        resolved_plant = str(resolved.plant_code.value).strip().upper()
 
         normalized_upper = str(user_query or "").upper()
         parts: list[str] = []
 
-        if product_id not in normalized_upper:
-            parts.append(product_id)
-        if not explicit_plant:
-            parts.append(plant_code)
+        if resolved_product not in normalized_upper:
+            parts.append(resolved_product)
+        if not explicit_plant and resolved_plant not in normalized_upper:
+            parts.append(resolved_plant)
 
         if not parts:
             return user_query
@@ -1386,7 +1406,7 @@ class BomAgentNode:
         # "모델에서" makes the inherited role explicit to both deterministic
         # extraction and the LLM fallback without changing the user's chat text.
         prefix = " ".join(parts)
-        if product_id in parts:
+        if resolved_product in parts:
             prefix += " 모델에서"
 
         return f"{prefix} {user_query}".strip()
