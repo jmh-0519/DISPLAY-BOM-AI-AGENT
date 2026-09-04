@@ -99,3 +99,35 @@ def test_empty_snapshot_adds_no_prompt_baggage():
     assert result.text == ""
     assert result.char_count == 0
     assert result.field_count == 0
+
+
+def test_projection_includes_exact_workflow_target_edge_provenance():
+    snapshot = DomainContextSnapshot(
+        purpose=ContextPurpose.DESIGN_CHANGE,
+        target_item_code=_value(
+            "0001-200008",
+            ContextSource.DESIGN_CHANGE_WORKFLOW,
+            ContextAuthority.WORKFLOW_STATE,
+            True,
+        ),
+        target_parent_item_code=_value(
+            "LJ94-100003",
+            ContextSource.DESIGN_CHANGE_WORKFLOW,
+            ContextAuthority.WORKFLOW_STATE,
+            True,
+        ),
+        target_location_code=_value(
+            "ALL",
+            ContextSource.DESIGN_CHANGE_WORKFLOW,
+            ContextAuthority.WORKFLOW_STATE,
+            True,
+        ),
+    )
+
+    result = LlmContextProjector().project(snapshot)
+
+    assert "target_parent_item_code=" in result.text
+    assert '"value":"LJ94-100003"' in result.text
+    assert "target_location_code=" in result.text
+    assert '"value":"ALL"' in result.text
+    assert result.field_count == 3

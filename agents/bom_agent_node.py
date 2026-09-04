@@ -1070,6 +1070,7 @@ class BomAgentNode:
                 workflow_state=effective_workflow_state,
                 allow_active_bom_scope=True,
                 allow_workflow_scope=active_workflow_context,
+                allow_workflow_target_context=bool(follow_up_intent),
                 evidence=evidence_collector.collect(messages),
             )
         )

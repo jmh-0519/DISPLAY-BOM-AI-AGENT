@@ -163,3 +163,23 @@ def test_terminal_workflow_history_does_not_create_scope_conflict():
 
     assert gateway.design_change_scope_conflict(state) is None
     assert gateway.route(state) != SCOPE_CONFLICT
+
+
+def test_relative_assy_design_change_uses_same_scope_conflict_semantics():
+    gateway = _gateway()
+    state = _state("해당 ASSY를 변경할 때 적용되는 기준과 영향을 분석해줘")
+
+    conflict = gateway.design_change_scope_conflict(state)
+
+    assert conflict is not None
+    assert conflict["active_version_code"] == ACTIVE_VERSION
+    assert conflict["workflow_version_code"] == WORKFLOW_VERSION
+    assert gateway.route(state) == SCOPE_CONFLICT
+
+
+def test_workflow_analysis_reference_does_not_bind_to_active_bom_scope():
+    gateway = _gateway()
+    state = _state("기존 분석 결과를 설명해줘")
+
+    assert gateway.design_change_scope_conflict(state) is None
+    assert gateway.route(state) != SCOPE_CONFLICT

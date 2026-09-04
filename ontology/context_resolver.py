@@ -17,6 +17,7 @@ from .context_contract import (
     ContextSource,
     ContextValue,
     DomainContextSnapshot,
+    validate_context_snapshot,
 )
 
 
@@ -29,6 +30,8 @@ class ContextResolutionInput:
     explicit_target_item_code: str | None = None
     explicit_target_item_type: str | None = None
     explicit_target_item_name: str | None = None
+    explicit_target_parent_item_code: str | None = None
+    explicit_target_location_code: str | None = None
     business_intent: str | None = None
     action_type: str | None = None
     user_goal: str | None = None
@@ -42,6 +45,10 @@ class ContextResolutionInput:
     # decides whether a current turn is eligible for contextual continuation.
     allow_active_bom_scope: bool = False
     allow_workflow_scope: bool = False
+    # Workflow target/edge inheritance is separately opt-in.  A workflow may
+    # provide MODEL/PLANT scope for a follow-up without implicitly making an
+    # old target the subject of a new request.
+    allow_workflow_target_context: bool = False
 
 
 class DomainContextResolverFoundation:
@@ -117,6 +124,39 @@ class DomainContextResolverFoundation:
         target_item_name = self._explicit_optional(
             self._clean(request.explicit_target_item_name)
         )
+        target_parent_item_code = self._explicit_optional(
+            self._upper(request.explicit_target_parent_item_code)
+        )
+        target_location_code = self._explicit_optional(
+            self._upper(request.explicit_target_location_code)
+        )
+
+        workflow_action_type: ContextValue | None = None
+        if request.allow_workflow_target_context:
+            workflow_target = self._workflow_target_context(workflow)
+            if target_item_code is None:
+                target_item_code = self._workflow_optional(
+                    workflow_target.get("target_item_code")
+                )
+            if target_item_type is None:
+                target_item_type = self._workflow_optional(
+                    workflow_target.get("target_item_type")
+                )
+            if target_item_name is None:
+                target_item_name = self._workflow_optional(
+                    workflow_target.get("target_item_name")
+                )
+            if target_parent_item_code is None:
+                target_parent_item_code = self._workflow_optional(
+                    workflow_target.get("target_parent_item_code")
+                )
+            if target_location_code is None:
+                target_location_code = self._workflow_optional(
+                    workflow_target.get("target_location_code")
+                )
+            workflow_action_type = self._workflow_optional(
+                workflow_target.get("action_type")
+            )
 
         analysis_id = self._workflow_optional(
             self._clean(workflow.get("analysis_id"))
@@ -128,18 +168,21 @@ class DomainContextResolverFoundation:
             self._upper(workflow.get("current_step"))
         )
 
-        return DomainContextSnapshot(
+        snapshot = DomainContextSnapshot(
             purpose=request.purpose,
             version_code=version_value,
             plant_code=plant_value,
             target_item_code=target_item_code,
             target_item_type=target_item_type,
             target_item_name=target_item_name,
+            target_parent_item_code=target_parent_item_code,
+            target_location_code=target_location_code,
             business_intent=self._derived_optional(
                 self._upper(request.business_intent)
             ),
-            action_type=self._derived_optional(
-                self._upper(request.action_type)
+            action_type=(
+                self._derived_optional(self._upper(request.action_type))
+                or workflow_action_type
             ),
             user_goal=self._explicit_optional(
                 self._clean(request.user_goal)
@@ -152,6 +195,8 @@ class DomainContextResolverFoundation:
             workflow_step=workflow_step,
             evidence=self._validated_evidence(request.evidence),
         )
+        validate_context_snapshot(snapshot)
+        return snapshot
 
     @staticmethod
     def _validated_evidence(
@@ -243,6 +288,50 @@ class DomainContextResolverFoundation:
                 continue
             return candidate
         return None
+
+    @classmethod
+    def _workflow_target_context(
+        cls,
+        workflow: Mapping[str, Any],
+    ) -> dict[str, str | None]:
+        """Return one authoritative workflow target edge, or no target.
+
+        Multi-action workflows are intentionally not collapsed to one target.
+        This protects follow-up context from silently binding to the first action.
+        """
+        actions = workflow.get("actions")
+        if not isinstance(actions, list) or len(actions) != 1:
+            return {}
+        raw_action = actions[0]
+        if not isinstance(raw_action, Mapping):
+            return {}
+        action = dict(raw_action)
+
+        item_code = cls._upper(
+            action.get("old_item_code") or action.get("new_item_code")
+        )
+        target_type = cls._upper(action.get("target_type"))
+        parent_item_code = cls._upper(action.get("parent_item_code"))
+        location_code = cls._upper(action.get("location_code"))
+        action_type = cls._upper(action.get("action_type"))
+
+        item_name = None
+        analysis_context = workflow.get("analysis_context")
+        if isinstance(analysis_context, Mapping):
+            target_item = analysis_context.get("target_item")
+            if isinstance(target_item, Mapping):
+                context_code = cls._upper(target_item.get("item_code"))
+                if not item_code or not context_code or context_code == item_code:
+                    item_name = cls._clean(target_item.get("item_name"))
+
+        return {
+            "target_item_code": item_code,
+            "target_item_type": target_type,
+            "target_item_name": item_name,
+            "target_parent_item_code": parent_item_code,
+            "target_location_code": location_code,
+            "action_type": action_type,
+        }
 
     @classmethod
     def _workflow_scope(

@@ -4,7 +4,7 @@ from evaluation.context.context_eval_runner import load_cases, run_evaluation
 def test_context_evaluation_catalog_has_gate_and_diagnostic_coverage():
     cases = load_cases()
 
-    assert len(cases["gate_cases"]) >= 10
+    assert len(cases["gate_cases"]) >= 13
     assert len(cases["diagnostic_cases"]) >= 2
 
     categories = {case["category"] for case in cases["gate_cases"]}
@@ -16,6 +16,8 @@ def test_context_evaluation_catalog_has_gate_and_diagnostic_coverage():
         "single_capability_routing",
         "authority_safety",
         "prompt_budget",
+        "scope_conflict_semantics",
+        "workflow_reference_semantics",
     }.issubset(categories)
 
 

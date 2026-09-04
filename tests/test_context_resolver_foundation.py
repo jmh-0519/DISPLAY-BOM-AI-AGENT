@@ -193,3 +193,70 @@ def test_workflow_ids_are_observational_and_workflow_authoritative():
     assert context.analysis_id.authority == ContextAuthority.WORKFLOW_STATE
     assert context.request_id is None
     assert context.workflow_step.value == "ANALYSIS_READY"
+
+
+def test_workflow_target_edge_is_opt_in_and_preserves_exact_parent_location():
+    workflow = _workflow()
+    workflow["actions"] = [{
+        "action_type": "REPLACE",
+        "target_type": "MATERIAL",
+        "old_item_code": "0001-200008",
+        "parent_item_code": "LJ94-100003",
+        "location_code": "ALL",
+    }]
+    workflow["analysis_context"] = {
+        "version_code": "LTA750HR11-001",
+        "plant_code": "P02",
+        "target_item": {
+            "item_code": "0001-200008",
+            "item_name": "SPACER",
+        },
+    }
+
+    default_context = _resolver().resolve(
+        ContextResolutionInput(
+            purpose=ContextPurpose.DESIGN_CHANGE,
+            workflow_state=workflow,
+            allow_workflow_scope=True,
+        )
+    )
+    assert default_context.target_item_code is None
+    assert default_context.target_parent_item_code is None
+
+    context = _resolver().resolve(
+        ContextResolutionInput(
+            purpose=ContextPurpose.DESIGN_CHANGE,
+            workflow_state=workflow,
+            allow_workflow_scope=True,
+            allow_workflow_target_context=True,
+        )
+    )
+
+    assert context.target_item_code.value == "0001-200008"
+    assert context.target_item_name.value == "SPACER"
+    assert context.target_item_type.value == "MATERIAL"
+    assert context.target_parent_item_code.value == "LJ94-100003"
+    assert context.target_location_code.value == "ALL"
+    assert context.action_type.value == "REPLACE"
+    assert context.target_item_code.source == ContextSource.DESIGN_CHANGE_WORKFLOW
+    assert context.target_parent_item_code.source == ContextSource.DESIGN_CHANGE_WORKFLOW
+
+
+def test_multi_action_workflow_never_collapses_to_one_target_edge():
+    workflow = _workflow()
+    workflow["actions"] = [
+        {"action_type": "REPLACE", "old_item_code": "0001-200008"},
+        {"action_type": "REPLACE", "old_item_code": "0001-200009"},
+    ]
+    context = _resolver().resolve(
+        ContextResolutionInput(
+            purpose=ContextPurpose.DESIGN_CHANGE,
+            workflow_state=workflow,
+            allow_workflow_scope=True,
+            allow_workflow_target_context=True,
+        )
+    )
+    assert context.target_item_code is None
+    assert context.target_parent_item_code is None
+    assert context.target_location_code is None
+    assert context.action_type is None

@@ -10,6 +10,15 @@ from .context_contract import (
     ContextSource,
     ContextValue,
     DomainContextSnapshot,
+    validate_context_snapshot,
+)
+from .context_semantics import (
+    ContextSemanticResolver,
+    DEFAULT_CONTEXT_SEMANTIC_RESOLVER,
+    RelativeReferenceDecision,
+    RelativeReferenceType,
+    ScopeIdentity,
+    ScopeRelation,
 )
 from .context_resolver import (
     ContextResolutionInput,
@@ -38,7 +47,9 @@ __all__ = [
     "ContextPurpose",
     "ContextProjectionResult",
     "ContextResolutionInput",
+    "ContextSemanticResolver",
     "ContextSource",
+    "DEFAULT_CONTEXT_SEMANTIC_RESOLVER",
     "DEFAULT_DOMAIN_CONTEXT_RESOLVER",
     "DEFAULT_LLM_CONTEXT_PROJECTOR",
     "ContextValue",
@@ -50,4 +61,9 @@ __all__ = [
     "DomainRelationType",
     "LlmContextProjector",
     "OntologyRelation",
+    "RelativeReferenceDecision",
+    "RelativeReferenceType",
+    "ScopeIdentity",
+    "ScopeRelation",
+    "validate_context_snapshot",
 ]

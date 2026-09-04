@@ -1,7 +1,14 @@
+import pytest
+
 from ontology.context_contract import (
     CONTEXT_FIELD_POLICIES,
+    ContextAuthority,
     ContextInheritanceMode,
+    ContextPurpose,
     ContextSource,
+    ContextValue,
+    DomainContextSnapshot,
+    validate_context_snapshot,
 )
 
 
@@ -12,6 +19,8 @@ def test_context_contract_covers_core_fields():
         "target_item_code",
         "target_item_type",
         "target_item_name",
+        "target_parent_item_code",
+        "target_location_code",
         "business_intent",
         "action_type",
         "user_goal",
@@ -60,3 +69,24 @@ def test_evidence_requires_actual_retrieval_or_tool_result():
     assert policy.inheritance_mode == ContextInheritanceMode.TOOL_EVIDENCE_ONLY
     assert ContextSource.CURRENT_TURN not in policy.allowed_sources
     assert ContextSource.ACTIVE_BOM not in policy.allowed_sources
+
+
+def test_exact_target_edge_fields_never_inherit_from_active_bom():
+    for field_name in ("target_parent_item_code", "target_location_code"):
+        policy = CONTEXT_FIELD_POLICIES[field_name]
+        assert ContextSource.ACTIVE_BOM not in policy.allowed_sources
+        assert ContextSource.DESIGN_CHANGE_WORKFLOW in policy.allowed_sources
+
+
+def test_context_policy_validator_rejects_active_bom_as_change_target_source():
+    snapshot = DomainContextSnapshot(
+        purpose=ContextPurpose.DESIGN_CHANGE,
+        target_item_code=ContextValue(
+            value="0001-200008",
+            source=ContextSource.ACTIVE_BOM,
+            authority=ContextAuthority.GRAPH_STATE,
+            inherited=True,
+        ),
+    )
+    with pytest.raises(ValueError, match="target_item_code"):
+        validate_context_snapshot(snapshot)

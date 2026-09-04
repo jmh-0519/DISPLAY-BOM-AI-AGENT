@@ -139,3 +139,56 @@ def test_active_design_change_workflow_still_blocks_active_bom_reinheritance():
         workflow_state=workflow,
         active_bom_context=_active_bom(),
     ) == query
+
+
+def test_agent_followup_projection_includes_workflow_target_edge_only_when_opted_in():
+    node = BomAgentNode(Mock(), Mock(), "skill")
+    workflow = _workflow()
+    workflow.update({
+        "plant_code": "P02",
+        "analysis_request": {
+            "version_code": "LTA750HR11-001",
+            "plant_code": "P02",
+        },
+        "actions": [{
+            "action_type": "REPLACE",
+            "target_type": "MATERIAL",
+            "old_item_code": "0001-200008",
+            "parent_item_code": "LJ94-100003",
+            "location_code": "ALL",
+        }],
+        "analysis_context": {
+            "version_code": "LTA750HR11-001",
+            "plant_code": "P02",
+            "target_item": {
+                "item_code": "0001-200008",
+                "item_name": "SPACER",
+            },
+        },
+    })
+    query = "왜 후보가 FAIL이야?"
+    decision = node.domain_intent_router.route(
+        query,
+        workflow_active=True,
+        workflow_state=workflow,
+    )
+
+    result = node._build_llm_context_projection(
+        messages=[HumanMessage(content=query)],
+        raw_user_query=query,
+        state={
+            "active_bom_context": None,
+            "design_change": workflow,
+        },
+        workflow_state=workflow,
+        routing_decision=decision,
+        routing_step="ANALYSIS_READY",
+        follow_up_intent="EXPLAIN_ANALYSIS",
+        design_change_mode=True,
+        product_cost_scan_intent=False,
+    )
+
+    assert '"value":"0001-200008"' in result.text
+    assert '"value":"LJ94-100003"' in result.text
+    assert '"value":"ALL"' in result.text
+    assert '"source":"DESIGN_CHANGE_WORKFLOW"' in result.text

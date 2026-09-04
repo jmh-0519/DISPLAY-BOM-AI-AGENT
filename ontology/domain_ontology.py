@@ -16,11 +16,14 @@ class DomainEntityType(str, Enum):
     VERSION = "VERSION"
     PLANT = "PLANT"
     BOM = "BOM"
+    BOM_EDGE = "BOM_EDGE"
     ITEM = "ITEM"
     ASSEMBLY = "ASSEMBLY"
     MATERIAL = "MATERIAL"
     SUPPLIER = "SUPPLIER"
     RULE = "RULE"
+    ANALYSIS_SESSION = "ANALYSIS_SESSION"
+    CHANGE_REQUEST = "CHANGE_REQUEST"
     DESIGN_CHANGE = "DESIGN_CHANGE"
 
 
@@ -28,14 +31,18 @@ class DomainRelationType(str, Enum):
     HAS_VERSION = "HAS_VERSION"
     VERSION_OF = "VERSION_OF"
     HAS_BOM = "HAS_BOM"
+    HAS_EDGE = "HAS_EDGE"
     VALID_AT = "VALID_AT"
     CONTAINS = "CONTAINS"
+    PARENT_ITEM = "PARENT_ITEM"
+    CHILD_ITEM = "CHILD_ITEM"
     IS_A = "IS_A"
     SUPPLIED_BY = "SUPPLIED_BY"
     TARGETS = "TARGETS"
     APPLIES_TO = "APPLIES_TO"
     APPLIES_AT = "APPLIES_AT"
     EVALUATED_BY = "EVALUATED_BY"
+    BASED_ON = "BASED_ON"
 
 
 @dataclass(frozen=True, order=True)
@@ -167,6 +174,21 @@ DEFAULT_DOMAIN_ONTOLOGY = DomainOntology(
         ),
         OntologyRelation(
             DomainEntityType.BOM,
+            DomainRelationType.HAS_EDGE,
+            DomainEntityType.BOM_EDGE,
+        ),
+        OntologyRelation(
+            DomainEntityType.BOM_EDGE,
+            DomainRelationType.PARENT_ITEM,
+            DomainEntityType.ITEM,
+        ),
+        OntologyRelation(
+            DomainEntityType.BOM_EDGE,
+            DomainRelationType.CHILD_ITEM,
+            DomainEntityType.ITEM,
+        ),
+        OntologyRelation(
+            DomainEntityType.BOM,
             DomainRelationType.CONTAINS,
             DomainEntityType.ITEM,
         ),
@@ -209,6 +231,51 @@ DEFAULT_DOMAIN_ONTOLOGY = DomainOntology(
             DomainEntityType.DESIGN_CHANGE,
             DomainRelationType.EVALUATED_BY,
             DomainEntityType.RULE,
+        ),
+        OntologyRelation(
+            DomainEntityType.ANALYSIS_SESSION,
+            DomainRelationType.TARGETS,
+            DomainEntityType.BOM_EDGE,
+        ),
+        OntologyRelation(
+            DomainEntityType.ANALYSIS_SESSION,
+            DomainRelationType.APPLIES_TO,
+            DomainEntityType.VERSION,
+        ),
+        OntologyRelation(
+            DomainEntityType.ANALYSIS_SESSION,
+            DomainRelationType.APPLIES_AT,
+            DomainEntityType.PLANT,
+        ),
+        OntologyRelation(
+            DomainEntityType.ANALYSIS_SESSION,
+            DomainRelationType.EVALUATED_BY,
+            DomainEntityType.RULE,
+        ),
+        OntologyRelation(
+            DomainEntityType.CHANGE_REQUEST,
+            DomainRelationType.IS_A,
+            DomainEntityType.DESIGN_CHANGE,
+        ),
+        OntologyRelation(
+            DomainEntityType.CHANGE_REQUEST,
+            DomainRelationType.BASED_ON,
+            DomainEntityType.ANALYSIS_SESSION,
+        ),
+        OntologyRelation(
+            DomainEntityType.CHANGE_REQUEST,
+            DomainRelationType.TARGETS,
+            DomainEntityType.BOM_EDGE,
+        ),
+        OntologyRelation(
+            DomainEntityType.CHANGE_REQUEST,
+            DomainRelationType.APPLIES_TO,
+            DomainEntityType.VERSION,
+        ),
+        OntologyRelation(
+            DomainEntityType.CHANGE_REQUEST,
+            DomainRelationType.APPLIES_AT,
+            DomainEntityType.PLANT,
         ),
     ),
 )

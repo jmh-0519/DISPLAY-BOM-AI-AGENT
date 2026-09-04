@@ -1,6 +1,6 @@
 {
-  "version": "1.0",
-  "base_commit": "fcd75e9",
+  "version": "2.0",
+  "base_commit": "f48bef6",
   "gate_cases": [
     {
       "id": "CTX-G01",
@@ -88,7 +88,24 @@
             "candidate_item_code": "0001-200020",
             "status": "FAIL"
           }
-        ]
+        ],
+        "actions": [
+          {
+            "action_type": "REPLACE",
+            "target_type": "MATERIAL",
+            "old_item_code": "0001-200008",
+            "parent_item_code": "LJ94-100003",
+            "location_code": "ALL"
+          }
+        ],
+        "analysis_context": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01",
+          "target_item": {
+            "item_code": "0001-200008",
+            "item_name": "SPACER"
+          }
+        }
       },
       "follow_up_intent": "EXPLAIN_ANALYSIS",
       "projection_contains": [
@@ -97,7 +114,11 @@
         "\"source\":\"DESIGN_CHANGE_WORKFLOW\"",
         "\"value\":\"ANA-CTX-1\"",
         "\"value\":\"ANALYSIS_READY\"",
-        "\"authority\":\"WORKFLOW_STATE\""
+        "\"authority\":\"WORKFLOW_STATE\"",
+        "\"value\":\"0001-200008\"",
+        "\"value\":\"LJ94-100003\"",
+        "\"value\":\"ALL\"",
+        "\"value\":\"REPLACE\""
       ],
       "projection_excludes": []
     },
@@ -201,6 +222,47 @@
         "current_step": "NOT_STARTED"
       },
       "max_projection_chars": 1800
+    },
+    {
+      "id": "CTX-G12",
+      "category": "scope_conflict_semantics",
+      "query": "해당 ASSY를 변경할 때 적용되는 기준과 영향을 분석해줘",
+      "active_bom": {
+        "product_id": "LTA550HR11-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "ANALYSIS_READY",
+        "analysis_id": "ANA-SCOPE-1",
+        "plant_code": "P01",
+        "analysis_request": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01"
+        }
+      },
+      "expected_route": "scope_conflict"
+    },
+    {
+      "id": "CTX-G13",
+      "category": "workflow_reference_semantics",
+      "query": "기존 분석 결과를 설명해줘",
+      "active_bom": {
+        "product_id": "LTA550HR11-001",
+        "plant_code": "P01",
+        "source": "get_bom"
+      },
+      "workflow": {
+        "current_step": "ANALYSIS_READY",
+        "analysis_id": "ANA-SCOPE-1",
+        "plant_code": "P01",
+        "analysis_request": {
+          "version_code": "LTA400HR01-001",
+          "plant_code": "P01"
+        }
+      },
+      "follow_up_intent": "EXPLAIN_ANALYSIS",
+      "expected_route": "agent"
     }
   ],
   "diagnostic_cases": [

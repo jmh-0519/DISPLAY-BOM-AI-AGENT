@@ -31,6 +31,8 @@ class LlmContextProjector:
         "target_item_code",
         "target_item_type",
         "target_item_name",
+        "target_parent_item_code",
+        "target_location_code",
         "business_intent",
         "action_type",
         "optimization_criterion",

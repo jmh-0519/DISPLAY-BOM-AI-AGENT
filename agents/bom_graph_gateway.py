@@ -34,6 +34,11 @@ from text_to_sql.query_router import (
     TextToSqlQueryRouter,
 )
 from ontology.context_contract import ContextPurpose, DomainContextSnapshot
+from ontology.context_semantics import (
+    DEFAULT_CONTEXT_SEMANTIC_RESOLVER,
+    ContextSemanticResolver,
+    ScopeRelation,
+)
 from ontology.context_resolver import (
     ContextResolutionInput,
     DEFAULT_DOMAIN_CONTEXT_RESOLVER,
@@ -68,23 +73,6 @@ class BomGraphGateway:
         "BLOCKED",
     })
 
-    # Relative expressions are safe only when Active BOM and active Design
-    # Change Workflow refer to the same MODEL/PLANT scope.  They deliberately
-    # stay narrow: ordinary read-only questions continue to prefer Active BOM,
-    # while explicit MODEL requests remain authoritative current-turn scope.
-    RELATIVE_SCOPE_MARKERS = (
-        "이 모델",
-        "이모델",
-        "현재 모델",
-        "현재모델",
-        "이 BOM",
-        "이BOM",
-        "현재 BOM",
-        "현재BOM",
-        "이 자재",
-        "이자재",
-    )
-
     def __init__(
         self,
         *,
@@ -92,6 +80,7 @@ class BomGraphGateway:
         knowledge_router: KnowledgeQueryRouter | None = None,
         text_to_sql_router: TextToSqlQueryRouter | None = None,
         context_resolver: DomainContextResolverFoundation | None = None,
+        context_semantic_resolver: ContextSemanticResolver | None = None,
         capability_resolver: CapabilityRequirementResolver | None = None,
         design_change_active_steps: Iterable[str] = (),
     ) -> None:
@@ -102,6 +91,9 @@ class BomGraphGateway:
         )
         self.context_resolver = (
             context_resolver or DEFAULT_DOMAIN_CONTEXT_RESOLVER
+        )
+        self.context_semantic_resolver = (
+            context_semantic_resolver or DEFAULT_CONTEXT_SEMANTIC_RESOLVER
         )
         self.capability_resolver = (
             capability_resolver or DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER
@@ -343,57 +335,32 @@ class BomGraphGateway:
             # fresh-analysis policy decides whether that means old or new scope.
             return None
 
-        compact = " ".join(str(user_query or "").strip().split())
-        if not any(
-            marker.lower() in compact.lower()
-            for marker in self.RELATIVE_SCOPE_MARKERS
-        ):
+        references = self.context_semantic_resolver.classify_relative_references(
+            user_query
+        )
+        if not references.requires_scope_alignment:
             return None
 
         requirement = self.capability_resolver.resolve(user_query)
         if Capability.DESIGN_CHANGE_ANALYSIS not in requirement.capabilities:
             return None
 
-        active = state.get("active_bom_context") or {}
-        active_version = str(
-            active.get("version_code")
-            or active.get("product_id")
-            or ""
-        ).strip().upper()
-        active_plant = str(
-            active.get("plant_code") or ""
-        ).strip().upper()
-        if not active_version or not active_plant:
-            return None
-
-        workflow_scope = self.context_resolver.resolve(
-            ContextResolutionInput(
-                purpose=ContextPurpose.DESIGN_CHANGE,
+        relation, active_scope, workflow_scope = (
+            self.context_semantic_resolver.compare_runtime_scopes(
+                active_bom_context=state.get("active_bom_context"),
                 workflow_state=workflow_state,
-                allow_workflow_scope=True,
             )
         )
-        if not workflow_scope.version_code or not workflow_scope.plant_code:
+        if relation != ScopeRelation.DIFFERENT:
             return None
-
-        workflow_version = str(
-            workflow_scope.version_code.value
-        ).strip().upper()
-        workflow_plant = str(
-            workflow_scope.plant_code.value
-        ).strip().upper()
-
-        if (
-            active_version == workflow_version
-            and active_plant == workflow_plant
-        ):
-            return None
+        assert active_scope is not None
+        assert workflow_scope is not None
 
         return {
-            "active_version_code": active_version,
-            "active_plant_code": active_plant,
-            "workflow_version_code": workflow_version,
-            "workflow_plant_code": workflow_plant,
+            "active_version_code": active_scope.version_code,
+            "active_plant_code": active_scope.plant_code,
+            "workflow_version_code": workflow_scope.version_code,
+            "workflow_plant_code": workflow_scope.plant_code,
             "workflow_step": current_step,
         }
 
@@ -416,7 +383,7 @@ class BomGraphGateway:
             f"현재 조회 중인 BOM은 {active_version} / {active_plant}이고, "
             f"진행 중인 설계변경 분석 대상은 "
             f"{workflow_version} / {workflow_plant}입니다. "
-            "'이 모델', '이 BOM', '이 자재' 같은 상대 표현만으로는 "
+            "'이 모델', '이 BOM', '이 자재', '이 ASSY' 같은 상대 표현만으로는 "
             "어느 범위를 의미하는지 안전하게 결정할 수 없습니다. "
             f"기존 분석을 이어가려면 {workflow_version} 모델을, "
             f"현재 조회 BOM을 새 대상으로 분석하려면 "

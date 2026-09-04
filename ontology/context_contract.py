@@ -108,6 +108,8 @@ class DomainContextSnapshot:
     target_item_code: ContextValue | None = None
     target_item_type: ContextValue | None = None
     target_item_name: ContextValue | None = None
+    target_parent_item_code: ContextValue | None = None
+    target_location_code: ContextValue | None = None
     business_intent: ContextValue | None = None
     action_type: ContextValue | None = None
     user_goal: ContextValue | None = None
@@ -125,6 +127,8 @@ class DomainContextSnapshot:
             "target_item_code",
             "target_item_type",
             "target_item_name",
+            "target_parent_item_code",
+            "target_location_code",
             "business_intent",
             "action_type",
             "user_goal",
@@ -200,6 +204,28 @@ CONTEXT_FIELD_POLICIES: dict[str, ContextFieldPolicy] = {
         ),
         "Target name must not be guessed from unrelated previous conversation.",
     ),
+    "target_parent_item_code": ContextFieldPolicy(
+        "target_parent_item_code",
+        DomainEntityType.ITEM,
+        ContextInheritanceMode.EXPLICIT_OR_WORKFLOW,
+        (
+            ContextSource.CURRENT_TURN,
+            ContextSource.DESIGN_CHANGE_WORKFLOW,
+            ContextSource.TOOL_RESULT,
+        ),
+        "Parent ITEM is part of the exact BOM edge and must be explicit or workflow/tool authoritative.",
+    ),
+    "target_location_code": ContextFieldPolicy(
+        "target_location_code",
+        None,
+        ContextInheritanceMode.EXPLICIT_OR_WORKFLOW,
+        (
+            ContextSource.CURRENT_TURN,
+            ContextSource.DESIGN_CHANGE_WORKFLOW,
+            ContextSource.TOOL_RESULT,
+        ),
+        "LOCATION is part of the exact BOM edge and must not be inferred from generic chat history.",
+    ),
     "business_intent": ContextFieldPolicy(
         "business_intent",
         None,
@@ -234,14 +260,14 @@ CONTEXT_FIELD_POLICIES: dict[str, ContextFieldPolicy] = {
     ),
     "analysis_id": ContextFieldPolicy(
         "analysis_id",
-        DomainEntityType.DESIGN_CHANGE,
+        DomainEntityType.ANALYSIS_SESSION,
         ContextInheritanceMode.WORKFLOW_ONLY,
         (ContextSource.DESIGN_CHANGE_WORKFLOW,),
         "Analysis ID can only come from workflow state.",
     ),
     "request_id": ContextFieldPolicy(
         "request_id",
-        DomainEntityType.DESIGN_CHANGE,
+        DomainEntityType.CHANGE_REQUEST,
         ContextInheritanceMode.WORKFLOW_ONLY,
         (ContextSource.DESIGN_CHANGE_WORKFLOW,),
         "Request ID can only come from workflow state.",
@@ -267,6 +293,48 @@ CONTEXT_FIELD_POLICIES: dict[str, ContextFieldPolicy] = {
 }
 
 
+def validate_context_snapshot(snapshot: DomainContextSnapshot) -> None:
+    """Enforce the declared field-source contract at runtime.
+
+    FINAL-01 turns CONTEXT_FIELD_POLICIES from documentation into an
+    executable safety invariant. The resolver calls this before returning a
+    snapshot, and tests may validate externally constructed snapshots as well.
+    """
+    if not isinstance(snapshot, DomainContextSnapshot):
+        raise TypeError("snapshot must be DomainContextSnapshot")
+
+    for field_name, policy in CONTEXT_FIELD_POLICIES.items():
+        if field_name == "evidence":
+            for evidence in snapshot.evidence:
+                if evidence.source not in policy.allowed_sources:
+                    raise ValueError(
+                        f"context field {field_name} disallows source {evidence.source.value}"
+                    )
+                if evidence.authority != ContextAuthority.TOOL_EVIDENCE:
+                    raise ValueError("context evidence must remain TOOL_EVIDENCE authoritative")
+            continue
+
+        value = getattr(snapshot, field_name)
+        if value is None:
+            continue
+        if value.source not in policy.allowed_sources:
+            raise ValueError(
+                f"context field {field_name} disallows source {value.source.value}"
+            )
+        if value.source == ContextSource.CURRENT_TURN and value.inherited:
+            raise ValueError(f"current-turn context cannot be inherited: {field_name}")
+        if (
+            policy.inheritance_mode == ContextInheritanceMode.WORKFLOW_ONLY
+            and value.source != ContextSource.DESIGN_CHANGE_WORKFLOW
+        ):
+            raise ValueError(f"workflow-only context has invalid source: {field_name}")
+        if (
+            policy.inheritance_mode == ContextInheritanceMode.CURRENT_TURN_ONLY
+            and value.source != ContextSource.CURRENT_TURN
+        ):
+            raise ValueError(f"current-turn-only context has invalid source: {field_name}")
+
+
 __all__ = [
     "CONTEXT_FIELD_POLICIES",
     "ContextAuthority",
@@ -277,4 +345,5 @@ __all__ = [
     "ContextSource",
     "ContextValue",
     "DomainContextSnapshot",
+    "validate_context_snapshot",
 ]
