@@ -53,6 +53,7 @@ class HandoffStatus(str, Enum):
     COST_METRIC_AMBIGUOUS = "COST_METRIC_AMBIGUOUS"
     KNOWLEDGE_EVIDENCE_REQUIRED = "KNOWLEDGE_EVIDENCE_REQUIRED"
     KNOWLEDGE_EVIDENCE_INVALID = "KNOWLEDGE_EVIDENCE_INVALID"
+    KNOWLEDGE_EVIDENCE_EMPTY = "KNOWLEDGE_EVIDENCE_EMPTY"
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,10 @@ class AnalyticsTargetEvidence:
     metric_value: float
     question: str
     row_count: int
+    parent_item_code: str | None = None
+    location_code: str | None = None
+    price_source: str | None = None
+    currency_code: str | None = None
     authority: str = "READ_ONLY_SQL_EVIDENCE"
 
     def as_dict(self) -> dict[str, Any]:
@@ -93,6 +98,10 @@ class AnalyticsTargetEvidence:
             "metric_value": self.metric_value,
             "question": self.question,
             "row_count": self.row_count,
+            "parent_item_code": self.parent_item_code,
+            "location_code": self.location_code,
+            "price_source": self.price_source,
+            "currency_code": self.currency_code,
             "authority": self.authority,
         }
 
@@ -243,6 +252,22 @@ class EvidenceToWorkflowHandoff:
         active_version = str(active.get("product_id") or "").strip().upper()
         active_plant = str(active.get("plant_code") or "").strip().upper()
 
+        # A user may disambiguate the scope by repeating the exact currently
+        # viewed VERSION code and PLANT without the literal word "모델":
+        #
+        #   LTA550HR11-001 P01 대상으로 ...
+        #
+        # This is not scope guessing because the code is required to equal the
+        # verified Active BOM VERSION already stored in Graph state.  An
+        # arbitrary material/ASSY code is never promoted to VERSION here.
+        if (
+            explicit_version is None
+            and explicit_plant
+            and active_version
+            and active_version in self.domain_router.item_codes(text)
+        ):
+            explicit_version = active_version
+
         # An explicit MODEL declares a fresh scope under the project's current
         # context policy.  Never silently reuse the old active PLANT.
         if explicit_version:
@@ -355,7 +380,11 @@ class EvidenceToWorkflowHandoff:
         if not rows or sql_result.row_count == 0:
             return self._blocked(
                 HandoffStatus.SQL_RESULT_EMPTY,
-                "분석 결과에서 변경 대상을 찾지 못했습니다.",
+                (
+                    "확정된 MODEL/PLANT BOM에서 비교 가능한 원가/단가 근거가 "
+                    "등록된 변경 대상 자재를 찾지 못했습니다. "
+                    "원가 근거가 없는 자재를 임의로 선택하지 않습니다."
+                ),
                 scope=scope,
                 knowledge=knowledge,
             )
@@ -427,6 +456,15 @@ class EvidenceToWorkflowHandoff:
             )
 
         metric_name, metric_value = metric_values[0]
+        parent_item_code = (
+            str(row.get("parent_item_code") or "").strip().upper() or None
+        )
+        location_code = (
+            str(row.get("location_code") or "").strip().upper() or None
+        )
+        price_source = str(row.get("price_source") or "").strip() or None
+        currency_code = str(row.get("currency_code") or "").strip().upper() or None
+
         analytics = AnalyticsTargetEvidence(
             version_code=scope.version_code,
             plant_code=scope.plant_code,
@@ -437,21 +475,33 @@ class EvidenceToWorkflowHandoff:
             metric_value=metric_value,
             question=str(sql_result.question or "").strip(),
             row_count=sql_result.row_count,
+            parent_item_code=parent_item_code,
+            location_code=location_code,
+            price_source=price_source,
+            currency_code=currency_code,
         )
 
-        # Only prepare the existing Analysis Session tool contract.  Do not add
-        # evidence metadata to tool args: the Service owns the business contract
-        # and revalidates VERSION/PLANT/source relation from DB.
+        # Only prepare the existing Analysis Session tool contract. The Service
+        # remains authoritative and revalidates VERSION/PLANT/source relation.
+        # When deterministic analytics already identifies the exact BOM edge,
+        # preserve parent/location so a nested or repeated material is never
+        # silently rebound to another relation.
+        action = {
+            "action_type": "REPLACE",
+            "old_item_code": item_code,
+        }
+        if parent_item_code:
+            action["parent_item_code"] = parent_item_code
+        if location_code:
+            action["location_code"] = location_code
+
         tool_arguments = {
             "request": {
                 "version_code": scope.version_code,
                 "plant_code": scope.plant_code,
                 "original_request": goal,
             },
-            "actions": [{
-                "action_type": "REPLACE",
-                "old_item_code": item_code,
-            }],
+            "actions": [action],
         }
 
         decision = WorkflowHandoffDecision(
@@ -608,6 +658,12 @@ class EvidenceToWorkflowHandoff:
             row for row in (payload.get("hits") or [])
             if isinstance(row, dict)
         ]
+        if not hits:
+            return None, (
+                HandoffStatus.KNOWLEDGE_EVIDENCE_EMPTY,
+                "설계변경 기준을 뒷받침할 RAG Knowledge 근거를 찾지 못했습니다.",
+            )
+
         references: list[str] = []
         for row in hits:
             document_id = str(row.get("document_id") or "").strip()

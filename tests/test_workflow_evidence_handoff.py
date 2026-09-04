@@ -128,6 +128,43 @@ def test_explicit_model_and_plant_resolve_current_turn_scope():
     assert scope.source == "CURRENT_TURN_EXPLICIT"
 
 
+def test_active_bom_version_code_and_plant_are_explicit_without_model_word():
+    handoff = EvidenceToWorkflowHandoff()
+    goal = (
+        f"{VERSION} {PLANT} 대상으로 가장 원가가 높은 자재 1개를 찾아 "
+        "변경 분석해줘"
+    )
+    scope = handoff.resolve_scope(
+        goal,
+        active_bom_context={
+            "product_id": VERSION,
+            "plant_code": PLANT,
+        },
+    )
+
+    assert scope is not None
+    assert scope.version_code == VERSION
+    assert scope.plant_code == PLANT
+    assert scope.source == "CURRENT_TURN_EXPLICIT"
+
+
+def test_unknown_single_code_is_not_promoted_to_version_without_model_word():
+    handoff = EvidenceToWorkflowHandoff()
+    goal = (
+        f"0001-310501 {PLANT} 대상으로 가장 원가가 높은 자재 1개를 찾아 "
+        "변경 분석해줘"
+    )
+    scope = handoff.resolve_scope(
+        goal,
+        active_bom_context={
+            "product_id": VERSION,
+            "plant_code": PLANT,
+        },
+    )
+
+    assert scope is None
+
+
 def test_ready_handoff_prepares_analysis_only_tool_contract():
     decision = EvidenceToWorkflowHandoff().build(
         user_goal=GOAL_TOP1,

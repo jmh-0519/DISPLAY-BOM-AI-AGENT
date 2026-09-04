@@ -50,12 +50,9 @@ class BomTextToSqlPathNodes:
 
     def query(self, state: BomAgentState) -> BomAgentState:
         user_query = self._last_user_query(state)
-        decision = self.router.route(user_query)
-        if not decision.eligible:
-            raise ValueError("Text-to-SQL Path received a non-analytical request.")
 
         try:
-            result = self.pipeline.run(user_query)
+            result = self.execute_result(user_query)
         except Exception:
             return {
                 "messages": [
@@ -73,6 +70,19 @@ class BomTextToSqlPathNodes:
             "messages": [AIMessage(content=self._format_result(result))],
             "error": None,
         }
+
+    def execute_result(self, user_query: str) -> TextToSqlPipelineResult:
+        """Return the structured read-only result for trusted composition paths.
+
+        The same conservative router and TextToSqlPipeline safety stack used by
+        the standalone UI path remain authoritative.  This method exists so a
+        higher-level composition can preserve rows/sql evidence without parsing
+        the rendered Markdown answer or executing the SQL pipeline twice.
+        """
+        decision = self.router.route(user_query)
+        if not decision.eligible:
+            raise ValueError("Text-to-SQL Path received a non-analytical request.")
+        return self.pipeline.run(user_query)
 
     @classmethod
     def _format_result(cls, result: TextToSqlPipelineResult) -> str:

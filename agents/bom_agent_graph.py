@@ -32,6 +32,7 @@ from agents.bom_graph_gateway import (
     FAST_KNOWLEDGE,
     FAST_TEXT_TO_SQL,
     FAST_WHERE_USED,
+    SCOPE_CONFLICT,
     BomGraphGateway,
 )
 from agents.bom_knowledge_nodes import (
@@ -55,6 +56,16 @@ from agents.bom_composition_nodes import (
     COMPOSITION_TEXT_TO_SQL,
     BomReadOnlyCompositionNodes,
     is_composition_knowledge_tool_result,
+)
+from agents.bom_workflow_composition_nodes import (
+    WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE,
+    WORKFLOW_COMPOSITION_HANDOFF,
+    WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY,
+    WORKFLOW_COMPOSITION_PLAN,
+    WORKFLOW_COMPOSITION_TEXT_TO_SQL,
+    BomWorkflowCompositionNodes,
+    is_workflow_composition_analysis_tool_result,
+    is_workflow_composition_knowledge_tool_result,
 )
 from agents.design_change_workflow_state import (
     create_initial_design_change_state,
@@ -89,8 +100,10 @@ class BomAgentGraph:
     START
       → Gateway Router
         → Fast Chat → END
+        → Scope Conflict Guard → END
         → Fast BOM/Where-used → MCP Tool Node → Fast Finalize → END
         → Read-only Composition (Text-to-SQL + RAG) → Finalize → END
+        → Workflow Composition (Text-to-SQL + RAG → Analysis) → END
         → Deterministic Analysis Macro → MCP Tool Node → Analysis Finalizer → END
         → Agent Node → MCP Tool Node → Agent Node → END
     """
@@ -138,6 +151,10 @@ class BomAgentGraph:
             client=client,
             deterministic=True,
         )
+        self.workflow_composition_path_nodes = BomWorkflowCompositionNodes(
+            text_to_sql_nodes=self.text_to_sql_path_nodes,
+            analysis_finalizer=self.analysis_finalizer_node,
+        )
 
         self.checkpointer = (
             checkpointer
@@ -155,6 +172,13 @@ class BomAgentGraph:
         workflow.add_node(
             FAST_CHAT,
             self._observed_node(FAST_CHAT, self.fast_path_nodes.chat),
+        )
+        workflow.add_node(
+            SCOPE_CONFLICT,
+            self._observed_node(
+                SCOPE_CONFLICT,
+                self._scope_conflict_node,
+            ),
         )
         workflow.add_node(
             FAST_BOM_READ,
@@ -224,6 +248,41 @@ class BomAgentGraph:
             ),
         )
         workflow.add_node(
+            WORKFLOW_COMPOSITION_PLAN,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_PLAN,
+                self.workflow_composition_path_nodes.plan,
+            ),
+        )
+        workflow.add_node(
+            WORKFLOW_COMPOSITION_TEXT_TO_SQL,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_TEXT_TO_SQL,
+                self.workflow_composition_path_nodes.text_to_sql,
+            ),
+        )
+        workflow.add_node(
+            WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY,
+                self.workflow_composition_path_nodes.knowledge_query,
+            ),
+        )
+        workflow.add_node(
+            WORKFLOW_COMPOSITION_HANDOFF,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_HANDOFF,
+                self.workflow_composition_path_nodes.handoff_and_dispatch,
+            ),
+        )
+        workflow.add_node(
+            WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE,
+                self.workflow_composition_path_nodes.analysis_finalize,
+            ),
+        )
+        workflow.add_node(
             FAST_READ_FINALIZE,
             self._observed_node(
                 FAST_READ_FINALIZE,
@@ -258,18 +317,21 @@ class BomAgentGraph:
             self._route_user_request,
             {
                 FAST_CHAT: FAST_CHAT,
+                SCOPE_CONFLICT: SCOPE_CONFLICT,
                 FAST_BOM_READ: FAST_BOM_READ,
                 FAST_WHERE_USED: FAST_WHERE_USED,
                 FAST_CURRENT_BOM_QUANTITY: FAST_CURRENT_BOM_QUANTITY,
                 FAST_KNOWLEDGE: FAST_KNOWLEDGE,
                 FAST_TEXT_TO_SQL: FAST_TEXT_TO_SQL,
                 COMPOSITION_PLAN: COMPOSITION_PLAN,
+                WORKFLOW_COMPOSITION_PLAN: WORKFLOW_COMPOSITION_PLAN,
                 MACRO_ANALYZE: MACRO_ANALYZE,
                 AGENT_PATH: AGENT,
             },
         )
 
         workflow.add_edge(FAST_CHAT, END)
+        workflow.add_edge(SCOPE_CONFLICT, END)
         workflow.add_edge(FAST_TEXT_TO_SQL, END)
         workflow.add_edge(COMPOSITION_PLAN, COMPOSITION_TEXT_TO_SQL)
         workflow.add_edge(
@@ -282,6 +344,38 @@ class BomAgentGraph:
             COMPOSITION_FINALIZE,
         )
         workflow.add_edge(COMPOSITION_FINALIZE, END)
+
+        workflow.add_conditional_edges(
+            WORKFLOW_COMPOSITION_PLAN,
+            self._route_workflow_composition_plan,
+            {
+                WORKFLOW_COMPOSITION_TEXT_TO_SQL: (
+                    WORKFLOW_COMPOSITION_TEXT_TO_SQL
+                ),
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            WORKFLOW_COMPOSITION_TEXT_TO_SQL,
+            self._route_workflow_composition_text_to_sql,
+            {
+                WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY: (
+                    WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY
+                ),
+                END: END,
+            },
+        )
+        workflow.add_edge(WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY, MCP_TOOLS)
+        workflow.add_conditional_edges(
+            WORKFLOW_COMPOSITION_HANDOFF,
+            self._route_workflow_composition_handoff,
+            {
+                MCP_TOOLS: MCP_TOOLS,
+                END: END,
+            },
+        )
+        workflow.add_edge(WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE, END)
+
         workflow.add_edge(FAST_KNOWLEDGE, MCP_TOOLS)
         workflow.add_edge(FAST_BOM_READ, MCP_TOOLS)
         workflow.add_edge(FAST_WHERE_USED, MCP_TOOLS)
@@ -309,6 +403,12 @@ class BomAgentGraph:
                 KNOWLEDGE_FINALIZE: KNOWLEDGE_FINALIZE,
                 COMPOSITION_KNOWLEDGE_FINALIZE: (
                     COMPOSITION_KNOWLEDGE_FINALIZE
+                ),
+                WORKFLOW_COMPOSITION_HANDOFF: (
+                    WORKFLOW_COMPOSITION_HANDOFF
+                ),
+                WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE: (
+                    WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE
                 ),
                 FAST_READ_FINALIZE: FAST_READ_FINALIZE,
                 END: END,
@@ -339,21 +439,100 @@ class BomAgentGraph:
             span.finish(output={"route": route})
             return route
 
-    def _runtime_route(self, state: BomAgentState) -> str:
-        """Promote only safe read-only compositions from Agent fallback.
+    def _scope_conflict_node(
+        self,
+        state: BomAgentState,
+    ) -> BomAgentState:
+        """Return a deterministic clarification without LLM or business Tool."""
+        conflict = self.gateway.design_change_scope_conflict(state)
+        if conflict is None:
+            raise ValueError(
+                "Scope Conflict node requires incompatible Active BOM "
+                "and Design Change Workflow scopes."
+            )
 
-        BomGraphGateway remains conservative and continues to classify every
-        multi-capability turn as AGENT_PATH. PLAN-02 adds a second, narrower
-        Graph-level admission gate: only TEXT_TO_SQL + RAG with no active
-        Design Change workflow may enter runtime composition.
+        record_performance_event(
+            category="context",
+            name="context.workflow_scope_conflict",
+            metadata={
+                "active_version_code": conflict["active_version_code"],
+                "active_plant_code": conflict["active_plant_code"],
+                "workflow_version_code": conflict["workflow_version_code"],
+                "workflow_plant_code": conflict["workflow_plant_code"],
+                "workflow_step": conflict["workflow_step"],
+            },
+        )
+        return {
+            "messages": [
+                AIMessage(
+                    content=self.gateway.scope_conflict_message(conflict)
+                )
+            ],
+            "composition_runtime": None,
+            "error": None,
+        }
+
+    def _runtime_route(self, state: BomAgentState) -> str:
+        """Promote only bounded compositions from conservative Agent fallback.
+
+        Gateway classification remains unchanged for CTX-05 compatibility.
+        Graph-level admission enables:
+        - PLAN-02 read-only TEXT_TO_SQL + RAG composition.
+        - PLAN-04 fully-scoped TEXT_TO_SQL + RAG + Analysis composition.
+
+        Workflow composition still stops at the existing Analysis Session and
+        never receives Request/approval/Production BOM authority.
         """
         route = self.gateway.route(state)
-        if (
-            route == AGENT_PATH
-            and self.composition_path_nodes.can_execute(state)
-        ):
+        if route != AGENT_PATH:
+            return route
+        if self.composition_path_nodes.can_execute(state):
             return COMPOSITION_PLAN
+        workflow_nodes = getattr(
+            self,
+            "workflow_composition_path_nodes",
+            None,
+        )
+        if workflow_nodes is not None and workflow_nodes.can_execute(state):
+            return WORKFLOW_COMPOSITION_PLAN
         return route
+
+    @staticmethod
+    def _route_workflow_composition_plan(state: BomAgentState) -> str:
+        runtime = state.get("composition_runtime")
+        if (
+            isinstance(runtime, dict)
+            and runtime.get("mode") == "WORKFLOW_ANALYSIS_COMPOSITION"
+            and runtime.get("status") == "PLANNED"
+        ):
+            return WORKFLOW_COMPOSITION_TEXT_TO_SQL
+        return END
+
+    @staticmethod
+    def _route_workflow_composition_text_to_sql(
+        state: BomAgentState,
+    ) -> str:
+        runtime = state.get("composition_runtime")
+        if (
+            isinstance(runtime, dict)
+            and runtime.get("mode") == "WORKFLOW_ANALYSIS_COMPOSITION"
+            and runtime.get("status") == "TEXT_TO_SQL_COMPLETED"
+        ):
+            return WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY
+        return END
+
+    @staticmethod
+    def _route_workflow_composition_handoff(
+        state: BomAgentState,
+    ) -> str:
+        messages = state.get("messages", [])
+        if (
+            messages
+            and isinstance(messages[-1], AIMessage)
+            and messages[-1].tool_calls
+        ):
+            return MCP_TOOLS
+        return END
 
     @staticmethod
     def _route_mcp_tool_result(state: BomAgentState) -> str:
@@ -361,6 +540,10 @@ class BomAgentGraph:
         normal_route = route_mcp_tool_result(state)
         if normal_route == END:
             return END
+        if is_workflow_composition_knowledge_tool_result(state):
+            return WORKFLOW_COMPOSITION_HANDOFF
+        if is_workflow_composition_analysis_tool_result(state):
+            return WORKFLOW_COMPOSITION_ANALYSIS_FINALIZE
         if is_composition_knowledge_tool_result(state):
             return COMPOSITION_KNOWLEDGE_FINALIZE
         if is_knowledge_tool_result(state):

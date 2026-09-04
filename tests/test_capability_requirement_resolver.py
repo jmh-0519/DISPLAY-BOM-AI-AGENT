@@ -111,6 +111,23 @@ def test_analytics_knowledge_and_design_change_impact_require_composition():
     ) == AGENT_PATH
 
 
+def test_analytics_design_change_infers_mandatory_rag_evidence_dependency():
+    query = (
+        "LTA550HR11-001 P01 대상으로 가장 원가가 높은 자재 1개를 찾아 "
+        "변경 분석해줘"
+    )
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (
+        Capability.TEXT_TO_SQL,
+        Capability.RAG,
+        Capability.DESIGN_CHANGE_ANALYSIS,
+    )
+    assert decision.composition_required is True
+    assert decision.workflow_managed is True
+    assert "WORKFLOW_KNOWLEDGE_EVIDENCE_REQUIRED" in decision.reasons
+
+
 def test_direct_design_change_is_not_misclassified_as_composition():
     query = "SEALANT를 변경하고싶어"
     decision = CapabilityRequirementResolver().resolve(query)

@@ -17,6 +17,7 @@ from agents.analysis_macro_dispatch import (
 )
 from agents.capability_requirement_resolver import (
     DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER,
+    Capability,
     CapabilityRequirementResolver,
 )
 from agents.bom_agent_state import BomAgentState
@@ -46,6 +47,7 @@ FAST_WHERE_USED = "fast_where_used"
 FAST_CURRENT_BOM_QUANTITY = "fast_current_bom_quantity"
 FAST_KNOWLEDGE = "fast_knowledge"
 FAST_TEXT_TO_SQL = "fast_text_to_sql"
+SCOPE_CONFLICT = "scope_conflict"
 AGENT_PATH = "agent"
 
 
@@ -65,6 +67,23 @@ class BomGraphGateway:
         "REPORT_COMPLETED",
         "BLOCKED",
     })
+
+    # Relative expressions are safe only when Active BOM and active Design
+    # Change Workflow refer to the same MODEL/PLANT scope.  They deliberately
+    # stay narrow: ordinary read-only questions continue to prefer Active BOM,
+    # while explicit MODEL requests remain authoritative current-turn scope.
+    RELATIVE_SCOPE_MARKERS = (
+        "이 모델",
+        "이모델",
+        "현재 모델",
+        "현재모델",
+        "이 BOM",
+        "이BOM",
+        "현재 BOM",
+        "현재BOM",
+        "이 자재",
+        "이자재",
+    )
 
     def __init__(
         self,
@@ -163,6 +182,14 @@ class BomGraphGateway:
         current_step = str(
             workflow_state.get("current_step") or "NOT_STARTED"
         ).strip().upper()
+
+        # R3 scope-conflict guard:
+        # A user may inspect another BOM while an Analysis remains active. That
+        # is a valid read operation, but a later relative Design Change request
+        # such as "이 모델에서..." must not silently bind to the old Workflow
+        # merely because DESIGN_CHANGE context prefers workflow scope.
+        if self.design_change_scope_conflict(state) is not None:
+            return SCOPE_CONFLICT
 
         # A pending slot is part of an existing business transaction. A numeric
         # follow-up such as "3" must never be mistaken for a new simple request.
@@ -286,6 +313,115 @@ class BomGraphGateway:
         # Missing PLANT/entity, ambiguous language, and unsupported simple
         # patterns intentionally fall back to the normal LLM Agent path.
         return AGENT_PATH
+
+    def design_change_scope_conflict(
+        self,
+        state: BomAgentState,
+    ) -> dict[str, str] | None:
+        """Return incompatible Active-BOM/Workflow scope for relative changes.
+
+        Read-only requests are intentionally excluded: READ_ONLY context is
+        allowed to prefer the currently viewed BOM even while another Analysis
+        remains active.  The guard applies only when the current turn requires
+        Design Change Analysis authority and the user did not explicitly name a
+        MODEL/VERSION.
+        """
+        user_query = self.last_user_query(state)
+        workflow_state = state.get("design_change") or {}
+        current_step = str(
+            workflow_state.get("current_step") or "NOT_STARTED"
+        ).strip().upper()
+
+        if (
+            current_step not in self.design_change_active_steps
+            or current_step in self.TERMINAL_WORKFLOW_STEPS
+        ):
+            return None
+
+        if self.router.explicit_model_scope_code(user_query):
+            # Explicit current-turn MODEL resolves the ambiguity. Existing
+            # fresh-analysis policy decides whether that means old or new scope.
+            return None
+
+        compact = " ".join(str(user_query or "").strip().split())
+        if not any(
+            marker.lower() in compact.lower()
+            for marker in self.RELATIVE_SCOPE_MARKERS
+        ):
+            return None
+
+        requirement = self.capability_resolver.resolve(user_query)
+        if Capability.DESIGN_CHANGE_ANALYSIS not in requirement.capabilities:
+            return None
+
+        active = state.get("active_bom_context") or {}
+        active_version = str(
+            active.get("version_code")
+            or active.get("product_id")
+            or ""
+        ).strip().upper()
+        active_plant = str(
+            active.get("plant_code") or ""
+        ).strip().upper()
+        if not active_version or not active_plant:
+            return None
+
+        workflow_scope = self.context_resolver.resolve(
+            ContextResolutionInput(
+                purpose=ContextPurpose.DESIGN_CHANGE,
+                workflow_state=workflow_state,
+                allow_workflow_scope=True,
+            )
+        )
+        if not workflow_scope.version_code or not workflow_scope.plant_code:
+            return None
+
+        workflow_version = str(
+            workflow_scope.version_code.value
+        ).strip().upper()
+        workflow_plant = str(
+            workflow_scope.plant_code.value
+        ).strip().upper()
+
+        if (
+            active_version == workflow_version
+            and active_plant == workflow_plant
+        ):
+            return None
+
+        return {
+            "active_version_code": active_version,
+            "active_plant_code": active_plant,
+            "workflow_version_code": workflow_version,
+            "workflow_plant_code": workflow_plant,
+            "workflow_step": current_step,
+        }
+
+    @staticmethod
+    def scope_conflict_message(conflict: dict[str, str]) -> str:
+        active_version = str(
+            conflict.get("active_version_code") or ""
+        ).strip()
+        active_plant = str(
+            conflict.get("active_plant_code") or ""
+        ).strip()
+        workflow_version = str(
+            conflict.get("workflow_version_code") or ""
+        ).strip()
+        workflow_plant = str(
+            conflict.get("workflow_plant_code") or ""
+        ).strip()
+
+        return (
+            f"현재 조회 중인 BOM은 {active_version} / {active_plant}이고, "
+            f"진행 중인 설계변경 분석 대상은 "
+            f"{workflow_version} / {workflow_plant}입니다. "
+            "'이 모델', '이 BOM', '이 자재' 같은 상대 표현만으로는 "
+            "어느 범위를 의미하는지 안전하게 결정할 수 없습니다. "
+            f"기존 분석을 이어가려면 {workflow_version} 모델을, "
+            f"현재 조회 BOM을 새 대상으로 분석하려면 "
+            f"{active_version} {active_plant}를 요청에 명시해 주세요."
+        )
 
     @staticmethod
     def resolve_read_context(state: BomAgentState) -> DomainContextSnapshot:

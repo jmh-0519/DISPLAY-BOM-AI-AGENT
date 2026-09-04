@@ -148,6 +148,25 @@ class CapabilityRequirementResolver:
             domain=domain,
             knowledge_required=knowledge_required,
         ):
+            # PLAN-04 workflow analysis may promote an analytics-selected BOM
+            # target only after Knowledge evidence is attached.  The RAG step is
+            # therefore a runtime evidence dependency even when the user says
+            # simply "원가가 가장 높은 자재를 찾아 변경 분석해줘" without
+            # explicitly asking for a 기준/정책 document in the same sentence.
+            #
+            # This does not grant any additional business authority.  It only
+            # makes the existing Evidence-to-Workflow contract explicit at
+            # capability-resolution time.
+            if (
+                Capability.TEXT_TO_SQL in detected
+                and Capability.RAG not in detected
+            ):
+                self._append(
+                    detected,
+                    Capability.RAG,
+                    reasons,
+                    "WORKFLOW_KNOWLEDGE_EVIDENCE_REQUIRED",
+                )
             self._append(
                 detected,
                 Capability.DESIGN_CHANGE_ANALYSIS,
