@@ -158,14 +158,22 @@ class CapabilityRequirementResolver:
             # makes the existing Evidence-to-Workflow contract explicit at
             # capability-resolution time.
             if (
-                (Capability.TEXT_TO_SQL in detected or domain.recommendation)
+                (
+                    Capability.TEXT_TO_SQL in detected
+                    or self._requires_workflow_knowledge_evidence(
+                        text,
+                        domain=domain,
+                        knowledge_required=knowledge_required,
+                    )
+                )
                 and Capability.RAG not in detected
             ):
-                # Evidence-driven read-only Design Change recommendation/analysis
-                # must attach Knowledge evidence before entering the existing
-                # Analysis Session.  Direct write-like instructions such as
-                # "SEALANT를 변경하고싶어" remain single-capability and stay on
-                # the existing workflow path.
+                # Evidence-driven read-only Design Change analysis attaches
+                # Knowledge evidence when the user asks for suitability,
+                # criteria/policy, impact, or an analytics-selected target.
+                # A simple deterministic "후보 분석"/"후보 점수" request does
+                # not become a cross-capability workflow merely because the
+                # router's recommendation flag is true.
                 self._append(
                     detected,
                     Capability.RAG,
@@ -204,6 +212,15 @@ class CapabilityRequirementResolver:
 
     def _has_analytics_requirement(self, query: str) -> bool:
         normalized = self.text_to_sql_router.normalize(query)
+        # "ASSY 하위에 ... 추가" is a BOM parent relation, not a bottom-N
+        # analytics request.  Remove only the structural particle form before
+        # applying generic ranking markers such as "하위".
+        normalized = re.sub(
+            r"(?:하위|아래|밑)\s*(?:에다가|에|로)\s*",
+            " ",
+            normalized,
+            flags=re.IGNORECASE,
+        )
         if not any(
             marker in normalized
             for marker in self.text_to_sql_router.DOMAIN_MARKERS
@@ -249,6 +266,26 @@ class CapabilityRequirementResolver:
             for marker in self.knowledge_router.DOMAIN_MARKERS
         )
         return has_knowledge and has_domain
+
+    def _requires_workflow_knowledge_evidence(
+        self,
+        query: str,
+        *,
+        domain,
+        knowledge_required: bool,
+    ) -> bool:
+        if knowledge_required:
+            return True
+        if not domain.recommendation:
+            return False
+        normalized = self.domain_router.normalize(query)
+        markers = (
+            "변경 가능", "변경가능", "교체 가능", "교체가능",
+            "대체 가능", "대체가능", "변경할 수", "교체할 수",
+            "대체할 수", "가능한지", "가능 여부", "가능여부",
+            "적합한지", "영향", "impact",
+        )
+        return any(marker in normalized for marker in markers)
 
     def _has_design_change_requirement(
         self,

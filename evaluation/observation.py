@@ -18,14 +18,21 @@ from core.performance_profiler import (
 
 OBSERVATION_SCHEMA_VERSION = "1.1"
 
-_ROUTE_TO_EXECUTION_PATH = {
+ROUTE_TO_EXECUTION_PATH = {
     "fast_chat": "FAST_PATH",
     "fast_bom_read": "FAST_PATH",
     "fast_where_used": "FAST_PATH",
     "fast_current_bom_quantity": "FAST_PATH",
+    "fast_knowledge": "KNOWLEDGE_PATH",
+    "fast_text_to_sql": "TEXT_TO_SQL_PATH",
+    "composition_plan": "READ_ONLY_COMPOSITION",
+    "workflow_composition_plan": "WORKFLOW_COMPOSITION",
+    "scope_conflict": "SCOPE_CONFLICT",
     "macro_analyze": "DETERMINISTIC_MACRO",
     "agent": "AGENT_PATH",
 }
+# Backward-compatible private alias used by older tests/importers.
+_ROUTE_TO_EXECUTION_PATH = ROUTE_TO_EXECUTION_PATH
 
 
 @dataclass(frozen=True)
@@ -147,7 +154,7 @@ class RuntimeObservationCollector:
         turn_events = all_events[before_event_count:]
         profile = summarize_performance_events(turn_events)
         gateway_route = self._gateway_route(turn_events)
-        execution_path = _ROUTE_TO_EXECUTION_PATH.get(gateway_route)
+        execution_path = ROUTE_TO_EXECUTION_PATH.get(gateway_route)
         if execution_path is None:
             execution_path = self._fallback_execution_path(tool_calls, profile)
 
@@ -221,9 +228,13 @@ class RuntimeObservationCollector:
         step = str(workflow.get("current_step") or "NOT_STARTED").upper()
         active = step not in {"NOT_STARTED", "APPLIED", "REPORT_COMPLETED", "BLOCKED"}
         try:
+            # Intent accuracy is a current-turn classification metric.
+            # Historical workflow activity must not suppress an explicit read
+            # intent such as "MODEL PLANT BOM 조회해줘".  Runtime authority and
+            # scope are evaluated separately by gateway route/context metrics.
             decision = router.route(
                 user_input,
-                workflow_active=active,
+                workflow_active=False,
                 workflow_state=workflow,
             )
         except Exception:
@@ -413,9 +424,21 @@ class RuntimeObservationCollector:
             return "ANALYZE"
         if error:
             return "BLOCK_OR_ERROR"
-        if execution_path == "FAST_PATH":
+        if execution_path == "SCOPE_CONFLICT":
+            return "BLOCK"
+        if execution_path in {
+            "FAST_PATH",
+            "KNOWLEDGE_PATH",
+            "TEXT_TO_SQL_PATH",
+            "READ_ONLY_COMPOSITION",
+        }:
             return "ANSWER"
-        pending_keys = ("pending_quantity_request", "pending_add_target_request", "pending_add_parent_request")
+        pending_keys = (
+            "pending_quantity_request",
+            "pending_add_target_request",
+            "pending_add_parent_request",
+            "pending_delete_target_request",
+        )
         if any(workflow_after.get(key) and not workflow_before.get(key) for key in pending_keys):
             return "CLARIFY"
         return None
@@ -433,6 +456,7 @@ class RuntimeObservationCollector:
             "pending_quantity_request",
             "pending_add_target_request",
             "pending_add_parent_request",
+            "pending_delete_target_request",
         )
         return {key: workflow.get(key) for key in keys}
 

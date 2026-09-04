@@ -183,3 +183,13 @@ def test_workflow_analysis_reference_does_not_bind_to_active_bom_scope():
 
     assert gateway.design_change_scope_conflict(state) is None
     assert gateway.route(state) != SCOPE_CONFLICT
+
+
+def test_explicit_bom_read_keeps_fast_read_semantics_during_active_analysis():
+    gateway = _gateway()
+    state = _state(f"{ACTIVE_VERSION} {PLANT} BOM 조회해줘")
+
+    from agents.bom_graph_gateway import FAST_BOM_READ
+
+    assert gateway.design_change_scope_conflict(state) is None
+    assert gateway.route(state) == FAST_BOM_READ

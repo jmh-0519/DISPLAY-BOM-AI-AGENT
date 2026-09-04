@@ -301,19 +301,35 @@ class EvidenceToWorkflowHandoff:
         active_version = str(active.get("product_id") or "").strip().upper()
         active_plant = str(active.get("plant_code") or "").strip().upper()
 
-        # A user may disambiguate the scope by repeating the exact currently
-        # viewed VERSION code and PLANT without the literal word "모델":
+        # A fully explicit current turn may omit the literal word "모델":
         #
-        #   LTA550HR11-001 P01 대상으로 ...
+        #   LTA400... P02에서 0001-...을 변경 분석해줘
+        #   LTA550... P01 대상으로 ...
         #
-        # This is not scope guessing because the code is required to equal the
-        # verified Active BOM VERSION already stored in Graph state.  An
-        # arbitrary material/ASSY code is never promoted to VERSION here.
+        # With an explicit PLANT and at least two item-like codes, the first
+        # code is the positional VERSION and the remaining code(s) are target
+        # entities.  TargetResolutionPlanner still rejects ambiguous old/new
+        # pairs, so this does not grant target-selection authority.
+        codes = list(dict.fromkeys(self.domain_router.item_codes(text)))
+        if explicit_version is None and explicit_plant and len(codes) >= 2:
+            plant_match = self.domain_router.PLANT_CODE_PATTERN.search(text)
+            positional_versions = []
+            if plant_match is not None:
+                positional_versions = [
+                    match.group(0).upper()
+                    for match in self.domain_router.ITEM_CODE_PATTERN.finditer(text)
+                    if match.start() < plant_match.start()
+                ]
+            if len(list(dict.fromkeys(positional_versions))) == 1:
+                explicit_version = positional_versions[0]
+
+        # The current Active BOM may also be repeated explicitly without the
+        # literal word "모델" even when no second item code exists.
         if (
             explicit_version is None
             and explicit_plant
             and active_version
-            and active_version in self.domain_router.item_codes(text)
+            and active_version in codes
         ):
             explicit_version = active_version
 

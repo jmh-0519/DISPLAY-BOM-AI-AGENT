@@ -64,13 +64,13 @@ def test_pending_quantity_slot_always_stays_on_agent_path():
     assert _gateway().route(_state("3", workflow)) == AGENT_PATH
 
 
-def test_active_analysis_keeps_even_simple_read_on_agent_path():
+def test_active_analysis_allows_explicit_bom_read_fast_path():
     workflow = create_initial_design_change_state()
     workflow["current_step"] = "ANALYSIS_READY"
     workflow["analysis_id"] = "ANA-1"
     assert (
         _gateway().route(_state("LTA400HR01-001 P01 BOM 보여줘", workflow))
-        == AGENT_PATH
+        == FAST_BOM_READ
     )
 
 
@@ -90,3 +90,12 @@ def test_terminal_fail_explanation_followup_stays_on_agent_path():
     workflow["analysis_id"] = "ANA-FAIL"
     workflow["candidates"] = []
     assert _gateway().route(_state("왜 fail 이야?", workflow)) == AGENT_PATH
+
+
+def test_pending_delete_target_slot_always_stays_on_agent_path():
+    workflow = create_initial_design_change_state()
+    workflow["pending_delete_target_request"] = {
+        "version_code": "LTA400HR01-001",
+        "plant_code": "P02",
+    }
+    assert _gateway().route(_state("0001-200003", workflow)) == AGENT_PATH

@@ -89,3 +89,48 @@ def test_assy_add_parent_followup_resumes_original_request():
     assert call["name"] == "analyze_design_change_candidates"
     assert call["args"]["actions"][0]["target_item_name"] == "BIN"
     assert call["args"]["actions"][0]["parent_item_code"] == "AS-FA-001"
+
+
+def test_vague_delete_target_clarifies_before_analysis():
+    client = Mock()
+    mcp_client = Mock()
+    mcp_client.get_tool_definitions.return_value = _defs()
+    node = BomAgentNode(client, mcp_client, "skill")
+    result = node({
+        "messages": [HumanMessage(content="LTA400HR01-001 P02 모델에서 자재 하나 삭제해줘")],
+        "design_change": {"current_step": "NOT_STARTED"},
+    })
+    client.create_agent_completion.assert_not_called()
+    assert result["messages"][0].tool_calls == []
+    assert "삭제할 자재/ASSY를 특정" in result["messages"][0].content
+    pending = result["design_change"]["pending_delete_target_request"]
+    assert pending["version_code"] == "LTA400HR01-001"
+    assert pending["plant_code"] == "P02"
+
+
+def test_delete_target_followup_resumes_scoped_analysis_without_llm():
+    client = Mock()
+    mcp_client = Mock()
+    mcp_client.get_tool_definitions.return_value = _defs()
+    node = BomAgentNode(client, mcp_client, "skill")
+    result = node({
+        "messages": [HumanMessage(content="0001-200003")],
+        "design_change": {
+            "current_step": "NOT_STARTED",
+            "pending_delete_target_request": {
+                "original_request": "LTA400HR01-001 P02 모델에서 자재 하나 삭제해줘",
+                "version_code": "LTA400HR01-001",
+                "plant_code": "P02",
+            },
+        },
+    })
+    client.create_agent_completion.assert_not_called()
+    call = result["messages"][0].tool_calls[0]
+    assert call["name"] == "analyze_design_change_candidates"
+    assert call["args"]["request"]["version_code"] == "LTA400HR01-001"
+    assert call["args"]["request"]["plant_code"] == "P02"
+    assert call["args"]["actions"] == [{
+        "action_type": "DELETE",
+        "old_item_code": "0001-200003",
+    }]
+    assert result["design_change"]["pending_delete_target_request"] is None

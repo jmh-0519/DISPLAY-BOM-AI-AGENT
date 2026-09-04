@@ -198,6 +198,12 @@ class BomGraphGateway:
             # reply belongs to the pending ADD transaction, not a fresh query.
             return AGENT_PATH
 
+        if workflow_state.get("pending_delete_target_request"):
+            # A vague DELETE request already asked the user to identify the
+            # source item.  The next short item code/name belongs to that
+            # clarification turn and must not be routed as a fresh read/chat.
+            return AGENT_PATH
+
         # CTX-05 capability preflight:
         # A request that explicitly requires more than one business capability
         # must never be consumed by the first matching single fast path. Until
@@ -238,6 +244,23 @@ class BomGraphGateway:
             read_scope = self.read_scope_context(state)
             if read_scope.get("product_id") and read_scope.get("plant_code"):
                 return FAST_CURRENT_BOM_QUANTITY
+
+        # An explicit current-turn read is allowed while an Analysis Session is
+        # active.  READ_ONLY scope intentionally prefers the BOM the user is
+        # viewing and must not be forced through the Design Change Agent merely
+        # because another workflow remains active.
+        if (
+            current_turn_decision.intent == "BOM_READ"
+            and current_turn_decision.plant_code
+            and current_turn_decision.reference_code
+        ):
+            return FAST_BOM_READ
+        if (
+            current_turn_decision.intent == "WHERE_USED"
+            and current_turn_decision.plant_code
+            and current_turn_decision.where_used_item_code
+        ):
+            return FAST_WHERE_USED
 
         # During a live Design Change workflow, the Agent owns context, HITL and state
         # transitions. Terminal historical states may accept a new simple read.

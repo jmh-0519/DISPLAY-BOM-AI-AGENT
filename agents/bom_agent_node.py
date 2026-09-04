@@ -263,6 +263,39 @@ class BomAgentNode:
             workflow_state["pending_add_target_request"] = None
             pending_add_target_consumed = True
 
+        pending_delete_target_request = (
+            workflow_state.get("pending_delete_target_request") or None
+        )
+        pending_delete_target_consumed = False
+        if pending_delete_target_request:
+            pending = dict(pending_delete_target_request)
+            version_code = str(pending.get("version_code") or "").strip().upper()
+            plant_code = str(pending.get("plant_code") or "").strip().upper()
+            reply = " ".join(str(user_query or "").strip().split())
+            reply = re.sub(
+                r"\s*(?:자재|품목|부품|MATERIAL|ASSY|어셈블리)\s*$",
+                "",
+                reply,
+                flags=re.IGNORECASE,
+            ).strip().strip('"\'`“”‘’')
+            generic_reply = {"", "하나", "아무거나", "적당한 것", "적당한거"}
+            if reply.lower() in {value.lower() for value in generic_reply}:
+                return {
+                    "messages": [AIMessage(
+                        content=(
+                            "삭제할 자재/ASSY를 특정해 주세요. "
+                            "자재코드 또는 품목명으로 입력해 주세요."
+                        )
+                    )],
+                    "design_change": dict(workflow_state),
+                    "error": None,
+                }
+            scope = " ".join(value for value in (version_code, plant_code) if value)
+            user_query = f"{scope} 모델에서 {reply} 삭제해줘".strip()
+            workflow_state = dict(workflow_state)
+            workflow_state["pending_delete_target_request"] = None
+            pending_delete_target_consumed = True
+
         pending_quantity_request = str(
             workflow_state.get("pending_quantity_request") or ""
         ).strip()
@@ -362,6 +395,51 @@ class BomAgentNode:
                         "design_change": updated_workflow_state,
                         "error": None,
                     }
+
+        # DELETE Target Resolution Gate:
+        # A scoped request such as "모델에서 자재 하나 삭제해줘" declares the
+        # action but not the source BOM edge.  Never let the general LLM invent
+        # an old_item_code or call Analysis with only target_type.  Ask for the
+        # source item first, then resume the same MODEL/PLANT scope on the next
+        # short reply.
+        if (
+            self.domain_intent_router.is_delete_instruction(user_query)
+            and str(current_step or "NOT_STARTED").strip().upper() == "NOT_STARTED"
+        ):
+            explicit_version = self.domain_intent_router.explicit_model_scope_code(
+                user_query
+            )
+            explicit_plant = self.domain_intent_router.extract_plant_code(user_query)
+            non_version_codes = [
+                code
+                for code in self.domain_intent_router.item_codes(user_query)
+                if not explicit_version or code != explicit_version
+            ]
+            named_target = self.domain_intent_router.extract_named_change_target(
+                user_query
+            )
+            if (
+                explicit_version
+                and explicit_plant
+                and not non_version_codes
+                and not named_target
+            ):
+                updated_workflow_state = dict(workflow_state)
+                updated_workflow_state["pending_delete_target_request"] = {
+                    "original_request": user_query,
+                    "version_code": explicit_version,
+                    "plant_code": explicit_plant,
+                }
+                return {
+                    "messages": [AIMessage(
+                        content=(
+                            "삭제할 자재/ASSY를 특정해 주세요. "
+                            "자재코드 또는 품목명으로 입력해 주세요."
+                        )
+                    )],
+                    "design_change": updated_workflow_state,
+                    "error": None,
+                }
 
         # Azure message conversion is intentionally deferred until an actual
         # LLM call is required. Deterministic Tool routing must not pay the
@@ -929,6 +1007,7 @@ class BomAgentNode:
             pending_quantity_consumed
             or pending_add_target_consumed
             or pending_add_parent_consumed
+            or pending_delete_target_consumed
         ):
             result["design_change"] = dict(workflow_state)
         return result

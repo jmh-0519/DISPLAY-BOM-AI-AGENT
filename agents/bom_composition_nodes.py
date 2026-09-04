@@ -106,6 +106,8 @@ class BomReadOnlyCompositionNodes:
             return False
         if workflow.get("pending_add_parent_request"):
             return False
+        if workflow.get("pending_delete_target_request"):
+            return False
         if step != "NOT_STARTED":
             return False
 

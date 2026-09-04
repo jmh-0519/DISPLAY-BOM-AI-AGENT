@@ -725,3 +725,20 @@ def test_explicit_old_new_pair_is_not_stolen_by_generalized_composition():
     nodes, _ = _explicit_nodes()
 
     assert nodes.can_execute(_state(query)) is False
+
+
+def test_explicit_code_composition_does_not_require_prior_active_bom_context():
+    query = (
+        f"{VERSION} {PLANT}에서 0001-200008을 변경할 때 "
+        "적용되는 기준과 영향을 분석해줘"
+    )
+    nodes, _ = _explicit_nodes()
+
+    state = _state(query, active_scope=False)
+    assert nodes.can_execute(state) is True
+    update = nodes.plan(state)
+    assert update["composition_runtime"]["scope"] == {
+        "version_code": VERSION,
+        "plant_code": PLANT,
+        "source": "CURRENT_TURN_EXPLICIT",
+    }

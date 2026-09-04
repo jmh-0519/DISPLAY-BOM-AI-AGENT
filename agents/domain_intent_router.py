@@ -524,13 +524,18 @@ class DomainIntentRouter:
         if self._has_direct_replace_directive(normalized):
             return True
 
-        # Reason + terse action is still a concrete change request, but a
-        # recommendation/analysis request remains read-only Analysis intent.
-        if (
-            self.has_design_change_reason_language(user_query)
-            and not self.is_design_change_recommendation_request(user_query)
-        ):
-            return True
+        # Reason + replacement wording can be a concrete change request, but
+        # policy/criteria questions such as "단종 자재 교체 기준이 뭐야?" are
+        # read-only Knowledge questions.  Do not promote a change-related noun
+        # to DESIGN_CHANGE without directive language.
+        if self.has_design_change_reason_language(user_query):
+            if any(
+                marker in normalized
+                for marker in ("기준", "원칙", "정책", "규칙", "가이드", "guide", "policy")
+            ):
+                return False
+            if not self.is_design_change_recommendation_request(user_query):
+                return True
         return False
 
     @staticmethod

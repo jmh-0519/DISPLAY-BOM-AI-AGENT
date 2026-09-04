@@ -134,6 +134,57 @@ def test_context_read_must_not_mutate_workflow():
     assert result.passed is False
 
 
+
+
+def test_context_read_treats_empty_to_not_started_as_semantic_noop():
+    result = _evaluator()._evaluate_assertion(
+        assertion="CONTEXT_MUST_NOT_MUTATE_WORKFLOW",
+        observation=_obs(
+            workflow_before={
+                "current_step": None,
+                "analysis_id": None,
+                "request_id": None,
+                "candidate_approval_id": None,
+                "final_approval_id": None,
+                "apply_status": None,
+                "pending_quantity_request": None,
+                "pending_add_target_request": None,
+                "pending_add_parent_request": None,
+                "pending_delete_target_request": None,
+            },
+            workflow_after={
+                "current_step": "NOT_STARTED",
+                "analysis_id": None,
+                "request_id": None,
+                "candidate_approval_id": None,
+                "final_approval_id": None,
+                "apply_status": "NOT_STARTED",
+                "pending_quantity_request": None,
+                "pending_add_target_request": None,
+                "pending_add_parent_request": None,
+                "pending_delete_target_request": None,
+            },
+        ),
+        expected_interaction="ANSWER",
+    )
+    assert result.passed is True
+    assert result.evidence["workflow_changes"] == {}
+
+
+def test_context_read_still_rejects_real_workflow_progress_after_normalization():
+    result = _evaluator()._evaluate_assertion(
+        assertion="CONTEXT_MUST_NOT_MUTATE_WORKFLOW",
+        observation=_obs(
+            workflow_before={"current_step": None, "apply_status": None, "analysis_id": None},
+            workflow_after={"current_step": "ANALYSIS_READY", "apply_status": "NOT_STARTED", "analysis_id": "ANA-1"},
+        ),
+        expected_interaction="ANSWER",
+    )
+    assert result.passed is False
+    assert "current_step" in result.evidence["workflow_changes"]
+    assert "analysis_id" in result.evidence["workflow_changes"]
+
+
 def test_missing_safety_database_evidence_is_not_silently_passed():
     result = _evaluator()._evaluate_assertion(
         assertion="READ_ONLY",

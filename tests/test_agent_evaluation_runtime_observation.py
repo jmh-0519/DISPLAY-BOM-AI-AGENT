@@ -170,3 +170,63 @@ def test_observation_jsonl_contains_metric_fields(tmp_path):
     assert '"case_id": "CHAT-001"' in text
     assert '"execution_path": "FAST_PATH"' in text
     assert '"tool_call_count": 0' in text
+
+
+def test_observation_maps_plan01_to_final01_runtime_routes_for_final02():
+    from evaluation.observation import ROUTE_TO_EXECUTION_PATH
+
+    assert ROUTE_TO_EXECUTION_PATH["fast_knowledge"] == "KNOWLEDGE_PATH"
+    assert ROUTE_TO_EXECUTION_PATH["fast_text_to_sql"] == "TEXT_TO_SQL_PATH"
+    assert ROUTE_TO_EXECUTION_PATH["composition_plan"] == "READ_ONLY_COMPOSITION"
+    assert ROUTE_TO_EXECUTION_PATH["workflow_composition_plan"] == "WORKFLOW_COMPOSITION"
+    assert ROUTE_TO_EXECUTION_PATH["scope_conflict"] == "SCOPE_CONFLICT"
+
+
+def test_scope_conflict_interaction_hint_is_block_without_tool_or_llm_guessing():
+    hint = RuntimeObservationCollector._interaction_hint(
+        execution_path="SCOPE_CONFLICT",
+        tool_calls=[],
+        plant_options=[],
+        workflow_before={"current_step": "ANALYSIS_READY", "analysis_id": "ANA-1"},
+        workflow_after={"current_step": "ANALYSIS_READY", "analysis_id": "ANA-1"},
+        error=None,
+    )
+    assert hint == "BLOCK"
+
+
+def test_observation_intent_ignores_active_workflow_for_explicit_bom_read(tmp_path):
+    from agents.domain_intent_router import DomainIntentRouter
+
+    class Gateway:
+        router = DomainIntentRouter()
+
+    class Agent:
+        gateway = Gateway()
+
+    collector = RuntimeObservationCollector(
+        Agent(), profile_path=tmp_path / "profile.jsonl"
+    )
+    workflow = {"current_step": "ANALYSIS_READY", "analysis_id": "ANA-1"}
+    assert (
+        collector._resolve_intent(
+            "LTA550HR01-001 P01 BOM 조회해줘", workflow
+        )
+        == "BOM_READ"
+    )
+
+
+def test_delete_pending_slot_is_classified_as_clarify():
+    hint = RuntimeObservationCollector._interaction_hint(
+        execution_path="AGENT_PATH",
+        tool_calls=[],
+        plant_options=[],
+        workflow_before={"pending_delete_target_request": None},
+        workflow_after={
+            "pending_delete_target_request": {
+                "version_code": "LTA400HR01-001",
+                "plant_code": "P02",
+            }
+        },
+        error=None,
+    )
+    assert hint == "CLARIFY"

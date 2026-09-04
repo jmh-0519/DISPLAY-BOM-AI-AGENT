@@ -97,3 +97,11 @@ def test_commonality_comparison_criterion_is_detected():
 
     assert ROUTER.comparison_criterion(query) == "COMMONALITY"
     assert ROUTER.route(query).intent == "DESIGN_CHANGE_RECOMMENDATION"
+
+
+def test_change_policy_question_is_not_a_write_intent():
+    decision = ROUTER.route("단종 자재 교체 기준이 뭐야?")
+
+    assert decision.intent == "LLM_FALLBACK"
+    assert decision.change is False
+    assert decision.recommendation is False

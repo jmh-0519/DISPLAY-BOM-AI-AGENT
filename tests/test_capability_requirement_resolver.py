@@ -199,3 +199,33 @@ def test_direct_write_like_change_remains_existing_single_capability_path():
 
     assert decision.capabilities == (Capability.DESIGN_CHANGE_ANALYSIS,)
     assert decision.composition_required is False
+
+
+def test_assy_parent_relation_is_not_text_to_sql_ranking():
+    query = "LTA400HR01-001 P02 LJ94-100001 하위에 BIN ASSY를 추가해줘"
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (Capability.DESIGN_CHANGE_ANALYSIS,)
+    assert decision.composition_required is False
+    from agents.analysis_macro_dispatch import MACRO_ANALYZE
+    assert _gateway().route(_state(query)) == MACRO_ANALYZE
+
+
+def test_simple_candidate_analysis_does_not_force_rag_composition():
+    query = "LTA400HR01-001 P02 0001-200003 교체 후보 분석해줘"
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (Capability.DESIGN_CHANGE_ANALYSIS,)
+    assert decision.composition_required is False
+    from agents.analysis_macro_dispatch import MACRO_ANALYZE
+    assert _gateway().route(_state(query)) == MACRO_ANALYZE
+
+
+def test_add_candidate_score_request_does_not_force_rag_composition():
+    query = "LTA400HR01-001 P02 모델에 DRIVE-IC 자재를 추가하고 후보 점수도 보여줘"
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (Capability.DESIGN_CHANGE_ANALYSIS,)
+    assert decision.composition_required is False
+    from agents.analysis_macro_dispatch import MACRO_ANALYZE
+    assert _gateway().route(_state(query)) == MACRO_ANALYZE
