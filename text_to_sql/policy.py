@@ -38,6 +38,7 @@ DEFAULT_ALLOWED_FUNCTIONS = frozenset(
         "date",
         "datetime",
         "ifnull",
+        "instr",
         "julianday",
         "length",
         "lower",

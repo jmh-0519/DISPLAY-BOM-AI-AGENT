@@ -62,6 +62,7 @@ from agents.bom_workflow_composition_nodes import (
     WORKFLOW_COMPOSITION_HANDOFF,
     WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY,
     WORKFLOW_COMPOSITION_PLAN,
+    WORKFLOW_COMPOSITION_TARGET_RESOLVE,
     WORKFLOW_COMPOSITION_TEXT_TO_SQL,
     BomWorkflowCompositionNodes,
     is_workflow_composition_analysis_tool_result,
@@ -103,7 +104,7 @@ class BomAgentGraph:
         → Scope Conflict Guard → END
         → Fast BOM/Where-used → MCP Tool Node → Fast Finalize → END
         → Read-only Composition (Text-to-SQL + RAG) → Finalize → END
-        → Workflow Composition (Text-to-SQL + RAG → Analysis) → END
+        → Workflow Composition (Target Evidence + RAG → Analysis) → END
         → Deterministic Analysis Macro → MCP Tool Node → Analysis Finalizer → END
         → Agent Node → MCP Tool Node → Agent Node → END
     """
@@ -255,6 +256,13 @@ class BomAgentGraph:
             ),
         )
         workflow.add_node(
+            WORKFLOW_COMPOSITION_TARGET_RESOLVE,
+            self._observed_node(
+                WORKFLOW_COMPOSITION_TARGET_RESOLVE,
+                self.workflow_composition_path_nodes.resolve_explicit_target,
+            ),
+        )
+        workflow.add_node(
             WORKFLOW_COMPOSITION_TEXT_TO_SQL,
             self._observed_node(
                 WORKFLOW_COMPOSITION_TEXT_TO_SQL,
@@ -349,8 +357,21 @@ class BomAgentGraph:
             WORKFLOW_COMPOSITION_PLAN,
             self._route_workflow_composition_plan,
             {
+                WORKFLOW_COMPOSITION_TARGET_RESOLVE: (
+                    WORKFLOW_COMPOSITION_TARGET_RESOLVE
+                ),
                 WORKFLOW_COMPOSITION_TEXT_TO_SQL: (
                     WORKFLOW_COMPOSITION_TEXT_TO_SQL
+                ),
+                END: END,
+            },
+        )
+        workflow.add_conditional_edges(
+            WORKFLOW_COMPOSITION_TARGET_RESOLVE,
+            self._route_workflow_composition_target_resolve,
+            {
+                WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY: (
+                    WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY
                 ),
                 END: END,
             },
@@ -478,7 +499,7 @@ class BomAgentGraph:
         Gateway classification remains unchanged for CTX-05 compatibility.
         Graph-level admission enables:
         - PLAN-02 read-only TEXT_TO_SQL + RAG composition.
-        - PLAN-04 fully-scoped TEXT_TO_SQL + RAG + Analysis composition.
+        - PLAN-04/05 fully-scoped target Evidence + RAG + Analysis composition.
 
         Workflow composition still stops at the existing Analysis Session and
         never receives Request/approval/Production BOM authority.
@@ -500,12 +521,30 @@ class BomAgentGraph:
     @staticmethod
     def _route_workflow_composition_plan(state: BomAgentState) -> str:
         runtime = state.get("composition_runtime")
-        if (
+        if not (
             isinstance(runtime, dict)
             and runtime.get("mode") == "WORKFLOW_ANALYSIS_COMPOSITION"
             and runtime.get("status") == "PLANNED"
         ):
+            return END
+        target_request = runtime.get("target_request") or {}
+        if target_request.get("mode") == "EXPLICIT":
+            return WORKFLOW_COMPOSITION_TARGET_RESOLVE
+        if target_request.get("mode") == "DETERMINISTIC_ANALYTICS":
             return WORKFLOW_COMPOSITION_TEXT_TO_SQL
+        return END
+
+    @staticmethod
+    def _route_workflow_composition_target_resolve(
+        state: BomAgentState,
+    ) -> str:
+        runtime = state.get("composition_runtime")
+        if (
+            isinstance(runtime, dict)
+            and runtime.get("mode") == "WORKFLOW_ANALYSIS_COMPOSITION"
+            and runtime.get("status") == "TARGET_RESOLVED"
+        ):
+            return WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY
         return END
 
     @staticmethod
@@ -516,7 +555,7 @@ class BomAgentGraph:
         if (
             isinstance(runtime, dict)
             and runtime.get("mode") == "WORKFLOW_ANALYSIS_COMPOSITION"
-            and runtime.get("status") == "TEXT_TO_SQL_COMPLETED"
+            and runtime.get("status") == "TARGET_RESOLVED"
         ):
             return WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY
         return END

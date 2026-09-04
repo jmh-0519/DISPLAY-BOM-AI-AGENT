@@ -106,6 +106,50 @@ class AnalyticsTargetEvidence:
         }
 
 
+
+
+@dataclass(frozen=True)
+class DesignChangeTargetEvidence:
+    """Verified source target that may enter read-only Design Change Analysis."""
+
+    version_code: str
+    plant_code: str
+    item_code: str
+    target_type: str
+    parent_item_code: str
+    location_code: str
+    resolution_mode: str
+    criterion: str
+    selection_mode: str
+    metric_name: str | None = None
+    metric_value: float | None = None
+    item_name: str | None = None
+    price_source: str | None = None
+    currency_code: str | None = None
+    evidence_source: str = "READ_ONLY_SCOPED_BOM_EVIDENCE"
+    authority: str = "READ_ONLY_TARGET_EVIDENCE"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "version_code": self.version_code,
+            "plant_code": self.plant_code,
+            "item_code": self.item_code,
+            "target_type": self.target_type,
+            "parent_item_code": self.parent_item_code,
+            "location_code": self.location_code,
+            "resolution_mode": self.resolution_mode,
+            "criterion": self.criterion,
+            "selection_mode": self.selection_mode,
+            "metric_name": self.metric_name,
+            "metric_value": self.metric_value,
+            "item_name": self.item_name,
+            "price_source": self.price_source,
+            "currency_code": self.currency_code,
+            "evidence_source": self.evidence_source,
+            "authority": self.authority,
+        }
+
+
 @dataclass(frozen=True)
 class KnowledgeEvidenceSummary:
     observed: bool
@@ -128,6 +172,7 @@ class WorkflowHandoffDecision:
     reason: str
     scope: ResolvedWorkflowScope | None = None
     analytics_evidence: AnalyticsTargetEvidence | None = None
+    target_evidence: DesignChangeTargetEvidence | None = None
     knowledge_evidence: KnowledgeEvidenceSummary | None = None
     tool_name: str | None = None
     tool_arguments: dict[str, Any] | None = None
@@ -156,6 +201,10 @@ class WorkflowHandoffDecision:
             "analytics_evidence": (
                 self.analytics_evidence.as_dict()
                 if self.analytics_evidence else None
+            ),
+            "target_evidence": (
+                self.target_evidence.as_dict()
+                if self.target_evidence else None
             ),
             "knowledge_evidence": (
                 self.knowledge_evidence.as_dict()
@@ -504,6 +553,25 @@ class EvidenceToWorkflowHandoff:
             "actions": [action],
         }
 
+        target_evidence = None
+        if parent_item_code and location_code:
+            target_evidence = DesignChangeTargetEvidence(
+                version_code=scope.version_code,
+                plant_code=scope.plant_code,
+                item_code=item_code,
+                target_type="MATERIAL",
+                parent_item_code=parent_item_code,
+                location_code=location_code,
+                resolution_mode="DETERMINISTIC_ANALYTICS",
+                criterion="COST",
+                selection_mode="TOP_1_HIGH",
+                metric_name=metric_name,
+                metric_value=metric_value,
+                item_name=str(row.get("item_name") or "").strip() or None,
+                price_source=price_source,
+                currency_code=currency_code,
+            )
+
         decision = WorkflowHandoffDecision(
             status=HandoffStatus.READY,
             reason=(
@@ -512,6 +580,7 @@ class EvidenceToWorkflowHandoff:
             ),
             scope=scope,
             analytics_evidence=analytics,
+            target_evidence=target_evidence,
             knowledge_evidence=knowledge,
             tool_name="analyze_design_change_candidates",
             tool_arguments=tool_arguments,
@@ -519,6 +588,221 @@ class EvidenceToWorkflowHandoff:
         if decision.write_authority_granted:
             raise RuntimeError("Evidence handoff must never grant write authority.")
         return decision
+
+    def build_from_target(
+        self,
+        *,
+        user_goal: str,
+        target_evidence: DesignChangeTargetEvidence | None,
+        knowledge_payload: dict[str, Any] | None,
+        scope: ResolvedWorkflowScope | None,
+    ) -> WorkflowHandoffDecision:
+        """Build Analysis-only handoff from already verified target evidence.
+
+        This generalized contract accepts either a user-explicit BOM edge or a
+        deterministic analytics-selected edge.  It never selects among ambiguous
+        rows and never grants Request/approval/Production write authority.
+        """
+        goal = " ".join(str(user_goal or "").strip().split())
+        if not self._is_supported_generalized_goal(goal):
+            return self._blocked(
+                HandoffStatus.UNSUPPORTED_GOAL,
+                "현재 Evidence handoff는 read-only REPLACE Analysis만 지원합니다.",
+                scope=scope,
+            )
+        if scope is None:
+            return self._blocked(
+                HandoffStatus.SCOPE_REQUIRED,
+                "Design Change Analysis에는 확정된 VERSION과 PLANT가 필요합니다.",
+            )
+        if target_evidence is None:
+            return self._blocked(
+                HandoffStatus.ITEM_CODE_REQUIRED,
+                "검증된 Design Change Target Evidence가 없습니다.",
+                scope=scope,
+            )
+
+        validation_error = self._validate_target_evidence(
+            target_evidence=target_evidence,
+            scope=scope,
+        )
+        if validation_error is not None:
+            return self._blocked(
+                validation_error[0],
+                validation_error[1],
+                scope=scope,
+            )
+
+        knowledge, knowledge_error = self._knowledge_evidence(knowledge_payload)
+        if knowledge_error is not None:
+            return self._blocked(
+                knowledge_error[0],
+                knowledge_error[1],
+                scope=scope,
+            )
+
+        action = {
+            "action_type": "REPLACE",
+            "old_item_code": target_evidence.item_code,
+            "parent_item_code": target_evidence.parent_item_code,
+            "location_code": target_evidence.location_code,
+        }
+        tool_arguments = {
+            "request": {
+                "version_code": scope.version_code,
+                "plant_code": scope.plant_code,
+                "original_request": goal,
+            },
+            "actions": [action],
+        }
+
+        analytics: AnalyticsTargetEvidence | None = None
+        if (
+            target_evidence.resolution_mode == "DETERMINISTIC_ANALYTICS"
+            and target_evidence.metric_name
+            and target_evidence.metric_value is not None
+        ):
+            analytics = AnalyticsTargetEvidence(
+                version_code=target_evidence.version_code,
+                plant_code=target_evidence.plant_code,
+                item_code=target_evidence.item_code,
+                criterion=target_evidence.criterion,
+                selection_mode=target_evidence.selection_mode,
+                metric_name=target_evidence.metric_name,
+                metric_value=float(target_evidence.metric_value),
+                question=goal,
+                row_count=1,
+                parent_item_code=target_evidence.parent_item_code,
+                location_code=target_evidence.location_code,
+                price_source=target_evidence.price_source,
+                currency_code=target_evidence.currency_code,
+            )
+
+        decision = WorkflowHandoffDecision(
+            status=HandoffStatus.READY,
+            reason=(
+                "검증된 source target과 Knowledge Evidence를 기존 "
+                "Design Change Analysis Session 입력으로 준비했습니다."
+            ),
+            scope=scope,
+            analytics_evidence=analytics,
+            target_evidence=target_evidence,
+            knowledge_evidence=knowledge,
+            tool_name="analyze_design_change_candidates",
+            tool_arguments=tool_arguments,
+        )
+        if decision.write_authority_granted:
+            raise RuntimeError("Evidence handoff must never grant write authority.")
+        return decision
+
+    def _is_supported_generalized_goal(self, user_goal: str) -> bool:
+        requirement = self.capability_resolver.resolve(user_goal)
+        allowed = (
+            frozenset({Capability.RAG, Capability.DESIGN_CHANGE_ANALYSIS}),
+            frozenset({
+                Capability.TEXT_TO_SQL,
+                Capability.RAG,
+                Capability.DESIGN_CHANGE_ANALYSIS,
+            }),
+        )
+        if not (
+            requirement.composition_required
+            and requirement.workflow_managed
+            and frozenset(requirement.capabilities) in allowed
+        ):
+            return False
+
+        normalized = self.domain_router.normalize(user_goal)
+        if self.domain_router.is_delete_instruction(user_goal):
+            return False
+        if self.domain_router.is_quantity_change_instruction(user_goal):
+            return False
+        if any(marker in normalized for marker in ("추가", "넣어")):
+            return False
+        return True
+
+    @staticmethod
+    def _validate_target_evidence(
+        *,
+        target_evidence: DesignChangeTargetEvidence,
+        scope: ResolvedWorkflowScope,
+    ) -> tuple[HandoffStatus, str] | None:
+        if target_evidence.authority != "READ_ONLY_TARGET_EVIDENCE":
+            return (
+                HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                "Target Evidence가 read-only authority로 표시되지 않았습니다.",
+            )
+        if target_evidence.evidence_source != "READ_ONLY_SCOPED_BOM_EVIDENCE":
+            return (
+                HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                "Target Evidence provenance가 scoped read-only BOM 근거가 아닙니다.",
+            )
+        if target_evidence.resolution_mode not in {
+            "EXPLICIT", "DETERMINISTIC_ANALYTICS",
+        }:
+            return (
+                HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                "지원하지 않는 Target resolution mode입니다.",
+            )
+        if target_evidence.resolution_mode == "EXPLICIT":
+            if (
+                target_evidence.criterion != "EXPLICIT"
+                or target_evidence.selection_mode != "USER_SPECIFIED"
+            ):
+                return (
+                    HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                    "명시 Target Evidence의 criterion/selection mode가 일치하지 않습니다.",
+                )
+        else:
+            if target_evidence.criterion not in {"COST", "COMMONALITY"}:
+                return (
+                    HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                    "지원하지 않는 deterministic Target criterion입니다.",
+                )
+            if target_evidence.selection_mode not in {"TOP_1_HIGH", "TOP_1_LOW"}:
+                return (
+                    HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                    "deterministic Target은 유일한 TOP-1 selection mode가 필요합니다.",
+                )
+            if (
+                not str(target_evidence.metric_name or "").strip()
+                or target_evidence.metric_value is None
+            ):
+                return (
+                    HandoffStatus.SQL_RESULT_UNSUPPORTED,
+                    "deterministic Target Evidence에 비교 metric이 없습니다.",
+                )
+        if (
+            target_evidence.version_code.upper() != scope.version_code.upper()
+            or target_evidence.plant_code.upper() != scope.plant_code.upper()
+        ):
+            return (
+                HandoffStatus.SQL_SCOPE_MISMATCH,
+                "Target Evidence의 VERSION/PLANT가 확정된 Workflow scope와 다릅니다.",
+            )
+        if not str(target_evidence.item_code or "").strip():
+            return (HandoffStatus.ITEM_CODE_REQUIRED, "Target Evidence에 품목코드가 없습니다.")
+        if target_evidence.item_code.upper() == scope.version_code.upper():
+            return (
+                HandoffStatus.ITEM_CODE_REQUIRED,
+                "VERSION 코드는 변경 대상 품목코드로 사용할 수 없습니다.",
+            )
+        if target_evidence.target_type not in {"MATERIAL", "ASSY"}:
+            return (
+                HandoffStatus.ITEM_CODE_REQUIRED,
+                "Design Change source target은 MATERIAL 또는 ASSY여야 합니다.",
+            )
+        if not str(target_evidence.parent_item_code or "").strip():
+            return (
+                HandoffStatus.ITEM_CODE_AMBIGUOUS,
+                "정확한 BOM edge를 확인할 parent_item_code가 없습니다.",
+            )
+        if not str(target_evidence.location_code or "").strip():
+            return (
+                HandoffStatus.ITEM_CODE_AMBIGUOUS,
+                "정확한 BOM edge를 확인할 location_code가 없습니다.",
+            )
+        return None
 
     def _is_supported_goal(self, user_goal: str) -> bool:
         requirement = self.capability_resolver.resolve(user_goal)
@@ -703,6 +987,7 @@ DEFAULT_EVIDENCE_TO_WORKFLOW_HANDOFF = EvidenceToWorkflowHandoff()
 
 __all__ = [
     "AnalyticsTargetEvidence",
+    "DesignChangeTargetEvidence",
     "DEFAULT_EVIDENCE_TO_WORKFLOW_HANDOFF",
     "EvidenceToWorkflowHandoff",
     "HandoffStatus",

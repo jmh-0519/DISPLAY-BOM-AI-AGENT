@@ -158,9 +158,14 @@ class CapabilityRequirementResolver:
             # makes the existing Evidence-to-Workflow contract explicit at
             # capability-resolution time.
             if (
-                Capability.TEXT_TO_SQL in detected
+                (Capability.TEXT_TO_SQL in detected or domain.recommendation)
                 and Capability.RAG not in detected
             ):
+                # Evidence-driven read-only Design Change recommendation/analysis
+                # must attach Knowledge evidence before entering the existing
+                # Analysis Session.  Direct write-like instructions such as
+                # "SEALANT를 변경하고싶어" remain single-capability and stay on
+                # the existing workflow path.
                 self._append(
                     detected,
                     Capability.RAG,

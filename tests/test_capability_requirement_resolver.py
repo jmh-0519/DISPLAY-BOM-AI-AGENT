@@ -161,3 +161,41 @@ def test_capability_resolution_is_current_turn_only():
     assert first.composition_required is True
     assert second.capabilities == (Capability.CHAT,)
     assert second.composition_required is False
+
+
+def test_explicit_target_analysis_infers_rag_evidence_dependency_without_analytics():
+    query = (
+        "LTA400HR01-001 P01에서 0001-200008을 변경할 때 "
+        "적용되는 기준과 영향을 분석해줘"
+    )
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (
+        Capability.RAG,
+        Capability.DESIGN_CHANGE_ANALYSIS,
+    )
+    assert decision.composition_required is True
+    assert decision.workflow_managed is True
+    assert "WORKFLOW_KNOWLEDGE_EVIDENCE_REQUIRED" in decision.reasons
+
+
+def test_named_target_read_only_analysis_infers_rag_evidence_dependency():
+    query = (
+        "LTA400HR01-001 P01에서 SEALANT를 다른 자재로 "
+        "변경할 수 있는지 분석해줘"
+    )
+    decision = CapabilityRequirementResolver().resolve(query)
+
+    assert decision.capabilities == (
+        Capability.RAG,
+        Capability.DESIGN_CHANGE_ANALYSIS,
+    )
+    assert decision.composition_required is True
+    assert decision.workflow_managed is True
+
+
+def test_direct_write_like_change_remains_existing_single_capability_path():
+    decision = CapabilityRequirementResolver().resolve("SEALANT를 변경하고싶어")
+
+    assert decision.capabilities == (Capability.DESIGN_CHANGE_ANALYSIS,)
+    assert decision.composition_required is False

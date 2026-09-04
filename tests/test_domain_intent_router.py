@@ -80,3 +80,20 @@ def test_candidate_free_fail_followup_is_analysis_explain():
     )
 
     assert intent == "EXPLAIN_ANALYSIS"
+
+
+def test_explicit_named_replace_analysis_is_read_only_recommendation():
+    query = "LTA400HR01-001 P01에서 SEALANT를 다른 자재로 변경할 수 있는지 분석해줘"
+    decision = ROUTER.route(query)
+
+    assert decision.intent == "DESIGN_CHANGE_RECOMMENDATION"
+    assert decision.recommendation is True
+    assert decision.change is False
+    assert decision.design_change_mode is True
+
+
+def test_commonality_comparison_criterion_is_detected():
+    query = "LTA400HR01-001 P01에서 공용성이 가장 높은 자재 1개를 찾아 변경 분석해줘"
+
+    assert ROUTER.comparison_criterion(query) == "COMMONALITY"
+    assert ROUTER.route(query).intent == "DESIGN_CHANGE_RECOMMENDATION"

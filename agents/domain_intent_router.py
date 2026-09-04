@@ -65,8 +65,13 @@ class DomainIntentRouter:
     )
     DESIGN_CHANGE_RECOMMENDATION_MARKERS = (
         "추천", "후보", "찾아", "대체 가능", "대체가능", "대체재", "대체품",
-        "변경 가능", "변경가능", "recommend", "candidate", "alternative",
-        "replacement material",
+        "변경 가능", "변경가능", "교체 가능", "교체가능",
+        "대체할 수", "교체할 수", "변경할 수",
+        "recommend", "candidate", "alternative", "replacement material",
+    )
+    DESIGN_CHANGE_ANALYSIS_MARKERS = (
+        "분석", "검토", "가능한지", "가능 여부", "가능여부", "적합한지",
+        "영향", "impact",
     )
     PRODUCT_COST_SCAN_SCOPE_MARKERS = (
         "대상모델", "대상 모델", "모델 전체", "제품 전체", "전체 bom", "bom 전체",
@@ -405,7 +410,16 @@ class DomainIntentRouter:
         if self.is_explicit_replacement_pair_analysis(user_query):
             return True
         normalized = self.normalize(user_query)
-        return any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS)
+        if any(marker in normalized for marker in self.DESIGN_CHANGE_RECOMMENDATION_MARKERS):
+            return True
+        # Natural analysis wording such as "SEALANT를 다른 자재로 변경할 수
+        # 있는지 분석해줘" is read-only Design Change Analysis, not a write
+        # directive.  Require both a replacement concept and an analysis marker
+        # so ordinary uses of the word "분석" are not promoted.
+        return bool(
+            any(marker in normalized for marker in self.REPLACE_ACTION_MARKERS)
+            and any(marker in normalized for marker in self.DESIGN_CHANGE_ANALYSIS_MARKERS)
+        )
 
     def has_design_change_reason_language(self, user_query: str) -> bool:
         normalized = self.normalize(user_query)
@@ -831,6 +845,11 @@ class DomainIntentRouter:
         normalized = self.normalize(user_query)
         if any(marker in normalized for marker in ("원가", "가격", "저렴", "싼")):
             return "COST"
+        if any(marker in normalized for marker in (
+            "공용성", "공용으로", "공통으로", "많이 쓰이는", "많이 사용",
+            "사용 모델 수", "사용모델수",
+        )):
+            return "COMMONALITY"
         if "납기" in normalized:
             return "LEAD_TIME"
         if "재고" in normalized:

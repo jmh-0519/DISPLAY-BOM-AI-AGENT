@@ -1,7 +1,8 @@
-"""PLAN-04 workflow-aware runtime composition.
+"""Evidence-driven workflow analysis composition.
 
-This path composes read-only analytics + Knowledge evidence and hands a verified
-single source item into the existing Design Change Analysis Session.
+This path resolves either an explicit source target or a deterministic analytics
+target, attaches Knowledge evidence, and hands one verified BOM edge into the
+existing Design Change Analysis Session.
 
 Runtime authority remains intentionally narrow:
 - Text-to-SQL: read-only evidence only.
@@ -34,9 +35,16 @@ from agents.selective_planner import (
 )
 from agents.workflow_evidence_handoff import (
     DEFAULT_EVIDENCE_TO_WORKFLOW_HANDOFF,
+    DesignChangeTargetEvidence,
     EvidenceToWorkflowHandoff,
     HandoffStatus,
     ResolvedWorkflowScope,
+)
+from agents.workflow_target_resolution import (
+    DEFAULT_WORKFLOW_TARGET_RESOLUTION_PLANNER,
+    TargetCriterion,
+    TargetResolutionMode,
+    WorkflowTargetResolutionPlanner,
 )
 from core.performance_profiler import record_performance_event
 from rag.query_router import (
@@ -45,9 +53,15 @@ from rag.query_router import (
 )
 from text_to_sql.pipeline import TextToSqlPipelineResult
 from text_to_sql.workflow_cost_evidence import ScopedBomCostEvidenceQuery
+from text_to_sql.workflow_target_evidence import (
+    ScopedBomTargetEvidenceQuery,
+    TargetEvidenceQueryResult,
+    TargetQueryStatus,
+)
 
 
 WORKFLOW_COMPOSITION_PLAN = "workflow_composition_plan"
+WORKFLOW_COMPOSITION_TARGET_RESOLVE = "workflow_composition_target_resolve"
 WORKFLOW_COMPOSITION_TEXT_TO_SQL = "workflow_composition_text_to_sql"
 WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY = "workflow_composition_knowledge_query"
 WORKFLOW_COMPOSITION_HANDOFF = "workflow_composition_handoff"
@@ -64,17 +78,20 @@ WORKFLOW_COMPOSITION_ANALYSIS_TOOL_CALL_PREFIX = (
 
 
 class BomWorkflowCompositionNodes:
-    """Execute a guarded TEXT_TO_SQL + RAG -> Analysis composition.
+    """Execute a guarded target evidence + RAG -> Analysis composition.
 
-    The node never creates a Design Change Request.  It can only dispatch the
-    existing read-only ``analyze_design_change_candidates`` Tool after the
-    PLAN-03 evidence contract returns READY.
+    Explicit targets bypass analytics.  Deterministic ranked targets use the
+    read-only BOM evidence executor.  The node never creates a Design Change
+    Request and can dispatch only ``analyze_design_change_candidates``.
     """
 
-    SUPPORTED_RUNTIME_CAPABILITIES = frozenset({
-        Capability.TEXT_TO_SQL,
-        Capability.RAG,
-        Capability.DESIGN_CHANGE_ANALYSIS,
+    SUPPORTED_RUNTIME_CAPABILITY_SETS = frozenset({
+        frozenset({Capability.RAG, Capability.DESIGN_CHANGE_ANALYSIS}),
+        frozenset({
+            Capability.TEXT_TO_SQL,
+            Capability.RAG,
+            Capability.DESIGN_CHANGE_ANALYSIS,
+        }),
     })
     SAFE_START_STEPS = frozenset({"NOT_STARTED"})
     REPLACEABLE_PRE_REQUEST_ANALYSIS_STEPS = frozenset({
@@ -94,6 +111,8 @@ class BomWorkflowCompositionNodes:
         handoff: EvidenceToWorkflowHandoff | None = None,
         knowledge_router: KnowledgeQueryRouter | None = None,
         cost_evidence_query: ScopedBomCostEvidenceQuery | None = None,
+        target_resolution_planner: WorkflowTargetResolutionPlanner | None = None,
+        target_evidence_query: ScopedBomTargetEvidenceQuery | None = None,
     ) -> None:
         self.text_to_sql_nodes = text_to_sql_nodes
         self.analysis_finalizer = analysis_finalizer
@@ -105,11 +124,20 @@ class BomWorkflowCompositionNodes:
         self.knowledge_router = (
             knowledge_router or DEFAULT_KNOWLEDGE_QUERY_ROUTER
         )
+        self.target_resolution_planner = (
+            target_resolution_planner
+            or DEFAULT_WORKFLOW_TARGET_RESOLUTION_PLANNER
+        )
+        pipeline = getattr(self.text_to_sql_nodes, "pipeline", None)
+        executor = getattr(pipeline, "executor", None)
+        self.target_evidence_query = (
+            target_evidence_query
+            if target_evidence_query is not None
+            else (ScopedBomTargetEvidenceQuery(executor) if executor is not None else None)
+        )
         if cost_evidence_query is not None:
             self.cost_evidence_query = cost_evidence_query
         else:
-            pipeline = getattr(self.text_to_sql_nodes, "pipeline", None)
-            executor = getattr(pipeline, "executor", None)
             self.cost_evidence_query = (
                 ScopedBomCostEvidenceQuery(executor)
                 if executor is not None
@@ -117,11 +145,7 @@ class BomWorkflowCompositionNodes:
             )
 
     def can_execute(self, state: BomAgentState) -> bool:
-        """Admit only fresh, fully scoped workflow compositions.
-
-        Missing MODEL/PLANT scope remains on the existing Agent path so the
-        current PLANT/context clarification UX is preserved.
-        """
+        """Admit only safe, fully-scoped Evidence -> Analysis compositions."""
         workflow = state.get("design_change") or {}
         step = str(workflow.get("current_step") or "NOT_STARTED").strip().upper()
         if str(workflow.get("pending_quantity_request") or "").strip():
@@ -144,20 +168,26 @@ class BomWorkflowCompositionNodes:
         )
         if scope is None:
             return False
-        if not self._safe_scope_entry(
-            workflow=workflow,
-            step=step,
-            scope=scope,
-        ):
+        if not self._safe_scope_entry(workflow=workflow, step=step, scope=scope):
             return False
 
-        plan = self.planner.plan_if_needed(query, requirement=requirement)
-        return bool(
-            plan is not None
-            and not plan.write_authority_granted
-            and plan.capability_names
-            == ("TEXT_TO_SQL", "RAG", "DESIGN_CHANGE_ANALYSIS")
+        target_decision = self.target_resolution_planner.resolve(
+            query,
+            scope_version_code=scope.version_code,
         )
+        if not target_decision.ready:
+            # Analytics requests with a non-unique ranking are intentionally
+            # admitted so the plan node can return a deterministic clarification
+            # instead of falling back to LLM target selection.  Other unsupported
+            # shapes (for example an explicit old/new pair) stay on the existing
+            # Agent/Macro path.
+            if Capability.TEXT_TO_SQL not in requirement.capabilities:
+                return False
+
+        plan = self.planner.plan_if_needed(query, requirement=requirement)
+        if plan is None or plan.write_authority_granted:
+            return False
+        return frozenset(requirement.capabilities) in self.SUPPORTED_RUNTIME_CAPABILITY_SETS
 
     def plan(self, state: BomAgentState) -> BomAgentState:
         query = BomGraphGateway.last_user_query(state)
@@ -172,8 +202,6 @@ class BomWorkflowCompositionNodes:
             active_bom_context=state.get("active_bom_context"),
         )
         if scope is None:
-            # can_execute() prevents this route at Graph entry. Keep the node
-            # defensive for direct invocation/tests.
             return self._blocked(
                 HandoffStatus.SCOPE_REQUIRED,
                 "설계변경 분석을 시작하려면 MODEL과 PLANT 범위를 먼저 확정해 주세요.",
@@ -181,11 +209,7 @@ class BomWorkflowCompositionNodes:
 
         workflow = state.get("design_change") or {}
         step = str(workflow.get("current_step") or "NOT_STARTED").strip().upper()
-        if not self._safe_scope_entry(
-            workflow=workflow,
-            step=step,
-            scope=scope,
-        ):
+        if not self._safe_scope_entry(workflow=workflow, step=step, scope=scope):
             return self._blocked(
                 HandoffStatus.SCOPE_REQUIRED,
                 (
@@ -195,47 +219,43 @@ class BomWorkflowCompositionNodes:
                 ),
             )
 
-        preflight = self.handoff.build(
-            user_goal=query,
-            sql_result=None,
-            knowledge_payload=None,
-            scope=scope,
+        target_decision = self.target_resolution_planner.resolve(
+            query,
+            scope_version_code=scope.version_code,
         )
-        if preflight.status == HandoffStatus.USER_SELECTION_REQUIRED:
-            return self._blocked(preflight.status, preflight.reason)
-        if preflight.status == HandoffStatus.UNSUPPORTED_GOAL:
-            return self._blocked(preflight.status, preflight.reason)
-        if preflight.status != HandoffStatus.KNOWLEDGE_EVIDENCE_REQUIRED:
-            return self._blocked(preflight.status, preflight.reason)
+        if not target_decision.ready or target_decision.request is None:
+            return self._blocked(
+                HandoffStatus.USER_SELECTION_REQUIRED,
+                target_decision.blocked_reason
+                or "변경 대상을 하나로 확정할 수 없습니다.",
+            )
+        target_request = target_decision.request
 
         plan = self.planner.plan_if_needed(query, requirement=requirement)
         if plan is None or plan.write_authority_granted:
             raise ValueError("Workflow Composition requires a safe Planner plan.")
 
-        analytics_query = self.handoff.build_scoped_analytics_question(
-            query,
-            scope=scope,
-        )
-        if not analytics_query:
-            return self._blocked(
-                HandoffStatus.USER_SELECTION_REQUIRED,
-                (
-                    "변경 대상을 자동 선정하려면 '가장 원가가 높은 자재 1개'처럼 "
-                    "유일한 선택 기준을 명시해 주세요."
-                ),
+        queries: dict[str, str] = {
+            Capability.RAG.value: self._knowledge_query(
+                query,
+                target_request=target_request.as_dict(),
+            )
+        }
+        if target_request.analytics_required:
+            queries[Capability.TEXT_TO_SQL.value] = self._analytics_question(
+                scope=scope,
+                target_request=target_request.as_dict(),
             )
 
-        knowledge_query = self._knowledge_query(query)
         runtime = {
             "mode": "WORKFLOW_ANALYSIS_COMPOSITION",
             "status": "PLANNED",
             "original_query": query,
             "plan": plan.as_dict(),
             "scope": scope.as_dict(),
-            "queries": {
-                Capability.TEXT_TO_SQL.value: analytics_query,
-                Capability.RAG.value: knowledge_query,
-            },
+            "target_request": target_request.as_dict(),
+            "target_evidence": None,
+            "queries": queries,
             "results": {},
             "handoff": None,
             "write_authority_granted": False,
@@ -246,84 +266,95 @@ class BomWorkflowCompositionNodes:
             metadata={
                 "capability_count": len(plan.steps),
                 "workflow_managed": True,
+                "target_resolution_mode": target_request.mode.value,
+                "target_criterion": target_request.criterion.value,
             },
             metrics={"step_count": len(plan.steps)},
         )
-        return {
-            "composition_runtime": runtime,
-            "error": None,
-        }
+        return {"composition_runtime": runtime, "error": None}
+
+    def resolve_explicit_target(self, state: BomAgentState) -> BomAgentState:
+        runtime = self._runtime(state)
+        scope = self._deserialize_scope(runtime.get("scope"))
+        target_request = runtime.get("target_request") or {}
+        if scope is None:
+            return self._blocked(HandoffStatus.SCOPE_REQUIRED, "변경 대상 범위가 없습니다.")
+        if self.target_evidence_query is None:
+            return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, "명시 Target을 검증할 read-only resolver가 없습니다.")
+        try:
+            result = self.target_evidence_query.resolve_explicit(
+                version_code=scope.version_code,
+                plant_code=scope.plant_code,
+                item_code=target_request.get("explicit_item_code"),
+                target_name=target_request.get("explicit_target_name"),
+            )
+        except Exception:
+            return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, "명시 Target BOM 근거를 안전하게 확인하지 못했습니다.")
+        return self._apply_target_result(runtime, scope, target_request, result, execution_mode="DETERMINISTIC_EXPLICIT_BOM_TARGET")
 
     def text_to_sql(self, state: BomAgentState) -> BomAgentState:
         runtime = self._runtime(state)
         query = self._runtime_query(runtime, Capability.TEXT_TO_SQL)
         scope = self._deserialize_scope(runtime.get("scope"))
+        target_request = runtime.get("target_request") or {}
         if scope is None:
-            return self._blocked(
-                HandoffStatus.SCOPE_REQUIRED,
-                "변경 대상 선정을 위한 MODEL/PLANT 범위가 없습니다.",
-            )
+            return self._blocked(HandoffStatus.SCOPE_REQUIRED, "변경 대상 선정을 위한 MODEL/PLANT 범위가 없습니다.")
 
+        criterion = str(target_request.get("criterion") or "").upper()
+        selection_mode = str(target_request.get("selection_mode") or "").upper()
         try:
-            if self.cost_evidence_query is not None:
-                # Workflow target promotion must not depend on free-form SQL
-                # generation.  Use one deterministic recursive BOM query over
-                # the same read-only executor.  General FAST_TEXT_TO_SQL and
-                # PLAN-02 ad-hoc analytics continue to use LLM Text-to-SQL.
-                result = self.cost_evidence_query.run(
-                    version_code=scope.version_code,
-                    plant_code=scope.plant_code,
-                    question=query,
+            if self.target_evidence_query is not None:
+                if criterion == TargetCriterion.COST.value:
+                    result = self.target_evidence_query.resolve_cost_rank(
+                        version_code=scope.version_code,
+                        plant_code=scope.plant_code,
+                        direction="LOW" if selection_mode == "TOP_1_LOW" else "HIGH",
+                    )
+                elif criterion == TargetCriterion.COMMONALITY.value:
+                    result = self.target_evidence_query.resolve_commonality_rank(
+                        version_code=scope.version_code,
+                        plant_code=scope.plant_code,
+                    )
+                else:
+                    return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, "지원하지 않는 deterministic 분석 기준입니다.")
+                return self._apply_target_result(runtime, scope, target_request, result, execution_mode="DETERMINISTIC_SCOPED_BOM_SQL")
+
+            # Compatibility path for existing isolated tests/validators.
+            if criterion != TargetCriterion.COST.value or self.cost_evidence_query is None:
+                return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, "deterministic target evidence resolver가 없습니다.")
+            legacy = self.cost_evidence_query.run(
+                version_code=scope.version_code,
+                plant_code=scope.plant_code,
+                question=query,
+            )
+            if legacy.status != "SQL" or not legacy.rows:
+                fallback_reason = str(legacy.reason or "").strip()
+                if not fallback_reason and criterion == TargetCriterion.COST.value:
+                    fallback_reason = (
+                        f"{scope.version_code} / {scope.plant_code} 활성 BOM에는 "
+                        "현재 비교 가능한 원가/단가 근거가 등록된 자재가 없습니다."
+                    )
+                return self._blocked(
+                    HandoffStatus.SQL_RESULT_EMPTY,
+                    fallback_reason or "비교 가능한 Target Evidence가 없습니다.",
                 )
-                execution_mode = "DETERMINISTIC_SCOPED_BOM_SQL"
-            else:
-                # Test/backward-compatibility fallback only.  Production graph
-                # supplies a real TextToSqlPipeline with ReadOnlySqlExecutor.
-                result = self.text_to_sql_nodes.execute_result(query)
-                execution_mode = "GENERATED_SQL_FALLBACK"
+            if legacy.row_count != 1:
+                return self._blocked(HandoffStatus.USER_SELECTION_REQUIRED, "동일 ranking 조건의 Target이 복수입니다. 품목을 직접 선택해 주세요.")
+            row = dict(legacy.rows[0])
+            evidence = self._target_evidence_from_row(scope, target_request, row)
+            updated = self._copy_runtime(runtime)
+            updated["status"] = "TARGET_RESOLVED"
+            updated["target_evidence"] = evidence.as_dict()
+            updated["results"][Capability.TEXT_TO_SQL.value] = {
+                "query": query,
+                "answer": self.text_to_sql_nodes._format_result(legacy),
+                "raw": self._serialize_sql_result(legacy),
+                "authority": "READ_ONLY_SQL_EVIDENCE",
+                "execution_mode": "DETERMINISTIC_SCOPED_BOM_SQL",
+            }
+            return {"composition_runtime": updated, "error": None}
         except Exception:
-            return self._blocked(
-                HandoffStatus.SQL_RESULT_UNSUPPORTED,
-                (
-                    "변경 대상 선정을 위한 읽기 전용 분석 조회를 안전하게 실행하지 "
-                    "못했습니다. MODEL/PLANT와 선택 기준을 확인해 주세요."
-                ),
-            )
-
-        if result.status != "SQL":
-            return self._blocked(
-                HandoffStatus.SQL_RESULT_UNSUPPORTED,
-                str(result.reason or "").strip()
-                or "변경 대상 선정을 위한 분석 조회를 수행할 수 없습니다.",
-            )
-
-        # A reachable BOM material without comparable COST evidence must never
-        # be promoted into a Design Change target.  Stop here before RAG so the
-        # user gets the real data-quality reason and no unnecessary Knowledge
-        # or Analysis tool is executed.
-        if result.row_count == 0 or not result.rows:
-            return self._blocked(
-                HandoffStatus.SQL_RESULT_EMPTY,
-                (
-                    f"{scope.version_code} / {scope.plant_code} 활성 BOM에는 "
-                    "현재 비교 가능한 원가/단가 근거가 등록된 자재가 없어 "
-                    "'가장 원가가 높은 자재 1개'를 확정할 수 없습니다."
-                ),
-            )
-
-        updated = self._copy_runtime(runtime)
-        updated["status"] = "TEXT_TO_SQL_COMPLETED"
-        updated["results"][Capability.TEXT_TO_SQL.value] = {
-            "query": query,
-            "answer": self.text_to_sql_nodes._format_result(result),
-            "raw": self._serialize_sql_result(result),
-            "authority": "READ_ONLY_SQL_EVIDENCE",
-            "execution_mode": execution_mode,
-        }
-        return {
-            "composition_runtime": updated,
-            "error": None,
-        }
+            return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, "변경 대상 선정을 위한 읽기 전용 분석 조회를 안전하게 실행하지 못했습니다.")
 
     def knowledge_query(self, state: BomAgentState) -> BomAgentState:
         runtime = self._runtime(state)
@@ -375,27 +406,19 @@ class BomWorkflowCompositionNodes:
         if not isinstance(knowledge_payload, dict):
             knowledge_payload = {}
 
-        sql_evidence = (
-            (runtime.get("results") or {})
-            .get(Capability.TEXT_TO_SQL.value, {})
-        )
-        sql_result = self._deserialize_sql_result(sql_evidence.get("raw"))
         scope = self._deserialize_scope(runtime.get("scope"))
-
-        decision = self.handoff.build(
+        target_evidence = self._deserialize_target_evidence(
+            runtime.get("target_evidence")
+        )
+        decision = self.handoff.build_from_target(
             user_goal=str(runtime.get("original_query") or ""),
-            sql_result=sql_result,
+            target_evidence=target_evidence,
             knowledge_payload=knowledge_payload,
             scope=scope,
         )
         if not decision.ready:
-            analytics_answer = str(sql_evidence.get("answer") or "").strip()
-            prefix = (
-                f"### 데이터 분석\n{analytics_answer}\n\n"
-                if analytics_answer else ""
-            )
             return {
-                "messages": [AIMessage(content=f"{prefix}{decision.reason}".strip())],
+                "messages": [AIMessage(content=decision.reason)],
                 "composition_runtime": None,
                 "error": None,
             }
@@ -461,20 +484,22 @@ class BomWorkflowCompositionNodes:
 
         runtime = self._runtime(state)
         handoff = runtime.get("handoff") or {}
-        analytics = handoff.get("analytics_evidence") or {}
+        target = handoff.get("target_evidence") or handoff.get("analytics_evidence") or {}
         knowledge = handoff.get("knowledge_evidence") or {}
 
         evidence_lines: list[str] = []
-        item_code = str(analytics.get("item_code") or "").strip()
-        metric_name = str(analytics.get("metric_name") or "").strip()
-        metric_value = analytics.get("metric_value")
+        item_code = str(target.get("item_code") or "").strip()
+        metric_name = str(target.get("metric_name") or "").strip()
+        metric_value = target.get("metric_value")
+        resolution_mode = str(target.get("resolution_mode") or "").strip()
         if item_code:
             metric_text = (
                 f" · {metric_name}={metric_value}"
                 if metric_name and metric_value is not None else ""
             )
+            mode_text = "사용자 지정" if resolution_mode == "EXPLICIT" else "deterministic evidence"
             evidence_lines.append(
-                f"- 분석 대상 선정 근거: {item_code}{metric_text}"
+                f"- 분석 대상 선정 근거: {item_code} · {mode_text}{metric_text}"
             )
 
         references = [
@@ -516,7 +541,7 @@ class BomWorkflowCompositionNodes:
             requirement.composition_required
             and requirement.workflow_managed
             and frozenset(requirement.capabilities)
-            == self.SUPPORTED_RUNTIME_CAPABILITIES
+            in self.SUPPORTED_RUNTIME_CAPABILITY_SETS
         )
 
     @classmethod
@@ -544,12 +569,130 @@ class BomWorkflowCompositionNodes:
         return scope.source == "CURRENT_TURN_EXPLICIT"
 
     @staticmethod
-    def _knowledge_query(user_goal: str) -> str:
-        # PLAN-03 currently supports only COST-based REPLACE handoff.  Use a
-        # dedicated evidence query instead of leaking the action directive into
-        # the standalone Knowledge router.
-        del user_goal
-        return "원가 절감 설계변경 기준과 영향"
+    def _knowledge_query(
+        user_goal: str,
+        *,
+        target_request: dict[str, Any],
+    ) -> str:
+        criterion = str(target_request.get("criterion") or "").strip().upper()
+        if criterion == TargetCriterion.COST.value:
+            return "원가 절감 설계변경 기준과 영향"
+        if criterion == TargetCriterion.COMMONALITY.value:
+            return "공용화 설계변경 기준과 영향"
+
+        normalized = " ".join(str(user_goal or "").strip().split()).lower()
+        reason_queries = (
+            (("단종", "eol"), "단종 설계변경 기준과 영향"),
+            (("공급 중단", "공급중단", "supplier stop"), "공급 중단 설계변경 기준과 영향"),
+            (("납기",), "납기 설계변경 기준과 영향"),
+            (("원가", "비용"), "원가 절감 설계변경 기준과 영향"),
+            (("재고",), "재고 설계변경 기준과 영향"),
+            (("품질", "불량"), "품질 설계변경 기준과 영향"),
+            (("규제", "인증"), "규제 설계변경 기준과 영향"),
+            (("공용화", "공통화"), "공용화 설계변경 기준과 영향"),
+        )
+        for markers, query in reason_queries:
+            if any(marker in normalized for marker in markers):
+                return query
+        return "설계변경 기준과 영향"
+
+    @staticmethod
+    def _analytics_question(
+        *,
+        scope: ResolvedWorkflowScope,
+        target_request: dict[str, Any],
+    ) -> str:
+        criterion = str(target_request.get("criterion") or "").upper()
+        selection_mode = str(target_request.get("selection_mode") or "").upper()
+        if criterion == TargetCriterion.COST.value:
+            direction = "낮은" if selection_mode == "TOP_1_LOW" else "높은"
+            return (
+                f"{scope.version_code} {scope.plant_code} 모델의 활성 BOM에서 "
+                f"현재 비교 가능한 원가 또는 단가가 가장 {direction} 자재 1개"
+            )
+        if criterion == TargetCriterion.COMMONALITY.value:
+            return (
+                f"{scope.version_code} {scope.plant_code} 모델의 활성 BOM에서 "
+                "동일 PLANT의 활성 VERSION 사용 모델 수가 가장 많은 자재 1개"
+            )
+        raise ValueError("Unsupported workflow analytics criterion")
+
+    def _apply_target_result(
+        self,
+        runtime: dict[str, Any],
+        scope: ResolvedWorkflowScope,
+        target_request: dict[str, Any],
+        result: TargetEvidenceQueryResult,
+        *,
+        execution_mode: str,
+    ) -> BomAgentState:
+        if result.status == TargetQueryStatus.EMPTY:
+            return self._blocked(HandoffStatus.SQL_RESULT_EMPTY, result.reason)
+        if result.status == TargetQueryStatus.AMBIGUOUS:
+            return self._blocked(HandoffStatus.USER_SELECTION_REQUIRED, result.reason)
+        if not result.ready or result.row is None:
+            return self._blocked(HandoffStatus.SQL_RESULT_UNSUPPORTED, result.reason)
+
+        evidence = self._target_evidence_from_row(
+            scope,
+            target_request,
+            result.row,
+        )
+        updated = self._copy_runtime(runtime)
+        updated["status"] = "TARGET_RESOLVED"
+        updated["target_evidence"] = evidence.as_dict()
+        if str(target_request.get("mode") or "") == TargetResolutionMode.DETERMINISTIC_ANALYTICS.value:
+            updated["results"][Capability.TEXT_TO_SQL.value] = {
+                "query": (runtime.get("queries") or {}).get(Capability.TEXT_TO_SQL.value),
+                "authority": result.authority,
+                "execution_mode": execution_mode,
+                "criterion": result.criterion,
+                "selection_mode": result.selection_mode,
+                "sql": result.sql,
+                "rows": [dict(row) for row in result.rows],
+            }
+        else:
+            updated["results"]["TARGET_RESOLUTION"] = {
+                "authority": result.authority,
+                "execution_mode": execution_mode,
+                "rows": [dict(row) for row in result.rows],
+            }
+        return {"composition_runtime": updated, "error": None}
+
+    @staticmethod
+    def _target_evidence_from_row(
+        scope: ResolvedWorkflowScope,
+        target_request: dict[str, Any],
+        row: dict[str, Any],
+    ) -> DesignChangeTargetEvidence:
+        item_type = str(row.get("target_item_type") or "").strip().upper()
+        target_type = "ASSY" if item_type == "ASSEMBLY" else "MATERIAL"
+        metric_name: str | None = None
+        metric_value: float | None = None
+        criterion = str(target_request.get("criterion") or "EXPLICIT").strip().upper()
+        if criterion == TargetCriterion.COST.value and row.get("unit_cost") is not None:
+            metric_name = "unit_cost"
+            metric_value = float(row.get("unit_cost"))
+        elif criterion == TargetCriterion.COMMONALITY.value and row.get("active_version_usage_count") is not None:
+            metric_name = "active_version_usage_count"
+            metric_value = float(row.get("active_version_usage_count"))
+
+        return DesignChangeTargetEvidence(
+            version_code=scope.version_code,
+            plant_code=scope.plant_code,
+            item_code=str(row.get("item_code") or "").strip().upper(),
+            target_type=target_type,
+            parent_item_code=str(row.get("parent_item_code") or "").strip().upper(),
+            location_code=str(row.get("location_code") or "").strip().upper(),
+            resolution_mode=str(target_request.get("mode") or "").strip().upper(),
+            criterion=criterion,
+            selection_mode=str(target_request.get("selection_mode") or "USER_SPECIFIED").strip().upper(),
+            metric_name=metric_name,
+            metric_value=metric_value,
+            item_name=str(row.get("item_name") or "").strip() or None,
+            price_source=str(row.get("price_source") or "").strip() or None,
+            currency_code=str(row.get("currency_code") or "").strip().upper() or None,
+        )
 
     @staticmethod
     def _serialize_sql_result(
@@ -587,6 +730,35 @@ class BomWorkflowCompositionNodes:
             row_count=int(payload.get("row_count") or 0),
             truncated=bool(payload.get("truncated")),
             elapsed_ms=float(payload.get("elapsed_ms") or 0.0),
+        )
+
+    @staticmethod
+    def _deserialize_target_evidence(payload: Any) -> DesignChangeTargetEvidence | None:
+        if not isinstance(payload, dict):
+            return None
+        required = (
+            "version_code", "plant_code", "item_code", "target_type",
+            "parent_item_code", "location_code", "resolution_mode",
+            "criterion", "selection_mode",
+        )
+        if any(not str(payload.get(key) or "").strip() for key in required):
+            return None
+        metric_value = payload.get("metric_value")
+        return DesignChangeTargetEvidence(
+            version_code=str(payload["version_code"]).strip().upper(),
+            plant_code=str(payload["plant_code"]).strip().upper(),
+            item_code=str(payload["item_code"]).strip().upper(),
+            target_type=str(payload["target_type"]).strip().upper(),
+            parent_item_code=str(payload["parent_item_code"]).strip().upper(),
+            location_code=str(payload["location_code"]).strip().upper(),
+            resolution_mode=str(payload["resolution_mode"]).strip().upper(),
+            criterion=str(payload["criterion"]).strip().upper(),
+            selection_mode=str(payload["selection_mode"]).strip().upper(),
+            metric_name=str(payload.get("metric_name") or "").strip() or None,
+            metric_value=(float(metric_value) if metric_value is not None else None),
+            item_name=str(payload.get("item_name") or "").strip() or None,
+            price_source=str(payload.get("price_source") or "").strip() or None,
+            currency_code=str(payload.get("currency_code") or "").strip().upper() or None,
         )
 
     @staticmethod
@@ -681,6 +853,7 @@ __all__ = [
     "WORKFLOW_COMPOSITION_KNOWLEDGE_QUERY",
     "WORKFLOW_COMPOSITION_KNOWLEDGE_TOOL_CALL_PREFIX",
     "WORKFLOW_COMPOSITION_PLAN",
+    "WORKFLOW_COMPOSITION_TARGET_RESOLVE",
     "WORKFLOW_COMPOSITION_TEXT_TO_SQL",
     "is_workflow_composition_analysis_tool_result",
     "is_workflow_composition_knowledge_tool_result",

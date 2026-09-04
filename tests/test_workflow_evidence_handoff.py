@@ -1,6 +1,7 @@
 from text_to_sql.pipeline import TextToSqlPipelineResult
 
 from agents.workflow_evidence_handoff import (
+    DesignChangeTargetEvidence,
     EvidenceToWorkflowHandoff,
     HandoffStatus,
     ResolvedWorkflowScope,
@@ -316,3 +317,146 @@ def test_scoped_analytics_question_is_generated_only_for_unique_goal():
     assert PLANT in question
     assert "1개" in question
     assert "자재코드" in question
+
+
+GOAL_EXPLICIT = (
+    f"{VERSION} {PLANT} 모델에서 0001-200008을 변경할 때 "
+    "적용되는 기준과 영향을 분석해줘"
+)
+
+
+def _target(**overrides):
+    values = {
+        "version_code": VERSION,
+        "plant_code": PLANT,
+        "item_code": "0001-200008",
+        "target_type": "MATERIAL",
+        "parent_item_code": "LJ94-100003",
+        "location_code": "ALL",
+        "resolution_mode": "EXPLICIT",
+        "criterion": "EXPLICIT",
+        "selection_mode": "USER_SPECIFIED",
+        "item_name": "SPACER",
+    }
+    values.update(overrides)
+    return DesignChangeTargetEvidence(**values)
+
+
+def test_generalized_explicit_target_handoff_needs_no_analytics_evidence():
+    decision = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=GOAL_EXPLICIT,
+        target_evidence=_target(),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert decision.status == HandoffStatus.READY
+    assert decision.analytics_evidence is None
+    assert decision.target_evidence.item_code == "0001-200008"
+    assert decision.tool_name == "analyze_design_change_candidates"
+    assert decision.tool_arguments == {
+        "request": {
+            "version_code": VERSION,
+            "plant_code": PLANT,
+            "original_request": GOAL_EXPLICIT,
+        },
+        "actions": [{
+            "action_type": "REPLACE",
+            "old_item_code": "0001-200008",
+            "parent_item_code": "LJ94-100003",
+            "location_code": "ALL",
+        }],
+    }
+    assert decision.write_authority_granted is False
+    assert decision.request_creation_allowed is False
+    assert decision.approval_allowed is False
+    assert decision.production_write_allowed is False
+
+
+def test_generalized_deterministic_target_preserves_metric_evidence():
+    target = _target(
+        resolution_mode="DETERMINISTIC_ANALYTICS",
+        criterion="COMMONALITY",
+        selection_mode="TOP_1_HIGH",
+        metric_name="active_version_usage_count",
+        metric_value=3.0,
+    )
+    goal = (
+        f"{VERSION} {PLANT} 모델에서 공용성이 가장 높은 자재 1개를 "
+        "찾아 변경 분석해줘"
+    )
+    decision = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=goal,
+        target_evidence=target,
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert decision.status == HandoffStatus.READY
+    assert decision.analytics_evidence is not None
+    assert decision.analytics_evidence.criterion == "COMMONALITY"
+    assert decision.analytics_evidence.metric_name == "active_version_usage_count"
+    assert decision.analytics_evidence.metric_value == 3.0
+
+
+def test_generalized_target_scope_mismatch_is_blocked():
+    decision = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=GOAL_EXPLICIT,
+        target_evidence=_target(version_code="LTA550HR11-001"),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert decision.status == HandoffStatus.SQL_SCOPE_MISMATCH
+    assert decision.tool_arguments is None
+
+
+def test_generalized_target_requires_exact_parent_and_location():
+    missing_parent = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=GOAL_EXPLICIT,
+        target_evidence=_target(parent_item_code=""),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+    missing_location = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=GOAL_EXPLICIT,
+        target_evidence=_target(location_code=""),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert missing_parent.status == HandoffStatus.ITEM_CODE_AMBIGUOUS
+    assert missing_location.status == HandoffStatus.ITEM_CODE_AMBIGUOUS
+
+
+def test_generalized_target_rejects_untrusted_provenance():
+    decision = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=GOAL_EXPLICIT,
+        target_evidence=_target(evidence_source="LLM_SELECTED_TARGET"),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert decision.status == HandoffStatus.SQL_RESULT_UNSUPPORTED
+    assert decision.tool_arguments is None
+
+
+def test_generalized_deterministic_target_requires_metric():
+    decision = EvidenceToWorkflowHandoff().build_from_target(
+        user_goal=(
+            f"{VERSION} {PLANT} 모델에서 가장 원가가 높은 자재 1개를 "
+            "찾아 변경 분석해줘"
+        ),
+        target_evidence=_target(
+            resolution_mode="DETERMINISTIC_ANALYTICS",
+            criterion="COST",
+            selection_mode="TOP_1_HIGH",
+            metric_name=None,
+            metric_value=None,
+        ),
+        knowledge_payload=_knowledge(),
+        scope=_scope(),
+    )
+
+    assert decision.status == HandoffStatus.SQL_RESULT_UNSUPPORTED
+    assert decision.tool_arguments is None
