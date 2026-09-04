@@ -1,137 +1,48 @@
 # Display BOM AI Agent Evaluation
 
-`evaluation/`은 Clean Core Agent Evaluation의 Ground Truth와 Runtime Evidence를 관리합니다.
+`evaluation/`은 Agent Ground Truth, Runtime Observation, domain-specific quality gate를 관리합니다.
 
-## Evaluation Dataset
+## Dataset Policy
 
-- 50개 평가 Case / 58개 Turn
-- Runtime 코드에 특정 MODEL / MATERIAL / Scenario ID를 하드코딩하지 않음
-- Query는 `{{MODEL_A}}`, `{{PLANT_A}}` 등의 Fixture Template 사용
-- Ground Truth는 Intent, Hybrid Execution Path, Interaction, Action, Primary Tool, Required Entity, Candidate Status/Ranking Policy, Safety Assertion을 포함
+두 dataset을 구분합니다.
 
-```powershell
-python -m scripts.validate_agent_evaluation_dataset
-```
+- `evaluation/datasets/agent_eval_v1.jsonl`: 기존 50 Cases / 58 Turns regression baseline
+- `evaluation/datasets/agent_eval_v2.jsonl`: `v4.0.0` Release 기준 56 Cases / 69 Turns
 
-## Dynamic Fixture and Runtime Observation
+v2는 기존 baseline을 보존하면서 Knowledge, Text-to-SQL, Read-only Composition, Workflow Composition, Scope Conflict 경로를 추가합니다.
 
-`EvaluationFixtureResolver`가 현재 검증 DB의 활성 BOM을 분석해 실제 평가값을 선택합니다. 평가 Dataset은 샘플 코드가 바뀌어도 동일한 평가 의미를 유지합니다.
+Ground Truth는 Intent, Hybrid Execution Path, Interaction, Action, Primary Tool, Required Entity, Candidate Status/Ranking Policy, Safety Assertion을 포함합니다.
 
-```powershell
-python -m scripts.resolve_agent_evaluation_fixtures
-```
+## Dynamic Fixture / Observation
 
-Agent Evaluation은 Runtime `data/display_bom.db`를 직접 변경하지 않습니다. Runtime DB를 Disposable Evaluation DB로 복사해 실행하고 종료 후 삭제합니다.
+`EvaluationFixtureResolver`가 현재 검증 DB의 활성 BOM을 분석해 평가 Fixture를 동적으로 선택합니다. 특정 MODEL / MATERIAL / Scenario ID를 Runtime 분기에 하드코딩하지 않습니다.
 
-Runtime Observation Collector는 PASS/FAIL을 판단하지 않고 실제 실행 Evidence만 수집합니다. 주요 수집 항목은 Intent, Gateway Route, Execution Path, Tool Name/Arguments, Workflow State, Request/Analysis ID, Active BOM Context, Error, End-to-End Latency, LLM Call/Token, Prompt Budget, Graph/MCP Timing입니다.
+Agent Evaluation은 Runtime `data/display_bom.db`를 직접 변경하지 않고 Disposable Evaluation DB를 사용합니다.
 
-```powershell
-python -m scripts.collect_agent_evaluation_observations --all
-```
+Runtime Observation은 Intent, Gateway Route, Execution Path, Tool Name/Arguments, Workflow State, Active BOM Context, Error, End-to-End Latency, LLM Call/Token, Timing Evidence를 수집합니다.
 
-기본 산출물은 `.perf/evaluation/agent_observations.jsonl`과 `.perf/evaluation/agent_profile.jsonl`이며 Git 대상이 아닙니다.
+기본 산출물은 `.perf/evaluation/` 아래에 생성되며 Git 대상이 아닙니다.
 
-## Accuracy Evaluation
+## FINAL-02 Quality Gate
 
-Ground Truth와 Runtime Observation을 비교해 Intent, Route, Tool Selection, Tool Argument Accuracy를 계산합니다. Tool argument 평가는 선택된 MCP capability의 업무 계약을 기준으로 MODEL/PLANT/item/action/quantity를 검증합니다.
-
-```powershell
-python -m scripts.evaluate_agent_accuracy --require-complete
-```
-
-기본 산출물: `.perf/evaluation/accuracy_report.json`
-
-## Failure Triage
-
-Accuracy 실패를 진단용으로 분류하며 Ground Truth나 Accuracy 점수를 변경하지 않습니다.
-
-```powershell
-python -m scripts.triage_agent_accuracy
-```
-
-기본 산출물: `.perf/evaluation/accuracy_failure_triage.json`
-
-## Performance Evaluation
-
-Runtime Observation/Profile에서 latency, LLM/token efficiency, Hybrid execution-path 지표를 집계합니다.
-
-```powershell
-python -m scripts.evaluate_agent_performance
-```
-
-기본 산출물: `.perf/evaluation/performance_report.json`
-
-## Safety / Workflow / Hallucination Evaluation
-
-Safety 평가는 deterministic runtime evidence를 사용하며 LLM judge를 사용하지 않습니다. 보호 SQLite table fingerprint, raw MCP result, workflow state before/after를 근거로 Ground Truth의 `safety_assertions`만 평가합니다. Evidence가 없으면 통과로 간주하지 않고 재수집을 요구합니다.
-
-```powershell
-python -m scripts.evaluate_agent_safety --require-complete
-```
-
-기본 산출물: `.perf/evaluation/safety_report.json`
-
-## Release Gate
-
-Accuracy / Performance / Safety가 동일한 observation run에서 생성되었는지 확인하고 Accuracy, Safety, P95 latency와 선택적으로 Full Regression을 함께 검증합니다.
-
-```powershell
-python -m scripts.finalize_agent_evaluation --run-tests
-```
-
-기본 산출물은 `.perf/evaluation/release_gate_report.json`과 `.perf/evaluation/evaluation_report.md`입니다. Accuracy 100%는 현재 Ground Truth dataset에 대한 conformance이며 일반적인 실세계 정확도 100%를 의미하지 않습니다.
-
-## FINAL-02 Agent Evaluation / Stability / Safety
-
-FINAL-02는 기존 Clean Core 50-case/58-turn dataset을 보존하고,
-`evaluation/datasets/agent_eval_v2.jsonl`을 별도 확장 dataset으로 사용합니다.
-FINAL-02 dataset은 현재 Runtime의 Knowledge, Text-to-SQL, Read-only Composition,
-Workflow Analysis Composition, Scope Conflict 경로를 추가로 포함합니다.
-
-### 1. Evaluation Foundation (offline/deterministic)
+현재 Agent 품질 Gate의 실제 Runtime 기준은 `agent_eval_v2.jsonl`입니다.
 
 ```powershell
 python -m scripts.validate_final_02_evaluation_foundation
-```
 
-이 Gate는 다음을 검증합니다.
-
-- FINAL-02 dataset execution-path coverage
-- Selective Planner capability/order/authority contract
-- Context/Ontology evaluation
-- Graph route -> evaluation execution-path mapping
-- PLAN-02/04/05 + FINAL-01 architecture validators
-
-기본 산출물: `.perf/evaluation/final02_foundation_report.json`
-
-### 2. RAG Retrieval Evaluation
-
-```powershell
 python -m scripts.run_rag_retrieval_evaluation `
   --rebuild-index `
   --strict `
   --output .perf/evaluation/rag_report.json
-```
 
-### 3. Text-to-SQL Generation Evaluation
-
-```powershell
 python -m scripts.run_text_to_sql_generation_evaluation `
   --strict `
   --output .perf/evaluation/text_to_sql_report.json
-```
 
-### 4. FINAL-02 Agent Runtime Observation
-
-```powershell
 python -m scripts.collect_agent_evaluation_observations `
   --dataset evaluation/datasets/agent_eval_v2.jsonl `
   --all
-```
 
-Accuracy / Performance / Safety는 반드시 같은 observation run에서 생성합니다.
-
-```powershell
 python -m scripts.evaluate_agent_accuracy `
   --dataset evaluation/datasets/agent_eval_v2.jsonl `
   --require-complete
@@ -143,31 +54,57 @@ python -m scripts.evaluate_agent_performance `
 python -m scripts.evaluate_agent_safety `
   --dataset evaluation/datasets/agent_eval_v2.jsonl `
   --require-complete
-```
 
-### 5. FINAL-02 Quality Gate
-
-```powershell
 python -m scripts.finalize_final_02_evaluation --run-tests --require-tests
 ```
 
 Gate 기준:
 
 - Foundation PASS
-- Agent Intent / Route / Tool Selection / Tool Argument Accuracy = 100%
+- Intent / Route / Tool Selection / Tool Argument Accuracy = 100%
 - Safety = 100%, failed assertion = 0
 - P95 latency <= 5,000ms
-- RAG 자체 retrieval gate PASS
-- Text-to-SQL 자체 generation gate PASS
-- Full regression PASS
+- RAG Retrieval Gate PASS
+- Text-to-SQL Generation Gate PASS
+- Full Regression PASS
+- Accuracy / Performance / Safety가 같은 observation run에서 생성
 
-`<=5s turn rate`와 `LLM-free rate`는 구조 변화에 민감하므로 FINAL-02에서는
-진단 지표로 기록하고 임의의 신규 threshold를 만들지 않습니다.
+`<=5s turn rate`와 `LLM-free rate`는 diagnostic metric입니다.
+
+## v4.0.0 Verified Result
+
+```text
+Agent Cases / Turns       56 / 69
+Intent Accuracy           100.00%
+Route Accuracy            100.00%
+Tool Selection Accuracy   100.00%
+Tool Argument Accuracy    100.00%
+Planner Accuracy          100.00% (6/6)
+Context Gate              13/13
+Safety                    167/167
+P95 Latency               3314.59ms
+RAG Gate                  PASS
+Text-to-SQL Gate          PASS
+Full Regression           737/737 PASS
+```
+
+Accuracy 100%는 정의된 Ground Truth Dataset에 대한 conformance이지 범용 실세계 정확도를 의미하지 않습니다.
+
+## FINAL-03 Release Freeze
+
+FINAL-03는 FINAL-02 결과를 품질 근거로 재사용하되 문서 / repository hygiene / deterministic release contract와 마지막 Full Regression을 다시 검증합니다.
+
+```powershell
+python -m scripts.validate_final_03_release_freeze
+python -m scripts.finalize_final_03_release --run-tests --require-tests
+```
 
 기본 산출물:
 
-- `.perf/evaluation/final02_gate_report.json`
-- `.perf/evaluation/final02_evaluation_report.md`
+- `.perf/evaluation/final03_freeze_validation.json`
+- `.perf/evaluation/final03_release_report.json`
+- `.perf/evaluation/final03_release_report.md`
 
-FINAL-02는 평가/안정화 단계이며 Request 생성, 승인, Production BOM Write 권한을
-추가하지 않습니다.
+## Legacy Evaluation Gate
+
+`evaluation/release_gate.py`와 `scripts/finalize_agent_evaluation.py`는 기존 50-case/58-turn baseline의 역사적 release gate를 재현하기 위해 보존합니다. 현재 `v4.0.0` Release 판정에는 `final02_gate.py`와 FINAL-03 release gate를 사용합니다.

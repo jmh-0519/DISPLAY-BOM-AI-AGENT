@@ -70,3 +70,11 @@ logs/
 # RAG private knowledge and local vector index
 knowledge/documents/private/
 data/rag/
+
+# Local patch / migration backup workspaces
+.*_backup_*/
+
+# Local audit / generated evidence not tracked as source
+artifacts/
+data/*.db.*_backup_*
+evaluation/text_to_sql/text_to_sql_generation_latest.json
