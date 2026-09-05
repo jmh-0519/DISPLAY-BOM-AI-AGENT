@@ -1,4 +1,4 @@
-"""FINAL-01 Ontology / Context Understanding hardening validator."""
+"""Ontology / Context Understanding validator for the current release."""
 
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ def main() -> None:
         "workflow-only analysis reference must not conflict with Active BOM",
     )
 
-    print("FINAL-01 Ontology / Context Understanding Hardening PASS")
+    print("Ontology / Context Understanding Validation PASS")
     print("bom_edge_ontology=YES")
     print("analysis_session_change_request_split=YES")
     print("context_policy_runtime_validation=YES")

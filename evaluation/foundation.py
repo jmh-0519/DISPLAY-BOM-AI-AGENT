@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from agents.capability_requirement_resolver import DEFAULT_CAPABILITY_REQUIREMENT_RESOLVER
 from agents.selective_planner import DEFAULT_SELECTIVE_PLANNER
-from evaluation.dataset import FINAL02_DATASET_PATH, dataset_summary, load_evaluation_cases
+from evaluation.dataset import CURRENT_DATASET_PATH, dataset_summary, load_evaluation_cases
 from evaluation.observation import ROUTE_TO_EXECUTION_PATH
 
 
@@ -34,7 +34,7 @@ DEFAULT_VALIDATORS = (
     "scripts.validate_workflow_cost_evidence_runtime",
     "scripts.validate_context_workflow_scope_conflict",
     "scripts.validate_generalized_workflow_target_composition",
-    "scripts.validate_final_01_context_ontology",
+    "scripts.validate_context_ontology",
 )
 
 
@@ -133,7 +133,7 @@ def run_validator_commands(
 def evaluate_foundation(
     *,
     project_root: str | Path,
-    dataset_path: str | Path = FINAL02_DATASET_PATH,
+    dataset_path: str | Path = CURRENT_DATASET_PATH,
     run_validators: bool = True,
 ) -> dict[str, Any]:
     cases = load_evaluation_cases(dataset_path)
@@ -178,7 +178,7 @@ def evaluate_foundation(
     return {
         "schema_version": FOUNDATION_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "stage": "FINAL-02",
+        "stage": "EVALUATION_FOUNDATION",
         "passed": passed,
         "status": "PASS" if passed else "FAIL",
         "dataset": {

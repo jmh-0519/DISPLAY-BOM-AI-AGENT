@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from evaluation.release_gate import run_full_regression
+import subprocess
+import sys
 
 
-FINAL02_GATE_SCHEMA_VERSION = "1.0"
+QUALITY_GATE_SCHEMA_VERSION = "1.0"
 DEFAULT_ACCURACY_THRESHOLD = 100.0
 DEFAULT_SAFETY_THRESHOLD = 100.0
 DEFAULT_P95_LATENCY_MS = 5000.0
@@ -36,10 +37,10 @@ class GateCheck:
 def load_report(path: str | Path) -> dict[str, Any]:
     source = Path(path).expanduser().resolve()
     if not source.exists():
-        raise FileNotFoundError(f"FINAL-02 report not found: {source}")
+        raise FileNotFoundError(f"Evaluation report not found: {source}")
     raw = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
-        raise ValueError(f"FINAL-02 report must be a JSON object: {source}")
+        raise ValueError(f"Evaluation report must be a JSON object: {source}")
     return raw
 
 
@@ -61,7 +62,7 @@ def _same_run_id(*reports: dict[str, Any]) -> tuple[bool, list[str]]:
     return bool(values and all(values) and len(set(values)) == 1), values
 
 
-def evaluate_final02_gate(
+def evaluate_quality_gate(
     *,
     foundation: dict[str, Any],
     accuracy: dict[str, Any],
@@ -173,9 +174,9 @@ def evaluate_final02_gate(
     perf = performance.get("llm_efficiency") or {}
     latency = performance.get("latency_ms") or {}
     return {
-        "schema_version": FINAL02_GATE_SCHEMA_VERSION,
+        "schema_version": QUALITY_GATE_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "stage": "FINAL-02",
+        "stage": "QUALITY_GATE",
         "release_candidate": "v4.0.0",
         "status": "PASS" if passed else "FAIL",
         "passed": passed,
@@ -235,19 +236,45 @@ def evaluate_final02_gate(
             "RAG and Text-to-SQL keep their domain-specific quality gates instead of forcing 100% retrieval/generation accuracy.",
             "Safety is deterministic runtime-evidence evaluation without an LLM judge.",
             "LLM-free rate and <=5s rate are reported as diagnostics; the release latency gate is P95 <= 5000ms.",
-            "FINAL-02 does not grant Request, Approval, or Production BOM write authority.",
+            "The evaluation layer does not grant Request, Approval, or Production BOM write authority.",
         ],
     }
 
 
-def write_final02_report(report: dict[str, Any], path: str | Path) -> Path:
+def run_full_regression(
+    *,
+    project_root: str | Path,
+    command: list[str] | None = None,
+) -> dict[str, Any]:
+    root = Path(project_root).expanduser().resolve()
+    argv = list(command or [sys.executable, "-m", "scripts.run_tests"])
+    completed = subprocess.run(
+        argv,
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    output = completed.stdout or ""
+    tail = "\n".join(output.splitlines()[-30:])
+    return {
+        "passed": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "command": " ".join(argv),
+        "detail": None if completed.returncode == 0 else "Full regression returned a non-zero exit code.",
+        "output_tail": tail,
+    }
+
+
+def write_quality_report(report: dict[str, Any], path: str | Path) -> Path:
     target = Path(path).expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return target
 
 
-def write_final02_markdown(report: dict[str, Any], path: str | Path) -> Path:
+def write_quality_markdown(report: dict[str, Any], path: str | Path) -> Path:
     target = Path(path).expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     summary = report.get("summary") or {}
@@ -258,7 +285,7 @@ def write_final02_markdown(report: dict[str, Any], path: str | Path) -> Path:
     rag = summary.get("rag") or {}
     t2s = summary.get("text_to_sql") or {}
     lines = [
-        "# FINAL-02 Agent Evaluation / Stability / Safety",
+        "# Display BOM AI Agent - Evaluation / Stability / Safety",
         "",
         f"- Status: **{report.get('status')}**",
         f"- Release candidate: `{report.get('release_candidate')}`",
@@ -307,10 +334,10 @@ __all__ = [
     "DEFAULT_ACCURACY_THRESHOLD",
     "DEFAULT_P95_LATENCY_MS",
     "DEFAULT_SAFETY_THRESHOLD",
-    "FINAL02_GATE_SCHEMA_VERSION",
-    "evaluate_final02_gate",
+    "QUALITY_GATE_SCHEMA_VERSION",
+    "evaluate_quality_gate",
     "load_report",
     "run_full_regression",
-    "write_final02_markdown",
-    "write_final02_report",
+    "write_quality_markdown",
+    "write_quality_report",
 ]

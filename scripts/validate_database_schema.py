@@ -158,12 +158,12 @@ def validate(path: str | Path) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Validate Display BOM DB v9 normalized subtype schema."
+        description="Validate Display BOM database schema normalized subtype schema."
     )
     parser.add_argument("--database", default="data/display_bom.db")
     args = parser.parse_args()
     result = validate(args.database)
-    print("Display BOM DB v9 validation passed")
+    print("Display BOM database schema validation passed")
     for key, value in result.items():
         print(f"- {key}: {value}")
 

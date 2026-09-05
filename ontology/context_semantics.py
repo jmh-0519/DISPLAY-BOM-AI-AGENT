@@ -1,6 +1,6 @@
 """Deterministic relative-reference and scope semantics for Display BOM context.
 
-FINAL-01 centralizes language-independent runtime meaning that was previously
+This module centralizes language-independent runtime meaning that was previously
 spread across Gateway guards.  This module never calls an LLM, database, Tool,
 or workflow mutation API.
 """

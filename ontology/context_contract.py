@@ -296,7 +296,7 @@ CONTEXT_FIELD_POLICIES: dict[str, ContextFieldPolicy] = {
 def validate_context_snapshot(snapshot: DomainContextSnapshot) -> None:
     """Enforce the declared field-source contract at runtime.
 
-    FINAL-01 turns CONTEXT_FIELD_POLICIES from documentation into an
+    The current release turns CONTEXT_FIELD_POLICIES from documentation into an
     executable safety invariant. The resolver calls this before returning a
     snapshot, and tests may validate externally constructed snapshots as well.
     """

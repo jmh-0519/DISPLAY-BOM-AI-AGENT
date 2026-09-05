@@ -172,7 +172,7 @@ def test_observation_jsonl_contains_metric_fields(tmp_path):
     assert '"tool_call_count": 0' in text
 
 
-def test_observation_maps_plan01_to_final01_runtime_routes_for_final02():
+def test_observation_maps_current_runtime_routes_for_evaluation():
     from evaluation.observation import ROUTE_TO_EXECUTION_PATH
 
     assert ROUTE_TO_EXECUTION_PATH["fast_knowledge"] == "KNOWLEDGE_PATH"

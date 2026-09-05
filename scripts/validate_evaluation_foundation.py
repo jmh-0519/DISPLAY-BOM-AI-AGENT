@@ -8,14 +8,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from evaluation.dataset import FINAL02_DATASET_PATH
-from evaluation.final02_foundation import evaluate_foundation, write_foundation_report
+from evaluation.dataset import CURRENT_DATASET_PATH
+from evaluation.foundation import evaluate_foundation, write_foundation_report
 
 
 def _args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate FINAL-02 evaluation foundation without live Azure evaluation calls.")
-    parser.add_argument("--dataset", default=str(FINAL02_DATASET_PATH))
-    parser.add_argument("--output", default=str(PROJECT_ROOT / ".perf" / "evaluation" / "final02_foundation_report.json"))
+    parser = argparse.ArgumentParser(description="Validate the current evaluation foundation without live Azure evaluation calls.")
+    parser.add_argument("--dataset", default=str(CURRENT_DATASET_PATH))
+    parser.add_argument("--output", default=str(PROJECT_ROOT / ".perf" / "evaluation" / "foundation_report.json"))
     parser.add_argument("--skip-validators", action="store_true")
     return parser.parse_args()
 
@@ -34,7 +34,7 @@ def main() -> int:
     mapping = report["route_mapping"]
     validators = report["validators"]
 
-    print(f"FINAL-02 Evaluation Foundation {report['status']}")
+    print(f"Evaluation Foundation {report['status']}")
     print(f"agent_eval_cases={data['case_count']}")
     print(f"agent_eval_turns={data['turn_count']}")
     print("execution_paths=" + ",".join(f"{k}:{v}" for k, v in data["required_execution_path_coverage"].items()))

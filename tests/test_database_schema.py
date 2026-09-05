@@ -254,7 +254,7 @@ def test_schema_has_persisted_supply_and_demand_evidence(tmp_path):
     assert {"supplier_evaluation_json", "demand_context_json"} <= columns
 
 
-def test_pre_clean_core_version_requires_rebuild(tmp_path):
+def test_unsupported_legacy_version_requires_rebuild(tmp_path):
     db = SQLiteDatabase(tmp_path / "old-core.db")
     with db.transaction() as connection:
         connection.execute(

@@ -27,12 +27,12 @@ VALUES (6, 'Detailed evaluation evidence and impact analysis');
 UPDATE schema_versions SET description='Detailed evaluation evidence and impact analysis' WHERE version=6;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (7, 'Display BOM Clean Core baseline schema');
-UPDATE schema_versions SET description='Display BOM Clean Core baseline schema' WHERE version=7;
+VALUES (7, 'Display BOM baseline schema');
+UPDATE schema_versions SET description='Display BOM baseline schema' WHERE version=7;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
-VALUES (8, 'Clean Core schema semantics and metadata cleanup');
-UPDATE schema_versions SET description='Clean Core schema semantics and metadata cleanup' WHERE version=8;
+VALUES (8, 'Display BOM schema semantics and metadata cleanup');
+UPDATE schema_versions SET description='Display BOM schema semantics and metadata cleanup' WHERE version=8;
 
 INSERT OR IGNORE INTO schema_versions(version, description)
 VALUES (9, 'Normalized item subtype authority and typed version metadata');

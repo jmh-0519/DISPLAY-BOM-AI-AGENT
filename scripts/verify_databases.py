@@ -51,7 +51,7 @@ def verify_schema_contract(path: str | Path) -> dict[str, object]:
         expected = set(CORE_SCHEMA_TABLES)
         if tables != expected:
             raise RuntimeError(
-                "Clean Core table contract mismatch: "
+                "Display BOM table contract mismatch: "
                 f"missing={sorted(expected - tables)} "
                 f"unexpected={sorted(tables - expected)}"
             )
@@ -111,7 +111,7 @@ def verify_seed_baseline(path: str | Path) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Verify canonical Seed and Runtime databases for Clean Core freeze."
+        description="Verify canonical Seed and Runtime databases for the current release."
     )
     parser.add_argument("--seed-database", default=str(DEFAULT_SEED_DATABASE))
     parser.add_argument("--runtime-database", default=str(DEFAULT_RUNTIME_DATABASE))
@@ -121,7 +121,7 @@ def main() -> None:
     runtime_result = verify_schema_contract(args.runtime_database)
     business_result = verify_business_sample(Path(args.runtime_database))
 
-    print("Clean Core database verification passed")
+    print("Display BOM database verification passed")
     print(f"- seed: {seed_result}")
     print(f"- runtime: {runtime_result}")
     print(f"- business_sample: {business_result}")

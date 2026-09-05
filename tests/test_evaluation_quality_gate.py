@@ -1,4 +1,4 @@
-from evaluation.final02_gate import evaluate_final02_gate
+from evaluation.quality_gate import evaluate_quality_gate
 
 
 def _accuracy(run_id="run-1", value=100.0):
@@ -59,8 +59,8 @@ def _t2s(passed=True):
     }
 
 
-def test_final02_gate_passes_only_when_all_quality_domains_pass():
-    report = evaluate_final02_gate(
+def test_quality_gate_passes_only_when_all_quality_domains_pass():
+    report = evaluate_quality_gate(
         foundation=_foundation(),
         accuracy=_accuracy(),
         performance=_performance(),
@@ -73,8 +73,8 @@ def test_final02_gate_passes_only_when_all_quality_domains_pass():
     assert report["release_candidate"] == "v4.0.0"
 
 
-def test_final02_gate_rejects_stale_agent_reports_and_domain_gate_failures():
-    report = evaluate_final02_gate(
+def test_quality_gate_rejects_stale_agent_reports_and_domain_gate_failures():
+    report = evaluate_quality_gate(
         foundation=_foundation(),
         accuracy=_accuracy("run-a"),
         performance=_performance("run-b"),
@@ -88,8 +88,8 @@ def test_final02_gate_rejects_stale_agent_reports_and_domain_gate_failures():
     assert "TEXT_TO_SQL_GATE" in report["failed_checks"]
 
 
-def test_final02_gate_enforces_p95_accuracy_and_safety_thresholds():
-    report = evaluate_final02_gate(
+def test_quality_gate_enforces_p95_accuracy_and_safety_thresholds():
+    report = evaluate_quality_gate(
         foundation=_foundation(),
         accuracy=_accuracy(value=99.0),
         performance=_performance(p95=6000.0),

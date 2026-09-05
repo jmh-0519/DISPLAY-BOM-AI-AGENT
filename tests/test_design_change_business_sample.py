@@ -48,7 +48,7 @@ def test_baseline_product_is_queryable_in_p01_and_p02(tmp_path):
     )
 
 
-def test_latest_seed_uses_clean_core_schema(tmp_path):
+def test_latest_seed_uses_current_schema(tmp_path):
     database = make_database(tmp_path)
     with database.connection() as connection:
         names = {

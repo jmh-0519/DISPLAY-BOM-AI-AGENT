@@ -1,1 +1,1 @@
-"""Database schema migrations for Display BOM Clean Core."""
+"""Database schema migrations for Display BOM AI Agent."""

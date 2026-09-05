@@ -39,7 +39,7 @@ def main() -> None:
     print(f"- backup: {backup if backup else '(disabled)'}")
     for key, value in result.items():
         print(f"- {key}: {value}")
-    print("- next: python -m scripts.validate_database_v9 --database " + str(path))
+    print("- next: python -m scripts.validate_database_schema --database " + str(path))
 
 
 if __name__ == "__main__":

@@ -100,7 +100,7 @@ def verify(database_path: Path) -> dict[str, int]:
             missing = sorted(set(CORE_SCHEMA_TABLES) - existing_tables)
             unexpected = sorted(existing_tables - set(CORE_SCHEMA_TABLES))
             raise RuntimeError(
-                f"Clean Core schema mismatch: missing={missing} unexpected={unexpected}"
+                f"Display BOM schema mismatch: missing={missing} unexpected={unexpected}"
             )
 
         # Production E-BOM is mutable after successful design-change Apply.

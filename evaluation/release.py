@@ -4,28 +4,25 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 import subprocess
-from typing import Any, Iterable
+from typing import Any
 
-from evaluation.final02_gate import load_report, run_full_regression
+from evaluation.quality_gate import load_report, run_full_regression
 
 
-FINAL03_SCHEMA_VERSION = "1.0"
+RELEASE_SCHEMA_VERSION = "1.0"
 RELEASE_TARGET = "v4.0.0"
-DEVELOPMENT_STAGE_TOKEN = "phase" + "3"
-LEGACY_RELEASE_TOKEN = "v3." + "1.1"
-LEGACY_V311_FILES = {
-    "evaluation/release_gate.py",
-    "scripts/finalize_agent_evaluation.py",
-    "docs/RELEASE_V4_0_0.md",
-}
 REQUIRED_DOCS = {
     "README.md",
     "AGENTS.md",
     "docs/ARCHITECTURE.md",
+    "docs/DATABASE_SCHEMA.md",
     "docs/RELEASE_V4_0_0.md",
     "evaluation/README.md",
     "knowledge/rules/README.md",
+    "rag/README.md",
+    "text_to_sql/README.md",
 }
 REQUIRED_GITIGNORE_LINES = {
     ".perf/",
@@ -35,10 +32,17 @@ REQUIRED_GITIGNORE_LINES = {
     "data/*.db.*_backup_*",
     "evaluation/text_to_sql/text_to_sql_generation_latest.json",
 }
+# Development-task naming should not survive in the final v4 source tree.
+FORBIDDEN_TRACKED_FILENAME_PATTERNS = (
+    re.compile(r"(?:^|/|[_-])final[_-]?0[123](?:[_-]|\.|/|$)", re.IGNORECASE),
+    re.compile(r"(?:^|/)DB_V9_SCHEMA_DECISIONS\.md$", re.IGNORECASE),
+    re.compile(r"README_T2SQL02A\.md$", re.IGNORECASE),
+    re.compile(r"(?:^|/)verify_clean_core_databases\.py$", re.IGNORECASE),
+)
 
 
 @dataclass(frozen=True)
-class FreezeCheck:
+class ReleaseCheck:
     name: str
     passed: bool
     actual: Any
@@ -103,34 +107,21 @@ def _is_forbidden_tracked_path(path: str) -> bool:
     return False
 
 
-def _scan_tokens(root: Path, tracked: Iterable[str]) -> dict[str, list[str]]:
-    development_stage_hits: list[str] = []
-    active_v311_hits: list[str] = []
+def _development_named_files(tracked: list[str]) -> list[str]:
+    hits: list[str] = []
     for relative in tracked:
-        if Path(relative).suffix.lower() not in {".md", ".py", ".json"}:
-            continue
-        path = root / relative
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-        lowered = text.lower()
-        if DEVELOPMENT_STAGE_TOKEN in lowered:
-            development_stage_hits.append(relative)
-        if LEGACY_RELEASE_TOKEN in text and relative not in LEGACY_V311_FILES:
-            active_v311_hits.append(relative)
-    return {
-        "development_stage": sorted(set(development_stage_hits)),
-        "unexpected_v3_1_1": sorted(set(active_v311_hits)),
-    }
+        normalized = relative.replace("\\", "/")
+        if any(pattern.search(normalized) for pattern in FORBIDDEN_TRACKED_FILENAME_PATTERNS):
+            hits.append(normalized)
+    return sorted(set(hits))
 
 
-def _final02_summary_valid(report: dict[str, Any]) -> tuple[bool, list[str]]:
+def _quality_summary_valid(report: dict[str, Any]) -> tuple[bool, list[str]]:
     problems: list[str] = []
     if report.get("passed") is not True or report.get("status") != "PASS":
-        problems.append("FINAL-02 report is not PASS")
+        problems.append("quality gate report is not PASS")
     if report.get("release_candidate") != RELEASE_TARGET:
-        problems.append("FINAL-02 release_candidate is not v4.0.0")
+        problems.append("quality gate release_candidate is not v4.0.0")
     summary = report.get("summary") or {}
     accuracy = summary.get("accuracy") or {}
     for name in ("intent", "route", "tool_selection", "tool_arguments"):
@@ -150,36 +141,26 @@ def _final02_summary_valid(report: dict[str, Any]) -> tuple[bool, list[str]]:
     return not problems, problems
 
 
-def validate_final03_freeze(
+def validate_release_freeze(
     *,
     project_root: str | Path,
-    final02_report: dict[str, Any],
+    quality_report: dict[str, Any],
     tracked_files: list[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
-    checks: list[FreezeCheck] = []
+    checks: list[ReleaseCheck] = []
 
     missing_docs = sorted(path for path in REQUIRED_DOCS if not (root / path).is_file())
-    checks.append(FreezeCheck("RELEASE_DOCS", not missing_docs, missing_docs, []))
+    checks.append(ReleaseCheck("RELEASE_DOCS", not missing_docs, missing_docs, []))
 
     readme = _read_text(root, "README.md") if (root / "README.md").exists() else ""
     agents = _read_text(root, "AGENTS.md") if (root / "AGENTS.md").exists() else ""
-    checks.append(FreezeCheck(
+    checks.append(ReleaseCheck(
         "CURRENT_RELEASE_DOCUMENTED",
         RELEASE_TARGET in readme and RELEASE_TARGET in agents,
         {"readme": RELEASE_TARGET in readme, "agents": RELEASE_TARGET in agents},
         {"readme": True, "agents": True},
     ))
-    stale_active_markers = [
-        marker for marker in (
-            f"Current Clean Core Freeze: `{LEGACY_RELEASE_TOKEN}`",
-            f"{LEGACY_RELEASE_TOKEN} Freeze 직전",
-            "v3.1.0 Release 기준 최종 결과",
-            "## 15. 다음 개발 로드맵",
-        )
-        if marker in readme or marker in agents
-    ]
-    checks.append(FreezeCheck("STALE_ACTIVE_RELEASE_DOCS", not stale_active_markers, stale_active_markers, []))
 
     gitignore = set(
         line.strip()
@@ -187,24 +168,26 @@ def validate_final03_freeze(
         if line.strip() and not line.lstrip().startswith("#")
     ) if (root / ".gitignore").exists() else set()
     missing_ignores = sorted(REQUIRED_GITIGNORE_LINES - gitignore)
-    checks.append(FreezeCheck("REPOSITORY_IGNORE_POLICY", not missing_ignores, missing_ignores, []))
+    checks.append(ReleaseCheck("REPOSITORY_IGNORE_POLICY", not missing_ignores, missing_ignores, []))
 
     tracked = list(tracked_files) if tracked_files is not None else _git_tracked_files(root)
     forbidden = sorted(path for path in tracked if _is_forbidden_tracked_path(path))
-    checks.append(FreezeCheck("NO_LOCAL_ARTIFACTS_TRACKED", not forbidden, forbidden, []))
+    checks.append(ReleaseCheck("NO_LOCAL_ARTIFACTS_TRACKED", not forbidden, forbidden, []))
 
-    token_hits = _scan_tokens(root, tracked)
-    checks.append(FreezeCheck("NO_DEVELOPMENT_STAGE_TERM", not token_hits["development_stage"], token_hits["development_stage"], []))
-    checks.append(FreezeCheck(
-        "LEGACY_V311_ISOLATED",
-        not token_hits["unexpected_v3_1_1"],
-        token_hits["unexpected_v3_1_1"],
-        [],
-        "Legacy release references are allowed only in the explicit legacy gate and release-history document.",
-    ))
+    task_named = _development_named_files(tracked)
+    checks.append(ReleaseCheck("NO_DEVELOPMENT_TASK_FILENAMES", not task_named, task_named, []))
 
-    final02_ok, final02_problems = _final02_summary_valid(final02_report)
-    checks.append(FreezeCheck("FINAL02_QUALITY_EVIDENCE", final02_ok, final02_problems, []))
+    legacy_files = sorted(path for path in (
+        "evaluation/release_gate.py",
+        "scripts/finalize_agent_evaluation.py",
+        "evaluation/datasets/agent_eval_v1.jsonl",
+        "rag/AGENT_INTEGRATION.md",
+        "text_to_sql/README_T2SQL02A.md",
+    ) if path in tracked)
+    checks.append(ReleaseCheck("NO_LEGACY_V4_SOURCE_ARTIFACTS", not legacy_files, legacy_files, []))
+
+    quality_ok, quality_problems = _quality_summary_valid(quality_report)
+    checks.append(ReleaseCheck("QUALITY_EVIDENCE", quality_ok, quality_problems, []))
 
     release_doc = _read_text(root, "docs/RELEASE_V4_0_0.md") if (root / "docs/RELEASE_V4_0_0.md").exists() else ""
     authority_markers = (
@@ -212,7 +195,7 @@ def validate_final03_freeze(
         "Approval authority in analysis/evaluation layer      : NO",
         "Production BOM write authority                       : NO",
     )
-    checks.append(FreezeCheck(
+    checks.append(ReleaseCheck(
         "AUTHORITY_BOUNDARY_DOCUMENTED",
         all(marker in release_doc for marker in authority_markers),
         [marker for marker in authority_markers if marker not in release_doc],
@@ -221,9 +204,9 @@ def validate_final03_freeze(
 
     passed = all(check.passed for check in checks)
     return {
-        "schema_version": FINAL03_SCHEMA_VERSION,
+        "schema_version": RELEASE_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "stage": "FINAL-03",
+        "stage": "RELEASE_FREEZE",
         "release_target": RELEASE_TARGET,
         "status": "PASS" if passed else "FAIL",
         "passed": passed,
@@ -232,25 +215,24 @@ def validate_final03_freeze(
         "failed_checks": [check.name for check in checks if not check.passed],
         "summary": {
             "tracked_file_count": len(tracked),
-            "legacy_v311_allowed_files": sorted(LEGACY_V311_FILES),
-            "final02_run_id": final02_report.get("run_id"),
+            "quality_run_id": quality_report.get("run_id"),
         },
     }
 
 
-def evaluate_final03_gate(
+def evaluate_release_gate(
     *,
     freeze_validation: dict[str, Any],
-    final02_report: dict[str, Any],
+    quality_report: dict[str, Any],
     tests: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    checks: list[FreezeCheck] = [
-        FreezeCheck("FREEZE_VALIDATION", freeze_validation.get("passed") is True, freeze_validation.get("status"), "PASS"),
+    checks: list[ReleaseCheck] = [
+        ReleaseCheck("FREEZE_VALIDATION", freeze_validation.get("passed") is True, freeze_validation.get("status"), "PASS"),
     ]
-    final02_ok, final02_problems = _final02_summary_valid(final02_report)
-    checks.append(FreezeCheck("FINAL02_GATE", final02_ok, final02_problems, []))
+    quality_ok, quality_problems = _quality_summary_valid(quality_report)
+    checks.append(ReleaseCheck("QUALITY_GATE", quality_ok, quality_problems, []))
     if tests is not None:
-        checks.append(FreezeCheck(
+        checks.append(ReleaseCheck(
             "FINAL_FULL_REGRESSION",
             tests.get("passed") is True,
             {"passed": tests.get("passed"), "returncode": tests.get("returncode")},
@@ -259,25 +241,25 @@ def evaluate_final03_gate(
         ))
     passed = all(check.passed for check in checks)
     return {
-        "schema_version": FINAL03_SCHEMA_VERSION,
+        "schema_version": RELEASE_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "stage": "FINAL-03",
+        "stage": "RELEASE",
         "release_target": RELEASE_TARGET,
         "status": "PASS" if passed else "FAIL",
         "passed": passed,
         "head": freeze_validation.get("head"),
-        "final02_run_id": final02_report.get("run_id"),
+        "quality_run_id": quality_report.get("run_id"),
         "checks": [check.as_dict() for check in checks],
         "failed_checks": [check.name for check in checks if not check.passed],
         "summary": {
             "freeze_validation": freeze_validation.get("status"),
-            "final02": final02_report.get("status"),
+            "quality_gate": quality_report.get("status"),
             "full_regression": tests,
         },
         "notes": [
-            "FINAL-03 does not change Runtime business authority or evaluation thresholds.",
-            "The v4.0.0 tag must be created only after this gate passes and the release commit is created.",
-            "Local HEAD, remote branch, local tag and remote tag must point to the same release commit.",
+            "Release cleanup does not change Runtime business authority or evaluation thresholds.",
+            "The v4.0.0 tag must point to the final source-cleanup release commit.",
+            "Local HEAD, remote branch, local tag and remote tag must resolve to the same release commit.",
         ],
     }
 
@@ -293,12 +275,12 @@ def write_markdown(report: dict[str, Any], path: str | Path) -> Path:
     target = Path(path).expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# FINAL-03 Release Freeze",
+        "# Display BOM AI Agent v4.0.0 Release Freeze",
         "",
         f"- Status: **{report.get('status')}**",
         f"- Release target: `{report.get('release_target')}`",
         f"- HEAD at validation: `{report.get('head')}`",
-        f"- FINAL-02 run: `{report.get('final02_run_id')}`",
+        f"- Evaluation run: `{report.get('quality_run_id')}`",
         "",
         "## Gate Checks",
     ]
@@ -315,15 +297,14 @@ def write_markdown(report: dict[str, Any], path: str | Path) -> Path:
 
 
 __all__ = [
-    "FINAL03_SCHEMA_VERSION",
-    "LEGACY_V311_FILES",
+    "RELEASE_SCHEMA_VERSION",
     "RELEASE_TARGET",
     "REQUIRED_DOCS",
     "REQUIRED_GITIGNORE_LINES",
-    "evaluate_final03_gate",
+    "evaluate_release_gate",
     "load_report",
     "run_full_regression",
-    "validate_final03_freeze",
+    "validate_release_freeze",
     "write_json",
     "write_markdown",
 ]

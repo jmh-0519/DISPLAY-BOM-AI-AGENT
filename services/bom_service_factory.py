@@ -43,7 +43,7 @@ def create_read_bom_service(
         )
     if not schema or version != CORE_SCHEMA_VERSION:
         raise BomStorageConfigurationError(
-            "현재 Clean Core Schema와 호환되는 SQLite DB가 아닙니다."
+            "현재 Display BOM Schema와 호환되는 SQLite DB가 아닙니다."
         )
     if item_count == 0:
         raise BomStorageConfigurationError(

@@ -7,12 +7,10 @@ from typing import Any, Iterable
 from evaluation.schema import EvalCase, fixture_names
 
 
-DEFAULT_DATASET_PATH = (
-    Path(__file__).resolve().parent / "datasets" / "agent_eval_v1.jsonl"
-)
-FINAL02_DATASET_PATH = (
+CURRENT_DATASET_PATH = (
     Path(__file__).resolve().parent / "datasets" / "agent_eval_v2.jsonl"
 )
+DEFAULT_DATASET_PATH = CURRENT_DATASET_PATH
 
 
 def load_evaluation_cases(path: str | Path = DEFAULT_DATASET_PATH) -> list[EvalCase]:

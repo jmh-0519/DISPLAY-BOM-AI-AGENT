@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from evaluation.final03_release import evaluate_final03_gate
+from evaluation.release import evaluate_release_gate
 
 
-def _final02() -> dict:
+def _quality() -> dict:
     return {
         "passed": True,
         "status": "PASS",
@@ -22,20 +22,20 @@ def _final02() -> dict:
     }
 
 
-def test_final03_gate_passes_when_validation_final02_and_tests_pass():
-    report = evaluate_final03_gate(
+def test_release_gate_passes_when_validation_quality_and_tests_pass():
+    report = evaluate_release_gate(
         freeze_validation={"passed": True, "status": "PASS", "head": "abc"},
-        final02_report=_final02(),
+        quality_report=_quality(),
         tests={"passed": True, "returncode": 0, "detail": None},
     )
     assert report["passed"] is True
     assert report["release_target"] == "v4.0.0"
 
 
-def test_final03_gate_blocks_failed_final_regression():
-    report = evaluate_final03_gate(
+def test_release_gate_blocks_failed_final_regression():
+    report = evaluate_release_gate(
         freeze_validation={"passed": True, "status": "PASS", "head": "abc"},
-        final02_report=_final02(),
+        quality_report=_quality(),
         tests={"passed": False, "returncode": 1, "detail": "failed"},
     )
     assert report["passed"] is False

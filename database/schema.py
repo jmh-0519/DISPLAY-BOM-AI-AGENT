@@ -46,11 +46,11 @@ CORE_SCHEMA_TABLES = frozenset({
 
 
 class IncompatibleSchemaError(RuntimeError):
-    """현재 Clean Core와 호환되지 않는 SQLite Schema입니다."""
+    """현재 Display BOM 스키마와 호환되지 않는 SQLite Schema입니다."""
 
 
 class SchemaManager:
-    """현재 Clean Core SQL Schema를 초기화하고 검증합니다."""
+    """현재 Display BOM SQL Schema를 초기화하고 검증합니다."""
 
     DEFAULT_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
@@ -76,13 +76,13 @@ class SchemaManager:
         }
 
     @classmethod
-    def _validate_clean_core_schema(cls, connection) -> None:
+    def _validate_current_schema(cls, connection) -> None:
         tables = cls._user_tables(connection)
         missing = sorted(CORE_SCHEMA_TABLES - tables)
         unexpected = sorted(tables - CORE_SCHEMA_TABLES)
         if missing or unexpected:
             raise IncompatibleSchemaError(
-                "Clean Core DB Schema가 현재 기준과 일치하지 않습니다. "
+                "Display BOM DB Schema가 현재 기준과 일치하지 않습니다. "
                 f"missing={missing}, unexpected={unexpected}. "
                 "Canonical Seed DB에서 재생성하세요."
             )
@@ -98,19 +98,19 @@ class SchemaManager:
                 version = row["version"] if row else None
                 if (version or 0) < CORE_SCHEMA_VERSION:
                     raise IncompatibleSchemaError(
-                        "현재 Clean Core보다 이전 DB Schema입니다. "
+                        "현재 지원 버전보다 이전 DB Schema입니다. "
                         "Canonical Seed DB에서 재생성하거나 init_database.py의 "
                         "--recreate 옵션을 사용하세요."
                     )
             elif self._user_tables(connection):
                 raise IncompatibleSchemaError(
-                    "현재 Clean Core와 호환되지 않는 기존 DB Schema입니다. "
+                    "현재 Release와 호환되지 않는 기존 DB Schema입니다. "
                     "백업이 필요하면 먼저 복사한 뒤 init_database.py의 "
                     "--recreate 옵션을 사용하세요."
                 )
 
             connection.executescript(sql)
-            self._validate_clean_core_schema(connection)
+            self._validate_current_schema(connection)
 
     def current_version(self) -> int | None:
         with self.database.connection() as connection:
